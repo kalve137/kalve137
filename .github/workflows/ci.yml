@@ -42,6 +42,7 @@ jobs:
       VCPKG_ROOT: C:\vcpkg-kalve137
       VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
       VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-windows-release
       QT_VERSION: 6.10.2
       LLVM_VERSION: 22.1.8
       MESA_DIR: C:\mesa
@@ -77,11 +78,12 @@ jobs:
           }
 
       - name: Restore the vcpkg binary cache
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: C:\vcpkg-cache
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: vcpkg-${{ env.VCPKG_COMMIT }}-
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Bootstrap vcpkg
         run: |
@@ -93,10 +95,17 @@ jobs:
       - name: Build
         run: |
           . ./scripts/dev-shell.ps1
-          cmake --preset windows-release
+          cmake --preset windows-release -DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:\vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
       - name: Install software OpenGL
         env:
