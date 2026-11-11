@@ -118,3 +118,37 @@ jobs:
           name: kalve137-windows-x64
           path: build/windows-release/package/*.zip
           if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the package
+        uses: actions/download-artifact@v4
+        with:
+          name: kalve137-windows-x64
+          path: package
+
+      - name: Attach the package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          zip="package/kalve137-${version}-windows-x64.zip"
+          if [ ! -f "$zip" ]; then
+              echo "No $zip, the tag does not match the project version"
+              exit 1
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+              gh release upload "$TAG" "$zip" --clobber
+              exit 0
+          fi
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {found = 1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > notes.md
+          gh release create "$TAG" "$zip" --draft --verify-tag --title "$TAG" --notes-file notes.md
