@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/*"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -18,8 +18,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check the version
+        shell: pwsh
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: ./scripts/check-version.ps1 -Tag $env:TAG
+
   windows:
     name: Windows
+    needs: version
     runs-on: windows-2025
     timeout-minutes: 300
     env:
@@ -141,6 +157,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           version="${TAG#v}"
+          version="${version%%-*}"
+          prerelease=""
+          if [[ "$TAG" == *-* ]]; then
+              prerelease="--prerelease"
+          fi
           zip="package/kalve137-${version}-windows-x64.zip"
           if [ ! -f "$zip" ]; then
               echo "No $zip, the tag does not match the project version"
@@ -150,5 +171,5 @@ jobs:
               gh release upload "$TAG" "$zip" --clobber
               exit 0
           fi
-          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {found = 1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > notes.md
-          gh release create "$TAG" "$zip" --draft --verify-tag --title "$TAG" --notes-file notes.md
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {found = 1; next} found && /^(## )?\[[^]]+\]/ {exit} found {print}' CHANGELOG.md > notes.md
+          gh release create "$TAG" "$zip" --draft $prerelease --verify-tag --title "$TAG" --notes-file notes.md
