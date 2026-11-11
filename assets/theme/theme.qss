@@ -1,0 +1,418 @@
+/* SPDX-FileCopyrightText: 2026 Danius Kalvaitis */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+* {
+    font-family: @fontFamily;
+}
+
+QMainWindow::separator {
+    background: @base;
+    width: 3px;
+    height: 3px;
+}
+QMenuBar {
+    background: @base;
+    color: @text;
+}
+QMenuBar::item {
+    padding: @spaceS @spaceM;
+}
+QMenuBar::item:selected,
+QMenu::item:selected {
+    background: @raised;
+    color: @accent;
+}
+QMenu {
+    background: @surface;
+    color: @text;
+    border: 1px solid @raised;
+    padding: @spaceS 0;
+}
+QMenu::item {
+    padding: @rowPadY @spaceXxl @rowPadY 32px;
+}
+QMenu::icon {
+    left: @spaceM;
+}
+QMenu::item:disabled {
+    color: @textDisabled;
+}
+QFrame#commandSearch {
+    background: @surface;
+    border: 1px solid @border;
+}
+QMenu::separator {
+    height: 1px;
+    background: @raised;
+    margin: @spaceS @spaceM;
+}
+QStatusBar {
+    background: @base;
+    color: @textDim;
+    border-top: 1px solid @surface;
+}
+QToolTip {
+    background: @base;
+    color: @text;
+    border: 1px solid @border;
+    padding: @spaceS @spaceM;
+}
+
+QToolBar {
+    background: @base;
+    border: none;
+    spacing: @spaceXs;
+    padding: @spaceXs @spaceS;
+}
+QToolBar::separator {
+    background: @raised;
+    width: 1px;
+    margin: @spaceM;
+}
+QToolButton {
+    color: @text;
+    padding: @spaceS @spaceM;
+    border: 1px solid transparent;
+    border-radius: @radiusControl;
+}
+QToolButton:hover {
+    background: @raised;
+}
+QToolButton:pressed {
+    background: @raisedPressed;
+}
+QToolButton:checked {
+    background: @raised;
+    border-color: @accent;
+    color: @accent;
+}
+QToolButton:disabled {
+    color: @textDisabled;
+}
+QToolButton[popupMode="1"] {
+    padding-right: 18px;
+}
+QToolButton::menu-button {
+    subcontrol-origin: padding;
+    subcontrol-position: right center;
+    margin: @spaceXs @spaceXs @spaceXs 0;
+    border: none;
+    background: transparent;
+    width: 14px;
+}
+QToolButton::menu-button:hover {
+    background: @raisedHover;
+    border-radius: @radiusSmall;
+}
+QToolButton::menu-arrow {
+    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    width: 10px;
+    height: 10px;
+}
+QToolButton#finishSketch {
+    color: @base;
+    background: @accent;
+    font-weight: 500;
+}
+QToolButton#finishSketch:hover {
+    background: @accentHover;
+}
+
+QDockWidget {
+    color: @textDim;
+}
+QDockWidget::title {
+    background: @base;
+    padding: @rowPadY @spaceM;
+}
+QTabBar {
+    background: @base;
+}
+QTabBar::tab {
+    background: @base;
+    color: @textDim;
+    padding: @rowPadY @spaceL;
+    border: none;
+    border-bottom: 2px solid transparent;
+}
+QTabBar::tab:hover {
+    color: @text;
+}
+QTabBar::tab:selected {
+    color: @accent;
+    border-bottom-color: @accent;
+}
+QTreeWidget,
+QListWidget {
+    background: @surface;
+    border: none;
+    outline: 0;
+}
+QTreeWidget::item,
+QListWidget::item {
+    padding: @itemPadY @spaceXs;
+}
+QTreeWidget::item:hover,
+QListWidget::item:hover {
+    background: @surfaceHover;
+}
+QTreeWidget::item:selected,
+QListWidget::item:selected {
+    background: @raised;
+    color: @accent;
+}
+QScrollArea#timelineArea {
+    background: @base;
+    border: none;
+    border-top: 1px solid @raised;
+}
+
+QLabel#panelTitle {
+    color: @accent;
+    font-weight: 500;
+    font-size: @textTitle;
+}
+QLabel#panelHint {
+    color: @textDim;
+}
+QLabel#panelError {
+    color: @conflictText;
+}
+
+QFrame#floatingPanel {
+    background: @surface;
+    border: 1px solid @border;
+    border-radius: @radiusPanel;
+}
+QFrame#navBar {
+    background: @surface;
+    border: 1px solid @border;
+    border-radius: @radiusPanel;
+}
+QFrame#navBar QToolButton {
+    padding: @spaceXs;
+}
+QFrame#navBar QToolButton[popupMode="1"] {
+    padding-right: 18px;
+}
+QFrame#navBar QToolButton::menu-indicator {
+    image: none;
+}
+QFrame#navSeparator {
+    background: @border;
+    margin: @spaceS @spaceXs;
+}
+
+QPushButton {
+    background: @raised;
+    color: @text;
+    border: 1px solid @border;
+    border-radius: @radiusControl;
+    padding: @controlPadY @spaceXl;
+}
+QPushButton:hover {
+    background: @raisedHover;
+    border-color: @borderHover;
+}
+QPushButton:pressed {
+    background: @raisedPressed;
+}
+QPushButton:disabled {
+    color: @textDisabled;
+    border-color: @raised;
+}
+QPushButton:checked {
+    background: @raised;
+    border-color: @accent;
+    color: @accent;
+}
+QPushButton#primaryButton {
+    background: @accent;
+    color: @base;
+    border-color: @accent;
+    font-weight: 500;
+}
+QPushButton#primaryButton:hover {
+    background: @accentHover;
+}
+QPushButton#primaryButton:disabled {
+    background: @textDisabled;
+    border-color: @textDisabled;
+    color: @raised;
+}
+QLineEdit,
+QAbstractSpinBox,
+QComboBox {
+    background: @base;
+    color: @text;
+    border: 1px solid @raised;
+    border-radius: @radiusControl;
+    padding: @controlPadY @spaceM;
+    selection-background-color: @accent;
+    selection-color: @base;
+}
+QLineEdit:hover,
+QAbstractSpinBox:hover,
+QComboBox:hover {
+    border-color: @border;
+}
+QLineEdit:focus,
+QAbstractSpinBox:focus,
+QComboBox:focus {
+    border-color: @accent;
+}
+QLineEdit:disabled,
+QAbstractSpinBox:disabled,
+QComboBox:disabled {
+    background: @inputDisabled;
+    color: @textDisabled;
+    border-color: @borderDisabled;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox::down-arrow {
+    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    width: 12px;
+    height: 12px;
+}
+QComboBox QAbstractItemView {
+    background: @surface;
+    color: @text;
+    border: 1px solid @border;
+    selection-background-color: @raised;
+    selection-color: @accent;
+    outline: 0;
+}
+QAbstractSpinBox::up-button,
+QAbstractSpinBox::down-button {
+    border: none;
+    width: 16px;
+}
+QAbstractSpinBox::up-arrow {
+    image: url(:/kalve137/icons/qss/chevron_up.svg);
+    width: 10px;
+    height: 10px;
+}
+QAbstractSpinBox::down-arrow {
+    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    width: 10px;
+    height: 10px;
+}
+QCheckBox,
+QRadioButton {
+    spacing: @spaceM;
+}
+QCheckBox::indicator,
+QRadioButton::indicator,
+QAbstractItemView::indicator {
+    width: 12px;
+    height: 12px;
+    background: @base;
+    border: 1px solid @textDim;
+    border-radius: @radiusSmall;
+}
+QRadioButton::indicator {
+    border-radius: 7px;
+}
+QCheckBox::indicator:hover,
+QRadioButton::indicator:hover,
+QAbstractItemView::indicator:hover {
+    border-color: @text;
+}
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked,
+QAbstractItemView::indicator:checked,
+QCheckBox::indicator:indeterminate,
+QAbstractItemView::indicator:indeterminate {
+    border-color: @accent;
+}
+QCheckBox::indicator:checked,
+QAbstractItemView::indicator:checked {
+    image: url(:/kalve137/icons/qss/check.svg);
+}
+QCheckBox::indicator:indeterminate,
+QAbstractItemView::indicator:indeterminate {
+    image: url(:/kalve137/icons/qss/partial.svg);
+}
+QRadioButton::indicator:checked {
+    background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5, stop: 0 @accent, stop: 0.55 @accent, stop: 0.6 @base, stop: 1 @base);
+}
+QCheckBox::indicator:disabled,
+QRadioButton::indicator:disabled,
+QAbstractItemView::indicator:disabled {
+    background: @inputDisabled;
+    border-color: @textDisabled;
+}
+QCheckBox::indicator:checked:disabled,
+QAbstractItemView::indicator:checked:disabled {
+    image: url(:/kalve137/icons/qss/check_disabled.svg);
+}
+QCheckBox::indicator:indeterminate:disabled,
+QAbstractItemView::indicator:indeterminate:disabled {
+    image: url(:/kalve137/icons/qss/partial_disabled.svg);
+}
+QRadioButton::indicator:checked:disabled {
+    background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5, stop: 0 @textDisabled, stop: 0.55 @textDisabled, stop: 0.6 @inputDisabled, stop: 1 @inputDisabled);
+}
+QLineEdit#dimensionEditor {
+    background: @base;
+    color: @accent;
+    border: 1px solid @accent;
+    border-radius: @radiusSmall;
+    padding: @spaceXs @spaceS;
+}
+QLineEdit#sketchInput,
+QLineEdit#canvasInput {
+    background: @base;
+    color: @text;
+    border: 1px solid @border;
+    border-radius: @radiusSmall;
+    padding: @spaceXs @spaceS;
+}
+QLineEdit#sketchInput:focus,
+QLineEdit#canvasInput:focus {
+    color: @textBright;
+    border-bottom: 2px solid @accent;
+}
+QLineEdit[invalid="true"],
+QLineEdit#sketchInput[invalid="true"],
+QLineEdit#dimensionEditor[invalid="true"] {
+    border-color: @conflict;
+    border-bottom-color: @conflict;
+}
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: @raised;
+    border-radius: @radiusControl;
+    min-height: 24px;
+    margin: 1px;
+}
+QScrollBar::handle:horizontal {
+    background: @raised;
+    border-radius: @radiusControl;
+    min-width: 24px;
+    margin: 1px;
+}
+QScrollBar::handle:hover {
+    background: @border;
+}
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    width: 0;
+    height: 0;
+}
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
+}

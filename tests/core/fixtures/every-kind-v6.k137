@@ -1,0 +1,758 @@
+{
+  "counters": {
+    "appearance": 1,
+    "axis": 1,
+    "body": 3,
+    "chamfer": 1,
+    "extrude": 2,
+    "fillet": 1,
+    "hole": 1,
+    "move": 1,
+    "offset_face": 1,
+    "pattern": 1,
+    "plane": 3,
+    "point": 1,
+    "revolve": 1,
+    "shell": 1,
+    "sketch": 3
+  },
+  "features": [
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "plane_name": "XY",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": 40.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": 40.0,
+              "y": 20.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 0.0,
+              "y": 20.0
+            }
+          ]
+        }
+      },
+      "id": 1,
+      "name": "Sketch1",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "Body1",
+        "distance": 10.0,
+        "extent": "one_side",
+        "operation": "new_body",
+        "profiles": {
+          "seeds": [
+            [
+              5.0,
+              5.0
+            ]
+          ],
+          "sketch": 1
+        },
+        "second_distance": 10.0
+      },
+      "id": 2,
+      "name": "Extrude1",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "edges": [
+          {
+            "names": [],
+            "point": [
+              20.0,
+              0.0,
+              10.0
+            ]
+          }
+        ],
+        "radius": 2.0
+      },
+      "id": 3,
+      "name": "Fillet1",
+      "suppressed": false,
+      "type": "fillet"
+    },
+    {
+      "data": {
+        "distance": 1.0,
+        "edges": [
+          {
+            "names": [],
+            "point": [
+              20.0,
+              20.0,
+              10.0
+            ]
+          }
+        ]
+      },
+      "id": 4,
+      "name": "Chamfer1",
+      "suppressed": false,
+      "type": "chamfer"
+    },
+    {
+      "data": {
+        "countersink_angle": 90.0,
+        "depth": 5.0,
+        "diameter": 4.0,
+        "face_points": [
+          {
+            "names": [],
+            "point": [
+              30.0,
+              10.0,
+              10.0
+            ]
+          }
+        ],
+        "flip": false,
+        "head_depth": 3.0,
+        "head_diameter": 9.0,
+        "kind": "simple",
+        "sketch": 0,
+        "sketch_points": [],
+        "through_all": false,
+        "tip_angle": 118.0
+      },
+      "id": 5,
+      "name": "Hole1",
+      "suppressed": false,
+      "type": "hole"
+    },
+    {
+      "data": {
+        "distance": 2.0,
+        "faces": [
+          {
+            "names": [],
+            "point": [
+              0.0,
+              10.0,
+              5.0
+            ]
+          }
+        ]
+      },
+      "id": 6,
+      "name": "OffsetFace1",
+      "suppressed": false,
+      "type": "offset_face"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "plane_name": "XY",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 60.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": 80.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": 80.0,
+              "y": 20.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 60.0,
+              "y": 20.0
+            }
+          ]
+        }
+      },
+      "id": 7,
+      "name": "Sketch2",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "Body2",
+        "distance": 10.0,
+        "extent": "one_side",
+        "operation": "new_body",
+        "profiles": {
+          "seeds": [
+            [
+              65.0,
+              5.0
+            ]
+          ],
+          "sketch": 7
+        },
+        "second_distance": 10.0
+      },
+      "id": 8,
+      "name": "Extrude2",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "faces": [
+          {
+            "names": [],
+            "point": [
+              70.0,
+              10.0,
+              10.0
+            ]
+          }
+        ],
+        "inside": true,
+        "thickness": 1.0
+      },
+      "id": 9,
+      "name": "Shell1",
+      "suppressed": false,
+      "type": "shell"
+    },
+    {
+      "data": {
+        "angle": 360.0,
+        "axis": {
+          "kind": "y",
+          "line": 0,
+          "sketch": 0
+        },
+        "body": 8,
+        "body_part": 0,
+        "count": 2,
+        "kind": "linear",
+        "spacing": 30.0
+      },
+      "id": 10,
+      "name": "Pattern1",
+      "suppressed": false,
+      "type": "pattern"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            0.0
+          ]
+        },
+        "plane_name": "XZ",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": 110.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": 110.0,
+              "y": 10.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 100.0,
+              "y": 10.0
+            }
+          ]
+        }
+      },
+      "id": 11,
+      "name": "Sketch3",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "angle": 90.0,
+        "axis": {
+          "kind": "z",
+          "line": 0,
+          "sketch": 0
+        },
+        "body_name": "Body3",
+        "operation": "new_body",
+        "profiles": {
+          "seeds": [
+            [
+              105.0,
+              5.0
+            ]
+          ],
+          "sketch": 11
+        }
+      },
+      "id": 12,
+      "name": "Revolve1",
+      "suppressed": false,
+      "type": "revolve"
+    },
+    {
+      "data": {
+        "angle": 0.0,
+        "bodies": [
+          [
+            12,
+            0
+          ]
+        ],
+        "copy": false,
+        "copy_names": [],
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotate_axis": "z",
+        "translation": [
+          0.0,
+          0.0,
+          20.0
+        ]
+      },
+      "id": 13,
+      "name": "Move1",
+      "suppressed": false,
+      "type": "move"
+    },
+    {
+      "data": {
+        "bodies": [
+          [
+            2,
+            0
+          ]
+        ],
+        "color": [
+          0.8,
+          0.6,
+          0.2
+        ],
+        "faces": []
+      },
+      "id": 14,
+      "name": "Appearance1",
+      "suppressed": false,
+      "type": "appearance"
+    },
+    {
+      "data": {
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "kind": "offset",
+        "offset": 30.0
+      },
+      "id": 15,
+      "name": "Plane1",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "angle": 30.0,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 16,
+      "name": "Plane2",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "kind": "midplane",
+        "second": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "second_center": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "second_name": "Face"
+      },
+      "id": 17,
+      "name": "Plane3",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "axis": {
+          "direction": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "base_name": "Points",
+        "source": "two_points"
+      },
+      "id": 18,
+      "name": "Axis1",
+      "suppressed": false,
+      "type": "axis"
+    },
+    {
+      "data": {
+        "base_name": "Point",
+        "point": [
+          1.0,
+          2.0,
+          3.0
+        ]
+      },
+      "id": 19,
+      "name": "Point1",
+      "suppressed": false,
+      "type": "point"
+    }
+  ],
+  "format": "kalve137-design",
+  "marker": 19,
+  "next_id": 20,
+  "units": "mm",
+  "version": 6
+}

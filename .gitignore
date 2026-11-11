@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+/build/
+/install/
+/out/
+vcpkg_installed/
+
+CMakeUserPresets.json
+*.code-workspace
+.vs/
+.vscode/
+*.user

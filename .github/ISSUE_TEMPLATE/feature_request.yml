@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Feature request
+description: A tool, option or workflow Kalve 137 is missing
+labels: [enhancement]
+body:
+  - type: textarea
+    id: part
+    attributes:
+      label: Part
+      description: The part or task you are modeling.
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: Missing
+      description: What you would like to do and how you work around it today.
+    validations:
+      required: true

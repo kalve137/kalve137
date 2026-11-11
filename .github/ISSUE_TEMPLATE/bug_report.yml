@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Bug report
+description: Something breaks, crashes or gives a wrong result
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: What you did, starting from a new design or an attached one.
+      placeholder: |
+        1. Sketch a rectangle on XY
+        2. Extrude it 10 mm
+        3. Fillet the top edges
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: What happened and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From Help, About.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: Windows 11 24H2, NVIDIA RTX 3060
+  - type: textarea
+    id: files
+    attributes:
+      label: Files
+      description: Attach the problem report zip from Help, Report a Problem and the design if you can share it.

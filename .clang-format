@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+AccessModifierOffset: -4
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  SplitEmptyFunction: false
+IndentCaseLabels: false
+NamespaceIndentation: None
+FixNamespaceComments: true
+SpaceAfterTemplateKeyword: true
+BreakTemplateDeclarations: Yes
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortEnumsOnASingleLine: true
+InsertBraces: true
+InsertNewlineAtEOF: true
+LineEnding: DeriveLF
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: 'Standard_WarningsDisable'
+    Priority: 1
+  - Regex: 'Standard_WarningsRestore'
+    Priority: 3
+  - Regex: '.*'
+    Priority: 2
+TypenameMacros: [Handle]
+StatementMacros: [Q_OBJECT, Q_UNUSED]

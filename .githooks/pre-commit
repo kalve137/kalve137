@@ -1,0 +1,37 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+clang_format=$(command -v clang-format)
+if [ -z "$clang_format" ]; then
+    clang_format="/c/Program Files/LLVM/bin/clang-format.exe"
+fi
+if [ ! -x "$clang_format" ]; then
+    echo "pre-commit: clang-format not found. Install LLVM or put it on PATH."
+    exit 1
+fi
+
+status=0
+staged="${TMPDIR:-/tmp}/kalve137-staged.$$"
+git diff --cached --name-only --diff-filter=ACMR -- '*.cpp' '*.h' ':!third_party' > "$staged"
+while IFS= read -r path; do
+    if ! git show ":$path" | "$clang_format" --assume-filename="$path" --dry-run --Werror > /dev/null 2>&1; then
+        echo "pre-commit: $path is not formatted"
+        status=1
+    fi
+done < "$staged"
+rm -f "$staged"
+
+if [ "$status" -ne 0 ]; then
+    echo "Run .\\scripts\\format.ps1, stage the result and commit again."
+fi
+
+if ! command -v reuse > /dev/null 2>&1; then
+    echo "pre-commit: reuse not found. Install it with pipx install \"reuse[charset-normalizer]\"."
+    exit 1
+fi
+if ! reuse lint --quiet; then
+    echo "pre-commit: the tree is not REUSE compliant. Run reuse lint for details."
+    status=1
+fi
+exit "$status"

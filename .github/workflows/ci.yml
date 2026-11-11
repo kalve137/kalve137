@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    timeout-minutes: 300
+    env:
+      VCPKG_ROOT: C:\vcpkg-kalve137
+      VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
+      VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
+      QT_VERSION: 6.10.2
+      LLVM_VERSION: 22.1.8
+      MESA_DIR: C:\mesa
+      GALLIUM_DRIVER: llvmpipe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check licensing
+        run: |
+          pipx install "reuse[charset-normalizer]"
+          reuse lint
+
+      - name: Install LLVM
+        run: choco install llvm --version=$env:LLVM_VERSION -y --no-progress --force
+
+      - name: Check formatting
+        run: ./scripts/format.ps1 -Check
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          dir: C:\
+          cache: true
+
+      - name: Add the Qt license text
+        run: |
+          $target = 'C:\Qt\Licenses\LICENSE'
+          if (-not (Test-Path $target)) {
+              New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+              Invoke-WebRequest "https://code.qt.io/cgit/qt/qtbase.git/plain/LICENSES/LGPL-3.0-only.txt?h=v$env:QT_VERSION" -OutFile $target
+          }
+
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        run: |
+          New-Item -ItemType Directory -Force C:\vcpkg-cache | Out-Null
+          git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT checkout $env:VCPKG_COMMIT
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Build
+        run: |
+          . ./scripts/dev-shell.ps1
+          cmake --preset windows-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build --preset windows-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install software OpenGL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo pal1000/mesa-dist-win --pattern '*-release-msvc.7z' --dir C:\mesa-download
+          7z x (Get-ChildItem C:\mesa-download\*.7z).FullName -oC:\mesa-unpacked | Out-Null
+          New-Item -ItemType Directory -Force $env:MESA_DIR | Out-Null
+          foreach ($name in 'opengl32.dll', 'libgallium_wgl.dll', 'libglapi.dll') {
+              $dll = Join-Path C:\mesa-unpacked\x64 $name
+              if (Test-Path $dll) { Copy-Item $dll $env:MESA_DIR }
+          }
+          Copy-Item "$env:MESA_DIR\*.dll" build\windows-release
+
+      - name: Test
+        run: |
+          . ./scripts/dev-shell.ps1
+          ctest --preset windows-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload UI screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-shots
+          path: build/windows-release/ui-shots
+          if-no-files-found: ignore
+
+      - name: Package
+        run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:MESA_DIR
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalve137-windows-x64
+          path: build/windows-release/package/*.zip
+          if-no-files-found: error

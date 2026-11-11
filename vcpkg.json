@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "kalve137",
+  "version": "0.1.0",
+  "dependencies": [
+    "boost-graph",
+    "boost-math",
+    "eigen3",
+    "gtest",
+    "miniz",
+    "nlohmann-json",
+    "opencascade",
+    "spdlog"
+  ],
+  "builtin-baseline": "ec48c11eae9448c8c6e7739d93e06fa2433aa95f"
+}

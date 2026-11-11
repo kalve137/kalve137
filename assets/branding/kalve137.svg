@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+<defs>
+<linearGradient id="slate" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="256" y2="256"><stop offset="0" stop-color="#2B3A4E"/><stop offset="1" stop-color="#121A24"/></linearGradient>
+<linearGradient id="titanium" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="224"><stop offset="0" stop-color="#E3E6EA"/><stop offset="1" stop-color="#8A9099"/></linearGradient>
+<linearGradient id="steel" gradientUnits="userSpaceOnUse" x1="0" y1="8" x2="0" y2="248"><stop offset="0" stop-color="#7F99BA"/><stop offset="1" stop-color="#3C526F"/></linearGradient>
+</defs>
+<path d="M128 57.167L206.044 113.869L176.234 205.615L79.766 205.615L49.956 113.869Z" fill="#F2B705"/>
+<path d="M123 6.265L123 48.44L43.201 106.417L3.09 93.384Z" fill="#728CAE"/>
+<path d="M0 102.895L40.111 115.928L70.591 209.737L45.801 243.857Z" fill="#728CAE"/>
+<path d="M133 6.265L252.91 93.384L212.799 106.417L133 48.44Z" fill="#647D9E"/>
+<path d="M177.319 215.615L202.108 249.735L53.892 249.735L78.681 215.615Z" fill="#647D9E"/>
+<path d="M215.889 115.928L256 102.895L210.199 243.857L185.409 209.737Z" fill="#526C91"/>
+</svg>
