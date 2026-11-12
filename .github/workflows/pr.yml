@@ -18,7 +18,7 @@ jobs:
     name: Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check the version
         shell: pwsh
@@ -30,7 +30,7 @@ jobs:
     env:
       LLVM_VERSION: 22.1.8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install the checkers
         run: |
