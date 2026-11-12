@@ -23,7 +23,7 @@ jobs:
     name: Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -48,7 +48,7 @@ jobs:
       LLVM_VERSION: 22.1.8
       SOFTWARE_GL_DIR: C:\software-gl
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check licensing
         run: |
@@ -79,7 +79,7 @@ jobs:
 
       - name: Restore the vcpkg binary cache
         id: vcpkg-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: C:\vcpkg-cache
           key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
@@ -102,7 +102,7 @@ jobs:
 
       - name: Save the vcpkg binary cache
         if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: C:\vcpkg-cache
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
@@ -121,7 +121,7 @@ jobs:
 
       - name: Upload UI screenshots
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-shots
           path: build/windows-release/ui-shots
@@ -131,7 +131,7 @@ jobs:
         run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
 
       - name: Upload the package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kalve137-windows-x64
           path: build/windows-release/package/*.zip
@@ -145,10 +145,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download the package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: kalve137-windows-x64
           path: package
