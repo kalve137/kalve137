@@ -3,7 +3,7 @@
 
 name: Feature request
 description: A tool, option or workflow Kalve 137 is missing
-labels: [enhancement]
+labels: ["type: feature"]
 body:
   - type: textarea
     id: part

@@ -18,3 +18,5 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/labeler@v6
+        with:
+          sync-labels: true

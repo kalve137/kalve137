@@ -1,26 +1,23 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-enhancement:
+"type: feature":
   - head-branch: ["^feature/"]
 
-bug:
+"type: bug":
   - head-branch: ["^fix/"]
 
-refactor:
+"type: refactor":
   - head-branch: ["^refactor/"]
 
-documentation:
-  - any:
-      - head-branch: ["^docs/"]
-      - changed-files:
-          - any-glob-to-any-file: ["**/*.md", "docs/**"]
+"type: docs":
+  - head-branch: ["^docs/"]
 
-ci:
-  - any:
-      - head-branch: ["^ci/"]
-      - changed-files:
-          - any-glob-to-any-file: [".github/**"]
+"type: ci":
+  - head-branch: ["^ci/"]
+
+"type: dependencies":
+  - head-branch: ["^dependabot/"]
 
 "area: sketch":
   - changed-files:
@@ -49,3 +46,11 @@ ci:
 "area: build":
   - changed-files:
       - any-glob-to-any-file: ["**/CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "cmake/**", "scripts/**"]
+
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]
