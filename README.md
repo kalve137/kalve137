@@ -50,6 +50,7 @@ Zip carries its own Qt, OpenCascade and Visual C++ runtime. To check an unpacked
 ## Known limits
 
 - Windows only for now.
+- Release binaries are not code signed yet. On Windows 11 with Smart App Control on, Windows refuses to load them and shows a Bad Image dialog with status `0xc0e90002`, so Kalve 137 does not start.
 - Extrude To Object reaches planar faces and planes parallel to the sketch.
 - An edge listed in two fillet sets takes the first set's radius.
 - Window and crossing selection over a large import can take several seconds.
