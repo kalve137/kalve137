@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Pull request title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the title
+        if: github.base_ref != 'main'
+        shell: pwsh
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          $types = 'feat|fix|perf|refactor|test|docs|build|ci|chore|revert'
+          $scopes = 'sketch|modeling|files|viewer|ui|diagnostics|build|docs|ci|deps|release'
+          $problems = @()
+          if ($env:TITLE -cnotmatch "^($types)(\(($scopes)\))?!?: \S") {
+              $problems += "Start with type(scope): description. Types: $($types -replace '\|', ', '). Scopes are optional: $($scopes -replace '\|', ', ')."
+          }
+          if ($env:TITLE.Length -gt 72) {
+              $problems += "Keep it within 72 characters, it has $($env:TITLE.Length)."
+          }
+          if ($env:TITLE.EndsWith('.')) {
+              $problems += 'Drop the trailing period.'
+          }
+          foreach ($problem in $problems) {
+              Write-Output "::error::$problem"
+          }
+          if ($problems) {
+              Write-Output "Title: $env:TITLE"
+              exit 1
+          }

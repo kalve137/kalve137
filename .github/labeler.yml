@@ -2,19 +2,31 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 "type: feature":
-  - head-branch: ["^feature/"]
+  - head-branch: ["^feat/"]
 
 "type: bug":
   - head-branch: ["^fix/"]
 
+"type: perf":
+  - head-branch: ["^perf/"]
+
 "type: refactor":
   - head-branch: ["^refactor/"]
+
+"type: test":
+  - head-branch: ["^test/"]
 
 "type: docs":
   - head-branch: ["^docs/"]
 
+"type: build":
+  - head-branch: ["^build/"]
+
 "type: ci":
   - head-branch: ["^ci/"]
+
+"type: chore":
+  - head-branch: ["^chore/"]
 
 "type: dependencies":
   - head-branch: ["^dependabot/"]
