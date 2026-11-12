@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"type: feature":
+  - head-branch: ["^feature/"]
+
+"type: bug":
+  - head-branch: ["^fix/"]
+
+"type: refactor":
+  - head-branch: ["^refactor/"]
+
+"type: docs":
+  - head-branch: ["^docs/"]
+
+"type: ci":
+  - head-branch: ["^ci/"]
+
+"type: dependencies":
+  - head-branch: ["^dependabot/"]
+
+"area: sketch":
+  - changed-files:
+      - any-glob-to-any-file: ["src/sketch/**", "src/app/sketch/**", "tests/sketch/**", "third_party/planegcs/**"]
+
+"area: modeling":
+  - changed-files:
+      - any-glob-to-any-file: ["src/geometry/**", "src/app/feature/**", "tests/geometry/**"]
+
+"area: files":
+  - changed-files:
+      - any-glob-to-any-file: ["src/core/**", "src/app/session/**", "tests/core/**", "assets/samples/**"]
+
+"area: viewer":
+  - changed-files:
+      - any-glob-to-any-file: ["src/viewer/**", "src/app/view/**", "tests/viewer/**", "third_party/occt_qt/**"]
+
+"area: ui":
+  - changed-files:
+      - any-glob-to-any-file: ["src/app/shell/**", "src/app/panels/**", "src/app/theme/**", "assets/icons/**", "assets/theme/**", "tests/ui/**", "tests/app/**"]
+
+"area: diagnostics":
+  - changed-files:
+      - any-glob-to-any-file: ["src/log/**", "src/platform/**", "src/app/diagnostics/**", "tests/log/**", "tests/platform/**"]
+
+"area: build":
+  - changed-files:
+      - any-glob-to-any-file: ["**/CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "cmake/**", "scripts/**"]
+
+"area: docs":
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+
+"area: ci":
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]

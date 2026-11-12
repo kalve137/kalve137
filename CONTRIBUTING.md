@@ -50,13 +50,15 @@ Linux presets come later. The code is kept portable now, see below.
 
 `main` is always releasable and is the only long-lived branch. Work happens on short-lived branches named after their kind:
 
-| Prefix | For |
-| --- | --- |
-| `feature/` | New behavior |
-| `fix/` | Bug fixes |
-| `refactor/` | Code changes that keep behavior |
-| `docs/` | Documentation only |
-| `ci/` | Workflows, scripts and build setup |
+| Prefix | For | Label |
+| --- | --- | --- |
+| `feature/` | New behavior | `type: feature` |
+| `fix/` | Bug fixes | `type: bug` |
+| `refactor/` | Code changes that keep behavior | `type: refactor` |
+| `docs/` | Documentation only | `type: docs` |
+| `ci/` | Workflows, scripts and build setup | `type: ci` |
+
+Every label is `type: ` or `area: ` followed by a value. A pull request carries exactly one `type:` label, set from its branch prefix, and an `area:` label for each part of the repo it touches, set from its paths by `.github/labeler.yml`. Issues get their `type:` label from the issue form. A new area needs an entry in `.github/labeler.yml` and a matching label on GitHub.
 
 Open a pull request against `main`. It merges once the `Version` and `Windows` checks pass and lands as a single squashed commit, so the pull request title becomes the commit subject. Write it like a commit subject: imperative, capitalized, no trailing period and no type prefix, as in `Add taper to revolve`. Branches are deleted on merge.
 

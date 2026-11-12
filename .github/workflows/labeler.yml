@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  label:
+    name: Label
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@v6
+        with:
+          sync-labels: true
