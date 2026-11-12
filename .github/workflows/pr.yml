@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Pull request
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version
+        shell: pwsh
+        run: ./scripts/check-version.ps1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    env:
+      LLVM_VERSION: 22.1.8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the checkers
+        run: |
+          pipx install "reuse[charset-normalizer]"
+          pipx install "clang-format==$LLVM_VERSION"
+
+      - name: Check licensing
+        run: reuse lint
+
+      - name: Check formatting
+        shell: pwsh
+        run: ./scripts/format.ps1 -Check
+
+  source:
+    name: Source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the source branch
+        if: github.base_ref == 'main' && (github.head_ref != 'dev' || github.event.pull_request.head.repo.full_name != github.repository)
+        run: |
+          echo "main takes pull requests from this repo's dev only. Change the base branch of this pull request to dev."
+          exit 1

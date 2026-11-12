@@ -5,9 +5,10 @@ name: CI
 
 on:
   push:
-    branches: [main, "release/*"]
+    branches: [dev, "release/*"]
     tags: ["v*"]
-  pull_request:
+  schedule:
+    - cron: "0 3 * * 1,4"
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   version:

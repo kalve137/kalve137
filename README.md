@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/kalve137/kalve137/actions/workflows/ci.yml"><img alt="CI status." src="https://img.shields.io/github/actions/workflow/status/kalve137/kalve137/ci.yml?branch=main&label=CI"></a>
+  <a href="https://github.com/kalve137/kalve137/actions/workflows/ci.yml"><img alt="CI status." src="https://img.shields.io/github/actions/workflow/status/kalve137/kalve137/ci.yml?branch=dev&label=CI"></a>
   <a href="https://github.com/kalve137/kalve137/releases/latest"><img alt="Latest release." src="https://img.shields.io/github/v/release/kalve137/kalve137?include_prereleases&color=F2B705"></a>
   <a href="LICENSE"><img alt="License GPL-3.0-or-later." src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
   <img alt="Platform Windows 10 and 11." src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4">
@@ -66,7 +66,7 @@ Every UI flow is tested headless. A hidden main window is driven through real cl
 
 ## Build
 
-Windows build steps, tests, packaging, formatting and code layout are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes per release are in [CHANGELOG.md](CHANGELOG.md).
+Build steps and how to contribute are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes per release are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

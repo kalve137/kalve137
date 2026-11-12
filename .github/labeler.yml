@@ -19,6 +19,9 @@
 "type: dependencies":
   - head-branch: ["^dependabot/"]
 
+"type: promotion":
+  - head-branch: ["^dev$"]
+
 "area: sketch":
   - changed-files:
       - any-glob-to-any-file: ["src/sketch/**", "src/app/sketch/**", "tests/sketch/**", "third_party/planegcs/**"]
