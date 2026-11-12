@@ -9,11 +9,11 @@ if (-not $vs) {
     throw 'No Visual Studio installation with the C++ x64 toolset was found.'
 }
 
-$userVcpkg = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'User')
+$ownVcpkg = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'User') }
 & "$vs\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation | Out-Null
 
-if ($userVcpkg) {
-    $env:VCPKG_ROOT = $userVcpkg
+if ($ownVcpkg) {
+    $env:VCPKG_ROOT = $ownVcpkg
 }
 if (-not $env:QT_ROOT_DIR) {
     $env:QT_ROOT_DIR = [Environment]::GetEnvironmentVariable('QT_ROOT_DIR', 'User')

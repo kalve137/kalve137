@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/*"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -18,18 +18,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check the version
+        shell: pwsh
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: ./scripts/check-version.ps1 -Tag $env:TAG
+
   windows:
     name: Windows
+    needs: version
     runs-on: windows-2025
     timeout-minutes: 300
     env:
       VCPKG_ROOT: C:\vcpkg-kalve137
       VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
       VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-windows-release
       QT_VERSION: 6.10.2
       LLVM_VERSION: 22.1.8
-      MESA_DIR: C:\mesa
-      GALLIUM_DRIVER: llvmpipe
+      SOFTWARE_GL_DIR: C:\software-gl
     steps:
       - uses: actions/checkout@v4
 
@@ -61,11 +77,12 @@ jobs:
           }
 
       - name: Restore the vcpkg binary cache
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: C:\vcpkg-cache
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: vcpkg-${{ env.VCPKG_COMMIT }}-
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Bootstrap vcpkg
         run: |
@@ -77,23 +94,23 @@ jobs:
       - name: Build
         run: |
           . ./scripts/dev-shell.ps1
-          cmake --preset windows-release
+          cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:\vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Install software OpenGL
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download --repo pal1000/mesa-dist-win --pattern '*-release-msvc.7z' --dir C:\mesa-download
-          7z x (Get-ChildItem C:\mesa-download\*.7z).FullName -oC:\mesa-unpacked | Out-Null
-          New-Item -ItemType Directory -Force $env:MESA_DIR | Out-Null
-          foreach ($name in 'opengl32.dll', 'libgallium_wgl.dll', 'libglapi.dll') {
-              $dll = Join-Path C:\mesa-unpacked\x64 $name
-              if (Test-Path $dll) { Copy-Item $dll $env:MESA_DIR }
-          }
-          Copy-Item "$env:MESA_DIR\*.dll" build\windows-release
+          New-Item -ItemType Directory -Force $env:SOFTWARE_GL_DIR | Out-Null
+          Copy-Item "$env:QT_ROOT_DIR\bin\opengl32sw.dll" "$env:SOFTWARE_GL_DIR\opengl32.dll"
+          Copy-Item "$env:SOFTWARE_GL_DIR\opengl32.dll" build\windows-release
 
       - name: Test
         run: |
@@ -110,7 +127,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package
-        run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:MESA_DIR
+        run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
 
       - name: Upload the package
         uses: actions/upload-artifact@v4
@@ -141,6 +158,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           version="${TAG#v}"
+          version="${version%%-*}"
+          prerelease=""
+          if [[ "$TAG" == *-* ]]; then
+              prerelease="--prerelease"
+          fi
           zip="package/kalve137-${version}-windows-x64.zip"
           if [ ! -f "$zip" ]; then
               echo "No $zip, the tag does not match the project version"
@@ -150,5 +172,5 @@ jobs:
               gh release upload "$TAG" "$zip" --clobber
               exit 0
           fi
-          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {found = 1; next} found && /^## \[/ {exit} found {print}' CHANGELOG.md > notes.md
-          gh release create "$TAG" "$zip" --draft --verify-tag --title "$TAG" --notes-file notes.md
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {found = 1; next} found && /^(## )?\[[^]]+\]/ {exit} found {print}' CHANGELOG.md > notes.md
+          gh release create "$TAG" "$zip" --draft $prerelease --verify-tag --title "$TAG" --notes-file notes.md

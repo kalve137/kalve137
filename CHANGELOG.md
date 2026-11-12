@@ -1,6 +1,8 @@
 # Changelog
 
-Notable changes per release. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
+Notable changes per release. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/) as described in [CONTRIBUTING.md](CONTRIBUTING.md#versioning-and-releases).
+
+## [Unreleased]
 
 ## [0.1.0] - 2026-11-11
 
@@ -26,3 +28,6 @@ First public release for 64-bit Windows.
 - Third-party notices in Help, About and in release zip
 - Dodecahedron sample design in `bin\samples`
 - `--smoke` command line mode that checks an unpacked copy offscreen
+
+[Unreleased]: https://github.com/kalve137/kalve137/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kalve137/kalve137/releases/tag/v0.1.0

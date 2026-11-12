@@ -3,6 +3,9 @@
 
 include(GNUInstallDirs)
 
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS runtime_copy=1)
+set(CMAKE_JOB_POOL_LINK runtime_copy)
+
 function(kalve137_copy_runtime_dlls target)
     if(NOT WIN32)
         return()

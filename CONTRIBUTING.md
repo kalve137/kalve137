@@ -1,5 +1,7 @@
 # Contributing to Kalve 137
 
+Report security issues privately as described in [SECURITY.md](SECURITY.md), not in public issues.
+
 ## Build on Windows
 
 Prerequisites:
@@ -43,6 +45,46 @@ This builds `kalve137`, runs CPack into `build\windows-release\package\kalve137-
 Libraries shipped in the zip are listed in `THIRD-PARTY-NOTICES.md` and their license texts are installed to `bin\notices`. Update both when adding a dependency.
 
 Linux presets come later. The code is kept portable now, see below.
+
+## Workflow
+
+`main` is always releasable and is the only long-lived branch. Work happens on short-lived branches named after their kind:
+
+| Prefix | For |
+| --- | --- |
+| `feature/` | New behavior |
+| `fix/` | Bug fixes |
+| `refactor/` | Code changes that keep behavior |
+| `docs/` | Documentation only |
+| `ci/` | Workflows, scripts and build setup |
+
+Open a pull request against `main`. It merges once the `Version` and `Windows` checks pass and lands as a single squashed commit, so the pull request title becomes the commit subject. Write it like a commit subject: imperative, capitalized, no trailing period and no type prefix, as in `Add taper to revolve`. Branches are deleted on merge.
+
+Every user-visible change adds a line under `## [Unreleased]` in `CHANGELOG.md`, in the matching Keep a Changelog section such as `Added`, `Changed` or `Fixed`.
+
+## Versioning and releases
+
+Versions follow [Semantic Versioning](https://semver.org/). The public interface is the `.k137` file format and the command line.
+
+- Before 1.0, minor versions add features and may change the file format. Patch versions only fix bugs. Older files keep loading.
+- From 1.0, a major version is needed when older files stop loading or a command line option changes meaning.
+- Release tags are `vX.Y.Z`. Release candidates are `vX.Y.Z-rc.N`.
+
+Version lives in one place, `project(kalve137 VERSION ...)` in `CMakeLists.txt`. `scripts/check-version.ps1` checks it against `CHANGELOG.md` and, with `-Tag`, against a tag. CI runs it first, so a mismatched tag fails in seconds instead of after the build.
+
+```powershell
+pwsh scripts/check-version.ps1
+pwsh scripts/check-version.ps1 -Tag v0.2.0
+```
+
+To release:
+
+1. Open a release pull request that sets the version in `CMakeLists.txt`, renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, adds a fresh `## [Unreleased]` above it and updates the compare links at the bottom.
+2. After it merges, tag `main` with `git tag -a vX.Y.Z -m vX.Y.Z` and push the tag with `git push origin vX.Y.Z`.
+3. CI checks the version, builds and drafts a GitHub release with the changelog section as notes and the zip attached.
+4. Review the draft and publish it.
+
+Tags are permanent. A wrong release is fixed with a new patch version, never by moving a tag. When an older minor version needs a fix after `main` has moved on, branch `release/X.Y` from `vX.Y.0`, fix it there through pull requests and tag the patch on that branch.
 
 ## Layout
 
