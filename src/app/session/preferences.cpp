@@ -15,7 +15,7 @@ namespace {
 using viewer::NavigationPreset;
 
 constexpr std::array kPresets = {NavigationPreset::MiddleOrbitsCtrlPans, NavigationPreset::MiddlePansShiftOrbits,
-                                 NavigationPreset::MiddleOrbitsShiftPans};
+                                 NavigationPreset::MiddleOrbitsShiftPans, NavigationPreset::RightOrbitsCtrlPans};
 constexpr std::array kStyles = {VisualStyle::Shaded, VisualStyle::ShadedWithEdges, VisualStyle::Wireframe,
                                 VisualStyle::VisibleEdges};
 
@@ -28,6 +28,8 @@ const char* keyOf(NavigationPreset preset)
         return "pan-shift-orbit";
     case NavigationPreset::MiddleOrbitsShiftPans:
         return "orbit-shift-pan";
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return "right-orbit-ctrl-pan";
     }
     return "orbit-ctrl-pan";
 }
@@ -159,6 +161,8 @@ QString displayName(NavigationPreset preset)
         return tr("Middle Pans, Shift Orbits");
     case NavigationPreset::MiddleOrbitsShiftPans:
         return tr("Middle Orbits, Shift Pans");
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return tr("Right Orbits, Ctrl Pans");
     }
     return {};
 }
@@ -187,6 +191,10 @@ QString navigationHint(NavigationPreset preset)
         return tr("Orbit: Shift + middle drag   Pan: middle drag   Zoom: wheel or Ctrl + middle drag   Fit: F6");
     case NavigationPreset::MiddleOrbitsShiftPans:
         return tr("Orbit: middle drag   Pan: Shift + middle drag   Zoom: wheel or Ctrl + middle drag   Fit: F6");
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return tr(
+            "Orbit: right drag   Pan: Ctrl + right drag   Zoom: wheel or Shift + right drag   Menu: middle click   "
+            "Fit: F6");
     }
     return {};
 }

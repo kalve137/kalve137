@@ -70,6 +70,10 @@ public:
     bool facesStandardView() const;
     void turnView(ViewTurn way);
     void animateCamera(const std::function<void()>& change);
+    void saveView();
+    bool hasSavedView() const { return !m_savedView.IsNull(); }
+    void restoreSavedView();
+    void dropSavedView();
     QRectF viewCubeRect() const;
     void setGridPlane(const gp_Ax3& plane);
     const gp_Ax3& gridPlane() const { return m_grid->plane(); }
@@ -141,6 +145,7 @@ private:
     void updateGrid(bool force);
     void failFrame(V3d_View& view, const char* reason);
     bool recoverCamera(V3d_View& view);
+    void syncAspect(V3d_View& view);
     void logFailedFrame(const V3d_View& view, const char* reason) const;
     bool startBox(const QMouseEvent* event);
     bool dragBox(const QMouseEvent* event);
@@ -156,6 +161,7 @@ private:
     std::optional<GridExtent> m_gridExtent;
     Handle(SelectMgr_EntityOwner) m_hovered;
     Handle(Graphic3d_Camera) m_lastGoodCamera = new Graphic3d_Camera();
+    Handle(Graphic3d_Camera) m_savedView;
     bool m_hasGoodCamera = false;
     int m_failedFrames = 0;
 

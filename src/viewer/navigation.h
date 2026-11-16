@@ -9,6 +9,7 @@ enum class NavigationPreset {
     MiddleOrbitsCtrlPans,
     MiddlePansShiftOrbits,
     MiddleOrbitsShiftPans,
+    RightOrbitsCtrlPans,
 };
 
 struct Navigation {

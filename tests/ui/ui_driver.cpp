@@ -749,7 +749,9 @@ void UiDriver::drag(QPointF from, QPointF to, Qt::MouseButton button, Qt::Keyboa
     move(from);
     press(from, button, modifiers);
     for (int i = 1; i <= steps; ++i) {
-        move(from + (to - from) * (static_cast<double>(i) / steps), m_buttons);
+        sendMouse(QEvent::MouseMove, from + (to - from) * (static_cast<double>(i) / steps), Qt::NoButton, m_buttons,
+                  modifiers);
+        frame();
     }
     release(to, button, modifiers);
     settle();

@@ -234,6 +234,7 @@ void OcctViewWidget::setNavigation(const Navigation& navigation)
 {
     m_navigation = navigation;
     const unsigned int middle = Aspect_VKeyMouse_MiddleButton;
+    const unsigned int right = Aspect_VKeyMouse_RightButton;
     const unsigned int ctrl = Aspect_VKeyFlags_CTRL;
     const unsigned int shift = Aspect_VKeyFlags_SHIFT;
     NCollection_DataMap<unsigned int, AIS_MouseGesture>& gestures = ChangeMouseGestureMap();
@@ -255,6 +256,11 @@ void OcctViewWidget::setNavigation(const Navigation& navigation)
         gestures.Bind(middle, AIS_MouseGesture_RotateOrbit);
         gestures.Bind(middle | shift, AIS_MouseGesture_Pan);
         gestures.Bind(middle | ctrl, AIS_MouseGesture_Zoom);
+        break;
+    case NavigationPreset::RightOrbitsCtrlPans:
+        gestures.Bind(right, AIS_MouseGesture_RotateOrbit);
+        gestures.Bind(right | ctrl, AIS_MouseGesture_Pan);
+        gestures.Bind(right | shift, AIS_MouseGesture_Zoom);
         break;
     }
     SetRotationMode(navigation.orbitAroundCursor ? AIS_RotationMode_PickLast : AIS_RotationMode_BndBoxActive);
@@ -400,6 +406,55 @@ void OcctViewWidget::animateCamera(const std::function<void()>& change)
     }
     m_view->Camera()->Copy(start);
     startCameraAnimation(start, end);
+}
+
+void OcctViewWidget::saveView()
+{
+    if (!isReady()) {
+        return;
+    }
+    m_savedView = new Graphic3d_Camera();
+    m_savedView->Copy(targetCamera());
+}
+
+void OcctViewWidget::restoreSavedView()
+{
+    if (m_savedView.IsNull()) {
+        return;
+    }
+    const Handle(Graphic3d_Camera) saved = m_savedView;
+    m_savedView.Nullify();
+    if (!isReady() || !isUsable(*saved)) {
+        return;
+    }
+    animateCamera([this, &saved] {
+        m_view->Camera()->Copy(saved);
+        syncAspect(*m_view);
+        m_view->Invalidate();
+    });
+    updateView();
+}
+
+void OcctViewWidget::dropSavedView()
+{
+    m_savedView.Nullify();
+}
+
+void OcctViewWidget::syncAspect(V3d_View& view)
+{
+    int width = 0;
+    int height = 0;
+    view.Window()->Size(width, height);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    const double aspect = static_cast<double>(width) / height;
+    for (const Handle(Graphic3d_Camera)& camera :
+         {view.Camera(), myViewAnimation->CameraStart(), myViewAnimation->CameraEnd()}) {
+        if (!camera.IsNull() && camera->Aspect() != aspect) {
+            camera->SetAspect(aspect);
+        }
+    }
 }
 
 void OcctViewWidget::startCameraAnimation(const Handle(Graphic3d_Camera)& start, const Handle(Graphic3d_Camera)& end)
@@ -639,6 +694,7 @@ void OcctViewWidget::paintGL()
     view->InvalidateImmediate();
     try {
         repairUp(*view->Camera());
+        syncAspect(*view);
         AIS_ViewController::FlushViewEvents(m_context, view, true);
         if (isUsable(*view->Camera())) {
             m_lastGoodCamera->Copy(view->Camera());
@@ -710,7 +766,9 @@ void OcctViewWidget::mousePressEvent(QMouseEvent* event)
             return;
         }
     }
-    if (event->button() == Qt::RightButton) {
+    const Qt::MouseButton menuButton =
+        m_navigation.preset == NavigationPreset::RightOrbitsCtrlPans ? Qt::MiddleButton : Qt::RightButton;
+    if (event->button() == menuButton) {
         emit menuRequested(event->globalPosition().toPoint());
         return;
     }

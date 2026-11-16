@@ -4,7 +4,17 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/session/preferences.h"
+
+#include <QPointF>
+
+#include <gp_Pnt.hxx>
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstddef>
+#include <memory>
+#include <vector>
 
 namespace kalve137::uitest {
 namespace {
@@ -103,6 +113,61 @@ TEST_F(WorkflowTest, SketchOnAFaceFollowsTheFace)
     for (const nlohmann::json& feature : state["features"]) {
         EXPECT_EQ(feature["health"], "ok") << feature.dump();
     }
+}
+
+std::vector<QPointF> viewMarks(const UiDriver& ui)
+{
+    return {ui.at(gp_Pnt(0, 0, 0)), ui.at(gp_Pnt(10, 0, 0)), ui.at(gp_Pnt(0, 10, 0)), ui.at(gp_Pnt(0, 0, 10))};
+}
+
+void expectSameView(const std::vector<QPointF>& before, const std::vector<QPointF>& after)
+{
+    ASSERT_EQ(before.size(), after.size());
+    for (std::size_t i = 0; i < before.size(); ++i) {
+        EXPECT_NEAR(before[i].x(), after[i].x(), 1.0) << "mark " << i;
+        EXPECT_NEAR(before[i].y(), after[i].y(), 1.0) << "mark " << i;
+    }
+}
+
+TEST_F(WorkflowTest, FinishingASketchReturnsToThePreviousView)
+{
+    ui->settle();
+    const std::vector<QPointF> before = viewMarks(*ui);
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XZ));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->settle();
+    const QPointF up = ui->at(gp_Pnt(0, 0, 10)) - ui->at(gp_Pnt(0, 0, 0));
+    const QPointF across = ui->at(gp_Pnt(10, 0, 0)) - ui->at(gp_Pnt(0, 0, 0));
+    EXPECT_LT(std::abs(up.x()), 1.0) << "View faces XZ plane";
+    EXPECT_LT(std::abs(across.y()), 1.0) << "View faces XZ plane";
+
+    ui->trigger("Finish Sketch");
+    ui->settle();
+    expectSameView(before, viewMarks(*ui));
+}
+
+TEST_F(WorkflowTest, WithoutLookAtTheViewStaysPutThroughASketch)
+{
+    app::Preferences preferences = app::Preferences::load();
+    preferences.lookAtSketch = false;
+    preferences.save();
+    ui = std::make_unique<UiDriver>();
+    ui->settle();
+    const std::vector<QPointF> before = viewMarks(*ui);
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XZ));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->settle();
+    const QPointF up = ui->at(gp_Pnt(0, 0, 10)) - ui->at(gp_Pnt(0, 0, 0));
+    EXPECT_GT(std::abs(up.x()) + std::abs(ui->at(gp_Pnt(10, 0, 0)).y() - ui->at(gp_Pnt(0, 0, 0)).y()), 1.0)
+        << "View keeps its slant instead of facing plane";
+
+    ui->trigger("Finish Sketch");
+    ui->settle();
+    expectSameView(before, viewMarks(*ui));
 }
 
 } // namespace
