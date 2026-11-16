@@ -110,21 +110,26 @@ OcctViewWidget::OcctViewWidget(QWidget* parent) : QOpenGLWidget(parent)
     m_context = new AIS_InteractiveContext(m_viewer);
     m_grid = new GridObject(GridObject::Part::Lines);
     m_gridWash = new GridObject(GridObject::Part::Wash);
-    const auto addGridLayer = [this](const char* name, Graphic3d_ZLayerId after) {
+    const auto addLayer = [this](const char* name, Graphic3d_ZLayerId after, bool depthWrite) {
         Graphic3d_ZLayerSettings settings;
         settings.SetName(name);
         settings.SetClearDepth(false);
         settings.SetEnableDepthTest(true);
-        settings.SetEnableDepthWrite(false);
+        settings.SetEnableDepthWrite(depthWrite);
         Graphic3d_ZLayerId id = Graphic3d_ZLayerId_UNKNOWN;
         return m_viewer->InsertLayerAfter(id, settings, after) ? id : Graphic3d_ZLayerId_UNKNOWN;
     };
-    const Graphic3d_ZLayerId washLayer = addGridLayer("GridWash", Graphic3d_ZLayerId_Default);
+    const Graphic3d_ZLayerId washLayer = addLayer("GridWash", Graphic3d_ZLayerId_Default, false);
     const Graphic3d_ZLayerId gridLayer =
-        washLayer != Graphic3d_ZLayerId_UNKNOWN ? addGridLayer("Grid", washLayer) : Graphic3d_ZLayerId_UNKNOWN;
+        washLayer != Graphic3d_ZLayerId_UNKNOWN ? addLayer("Grid", washLayer, false) : Graphic3d_ZLayerId_UNKNOWN;
     if (gridLayer != Graphic3d_ZLayerId_UNKNOWN) {
         m_gridWash->SetZLayer(washLayer);
         m_grid->SetZLayer(gridLayer);
+        if (const Graphic3d_ZLayerId lines = addLayer("Lines", gridLayer, true); lines != Graphic3d_ZLayerId_UNKNOWN) {
+            m_linesLayer = lines;
+        } else {
+            K137_WARN(Viewer, "No lines layer, edges in grid plane can flicker against it");
+        }
     } else {
         K137_WARN(Viewer, "No grid layer, the grid draws under everything");
         m_gridWash->SetZLayer(Graphic3d_ZLayerId_BotOSD);

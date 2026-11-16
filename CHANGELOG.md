@@ -24,6 +24,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 
 - Closing Recover Design prompt keeps autosave
 - Default buttons are highlighted, including Save Zip and Restore
+- Sketch lines on grid plane no longer flicker against grid lines
 - Line tool angle box stays clear of line
 - Status bar hint returns after a menu closes
 - Dialogs show only a close button

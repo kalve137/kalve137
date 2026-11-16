@@ -5,14 +5,21 @@
 #include "ui_test.h"
 
 #include "app/session/preferences.h"
+#include "app/theme/theme.h"
+#include "viewer/occt_view_widget.h"
 
+#include <QColor>
+#include <QImage>
+#include <QPoint>
 #include <QPointF>
 
 #include <gp_Pnt.hxx>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -115,6 +122,10 @@ TEST_F(WorkflowTest, SketchOnAFaceFollowsTheFace)
     }
 }
 
+constexpr int kZoomSteps = 6;
+constexpr int kLineSamples = 200;
+constexpr int kLineTolerance = 64;
+
 std::vector<QPointF> viewMarks(const UiDriver& ui)
 {
     return {ui.at(gp_Pnt(0, 0, 0)), ui.at(gp_Pnt(10, 0, 0)), ui.at(gp_Pnt(0, 10, 0)), ui.at(gp_Pnt(0, 0, 10))};
@@ -146,6 +157,41 @@ TEST_F(WorkflowTest, FinishingASketchReturnsToThePreviousView)
     ui->trigger("Finish Sketch");
     ui->settle();
     expectSameView(before, viewMarks(*ui));
+}
+
+TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
+{
+    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
+    ASSERT_EQ(ui->state()["sketch"], 0);
+    ui->settle();
+    for (int i = 0; i < kZoomSteps; ++i) {
+        ui->wheel(ui->at(gp_Pnt(45, 20, 0)), 2);
+    }
+    ui->settle();
+    ui->save("zoomed on a grid line");
+
+    const QImage frame = ui->view().grabFramebuffer();
+    const qreal ratio = ui->view().devicePixelRatioF();
+    const QColor line = app::theme::kSketchFree;
+    int sampled = 0;
+    int solid = 0;
+    for (int i = 0; i <= kLineSamples; ++i) {
+        const QPointF at = ui->at(gp_Pnt(30.0 + 30.0 * i / kLineSamples, 20, 0)) * ratio;
+        const QPoint pixel = at.toPoint();
+        if (!frame.rect().contains(pixel)) {
+            continue;
+        }
+        ++sampled;
+        int best = std::numeric_limits<int>::max();
+        for (int dy = -1; dy <= 1; ++dy) {
+            const QColor c = frame.pixelColor(pixel + QPoint(0, dy));
+            best = std::min(best, std::abs(c.red() - line.red()) + std::abs(c.green() - line.green()) +
+                                      std::abs(c.blue() - line.blue()));
+        }
+        solid += best <= kLineTolerance ? 1 : 0;
+    }
+    ASSERT_GT(sampled, kLineSamples / 2);
+    EXPECT_GE(solid, sampled * 9 / 10) << solid << " of " << sampled << " samples show sketch line";
 }
 
 TEST_F(WorkflowTest, WithoutLookAtTheViewStaysPutThroughASketch)
