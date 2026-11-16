@@ -26,9 +26,11 @@ The first configure builds OpenCascade and takes 30 to 60 minutes. UI tests driv
 
 ## Pull requests
 
-Branch from `dev` with the type as prefix, as in `feat/revolve-taper`. Open the pull request against `dev`, run the tests that cover your change and add a line under `[Unreleased]` in `CHANGELOG.md` for anything users notice.
+Branch from `dev` with a type prefix such as `feat/`, `fix/` or `docs/`, which sets the label. Open the pull request against `dev`.
 
-Titles follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/), as in `feat(modeling): add taper to revolve`, lowercase and imperative within 72 characters. Types are `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `build`, `ci`, `chore` and `revert`. The optional scope is one of `sketch`, `modeling`, `files`, `viewer`, `ui`, `diagnostics`, `build`, `docs`, `ci`, `deps` or `release`. A `!` before the colon marks a breaking change. The title becomes the commit, so commits on your branch can say anything.
+The title is a capitalized imperative within 65 characters and without a trailing period, as in `Add taper to revolve`. Title and description become the squash commit, so fill in **Summary** and **Test plan**.
+
+Run the tests that cover your change, add a line under `[Unreleased]` in `CHANGELOG.md` for anything users notice and check that `format.ps1`, `lint.ps1` and `reuse lint` pass.
 
 Pull requests squash-merge after quick checks. Every merge into `dev` runs the full Windows build and `main` only takes `dev` commits that passed it.
 
