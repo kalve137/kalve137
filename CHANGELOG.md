@@ -34,6 +34,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Report a Problem notes missing crash report or unsaved design instead of disabling its checkbox
 - Dimension lines keep their contrast over light faces
 - Marking menu list sits lower and skips disabled and duplicate recent commands
+- Clicking a dimension label edits it without moving mouse first
 
 ## [0.1.0] - 2026-11-11
 
