@@ -58,17 +58,17 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_reopenLastProject = addCheck(general, tr("Reopen the last project on start"), tr("startup recent"));
 
     QFormLayout* navigation = addPage(tr("Navigation"));
-    m_preset = addCombo(navigation, tr("Mouse scheme"), tr("preset orbit pan zoom middle button"));
+    m_preset = addCombo(navigation, tr("Mouse scheme"), tr("preset orbit pan zoom middle right button"));
     for (const NavigationPreset preset :
          {NavigationPreset::MiddleOrbitsCtrlPans, NavigationPreset::MiddlePansShiftOrbits,
-          NavigationPreset::MiddleOrbitsShiftPans}) {
+          NavigationPreset::MiddleOrbitsShiftPans, NavigationPreset::RightOrbitsCtrlPans}) {
         m_preset->addItem(displayName(preset), static_cast<int>(preset));
     }
     m_presetHint = new QLabel(this);
     m_presetHint->setObjectName("panelHint");
     m_presetHint->setWordWrap(true);
     navigation->addRow(QString(), m_presetHint);
-    addRow(navigation, tr("Mouse scheme preset orbit pan zoom middle button"));
+    addRow(navigation, tr("Mouse scheme preset orbit pan zoom middle right button"));
     connect(m_preset, &QComboBox::currentIndexChanged, this, &PreferencesDialog::updatePresetHint);
     m_reverseZoom = addCheck(navigation, tr("Reverse wheel zoom direction"), tr("scroll invert"));
     m_zoomToCursor = addCheck(navigation, tr("Zoom toward the cursor"), tr("wheel scroll point"));
@@ -89,7 +89,8 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_showGrid = addCheck(display, tr("Show the grid"), tr("ground plane"));
 
     QFormLayout* sketch = addPage(tr("Sketch"));
-    m_lookAtSketch = addCheck(sketch, tr("Look at the sketch plane when sketching starts"), tr("camera turn"));
+    m_lookAtSketch = addCheck(sketch, tr("Look at sketch plane while sketching"), tr("camera turn return view"));
+    m_lookAtSketch->setToolTip(tr("Turns view to face sketch and returns to previous view when sketch ends"));
     m_sketchProfiles = addCheck(sketch, tr("Shade profiles"), tr("palette regions closed loops"));
     m_sketchPoints = addCheck(sketch, tr("Show points"), tr("palette vertices ends"));
     m_sketchDimensions = addCheck(sketch, tr("Show dimensions"), tr("palette sizes values"));

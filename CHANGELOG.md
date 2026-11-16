@@ -7,10 +7,13 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 ### Added
 
 - `--import-batch` command line mode that measures STEP import, save, reopen and export over a folder
+- Right Orbits, Ctrl Pans mouse scheme with marking menu on middle click
 - Copy Details in About for bug reports
 
 ### Changed
 
+- Finishing a sketch returns view to where it was before
+- Look at sketch plane preference has a clearer name
 - About shows version and license, with graphics details in Copy Details
 - Close prompts say Don't Save instead of Discard
 - Repeat runs last command available in current mode

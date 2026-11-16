@@ -115,6 +115,7 @@ void MainWindow::stopPickingPlane()
 
 void MainWindow::leaveModes()
 {
+    m_view->dropSavedView();
     m_featurePanel->cancel();
     stopPickingPlane();
     finishSketch();
@@ -141,6 +142,7 @@ void MainWindow::beginSketch(core::FeatureId id)
     if (feature == nullptr || !std::holds_alternative<core::SketchFeature>(feature->data)) {
         return;
     }
+    const bool alreadySketching = m_sketchEditor->isActive();
     m_featurePanel->cancel();
     stopPickingPlane();
     m_scene->setPickMode(PickMode::None);
@@ -150,6 +152,9 @@ void MainWindow::beginSketch(core::FeatureId id)
     m_view->setGridPlane(plane);
     m_view->setGridLabels(m_preferences.sketchGridLabels);
     if (m_preferences.lookAtSketch) {
+        if (!alreadySketching || !m_view->hasSavedView()) {
+            m_view->saveView();
+        }
         m_view->animateCamera([this, &plane] {
             m_view->lookAt(plane);
             fitView();
@@ -174,6 +179,9 @@ void MainWindow::fitView()
 
 void MainWindow::finishSketch()
 {
+    if (m_sketchEditor->isActive()) {
+        m_view->restoreSavedView();
+    }
     m_sketchEditor->end();
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));
     m_view->setGridLabels(false);
