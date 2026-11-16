@@ -6,6 +6,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 include(GoogleTest)
 
 add_executable(kalve137_tests
+    app/batch_import_test.cpp
     app/theme_test.cpp
     core/core_test.cpp
     core/expression_test.cpp

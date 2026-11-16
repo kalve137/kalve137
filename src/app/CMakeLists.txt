@@ -38,6 +38,10 @@ add_library(kalve137_app STATIC
     session/preferences.h
     session/preferences_dialog.cpp
     session/preferences_dialog.h
+    session/step_import.cpp
+    session/step_import.h
+    shell/batch_import.cpp
+    shell/batch_import.h
     shell/command_search.cpp
     shell/command_search.h
     shell/main_window.cpp

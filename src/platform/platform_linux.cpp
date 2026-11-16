@@ -3,6 +3,7 @@
 
 #include "platform/platform.h"
 
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -51,6 +52,13 @@ std::uint64_t totalMemory()
     const long pages = sysconf(_SC_PHYS_PAGES);
     const long pageSize = sysconf(_SC_PAGE_SIZE);
     return pages > 0 && pageSize > 0 ? static_cast<std::uint64_t>(pages) * static_cast<std::uint64_t>(pageSize) : 0;
+}
+
+std::uint64_t peakMemory()
+{
+    constexpr std::uint64_t kBytesPerKilobyte = 1024;
+    rusage usage{};
+    return getrusage(RUSAGE_SELF, &usage) == 0 ? static_cast<std::uint64_t>(usage.ru_maxrss) * kBytesPerKilobyte : 0;
 }
 
 void installCrashHandler(CrashOptions options)
