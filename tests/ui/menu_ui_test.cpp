@@ -4,6 +4,8 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include <QAction>
+
 #include <gtest/gtest.h>
 
 #include <variant>
@@ -34,6 +36,29 @@ protected:
         return total;
     }
 };
+
+TEST_F(MenuTest, RepeatSkipsCommandsUnavailableHere)
+{
+    EXPECT_EQ(ui->action("Repeat")->text(), QStringLiteral("Repeat Extrude"));
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XY));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->trigger("Circle");
+    ui->click(gp_Pnt(0, 0, 0));
+    ui->click(gp_Pnt(5, 0, 0));
+    ui->trigger("Finish Sketch");
+
+    QAction* repeat = ui->action("Repeat");
+    EXPECT_EQ(repeat->text(), QStringLiteral("Repeat Create Sketch")) << "Circle only works inside a sketch";
+    EXPECT_TRUE(repeat->isEnabled());
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XY));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    EXPECT_EQ(repeat->text(), QStringLiteral("Repeat Circle"));
+    EXPECT_TRUE(repeat->isEnabled());
+}
 
 TEST_F(MenuTest, TimelineSuppressesAndUnsuppresses)
 {

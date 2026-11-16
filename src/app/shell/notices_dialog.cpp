@@ -20,8 +20,8 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr int kDialogWidth = theme::kWidthRegular;
-constexpr int kDialogHeight = 560;
+constexpr int kDialogWidth = theme::kWidthWide;
+constexpr int kDialogHeight = 640;
 constexpr const char* kNoticesResource = ":/kalve137/THIRD-PARTY-NOTICES.md";
 constexpr const char* kNoticesFolder = "notices";
 

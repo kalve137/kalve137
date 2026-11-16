@@ -22,6 +22,7 @@ public:
     explicit MarkingMenu(QWidget* parent = nullptr);
 
     void setSlot(Slot slot, QAction* action);
+    bool inRing(const QAction* action) const;
     void addListAction(QAction* action);
     void addListSeparator();
     void popup(QPoint center);

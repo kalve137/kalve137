@@ -4,9 +4,16 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include <QAbstractButton>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QStandardPaths>
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <system_error>
 
 namespace kalve137::uitest {
 namespace {
@@ -55,6 +62,49 @@ TEST_F(FilesTest, SavesReopensExportsAndImports)
     ui->save("imported");
 }
 
+TEST_F(FilesTest, OpenStartsInTheLastUsedFolder)
+{
+    block(*ui);
+    answerFile(scratch() / "part.k137");
+    ui->trigger("Save");
+    ui->trigger("New Design");
+
+    QString start;
+    answerDialog([&start](QWidget& widget) {
+        if (const auto* dialog = qobject_cast<QFileDialog*>(&widget)) {
+            start = dialog->directory().absolutePath();
+        }
+        widget.close();
+    });
+    ui->trigger("Open Design...");
+    std::error_code ec;
+    EXPECT_TRUE(std::filesystem::equivalent(std::filesystem::path(start.toStdU16String()), scratch(), ec))
+        << start.toStdString();
+    EXPECT_TRUE(ui->document().features().empty());
+}
+
+TEST_F(FilesTest, VersionHistoryMarksRestoreAsPrimary)
+{
+    block(*ui);
+    answerFile(scratch() / "part.k137");
+    ui->trigger("Save");
+    ui->trigger("Undo");
+    ui->trigger("Save");
+
+    bool gold = false;
+    answerDialog([&gold](QWidget& widget) {
+        for (QPushButton* button : widget.findChildren<QPushButton*>()) {
+            if (button->text() == QStringLiteral("Restore")) {
+                gold = paintsAccent(*button);
+            }
+        }
+        widget.close();
+    });
+    ui->trigger("Version History...");
+    EXPECT_EQ(pendingAnswers(), 0U);
+    EXPECT_TRUE(gold);
+}
+
 TEST_F(FilesTest, NewDesignAsksBeforeDroppingChanges)
 {
     block(*ui);
@@ -62,10 +112,68 @@ TEST_F(FilesTest, NewDesignAsksBeforeDroppingChanges)
     ui->trigger("New Design");
     EXPECT_EQ(ui->document().features().size(), 2U);
 
-    answerMessage(QMessageBox::Discard);
+    QString discardText;
+    answerDialog([&discardText](QWidget& widget) {
+        auto* box = qobject_cast<QMessageBox*>(&widget);
+        ASSERT_NE(box, nullptr);
+        discardText = box->button(QMessageBox::Discard)->text();
+        EXPECT_EQ(box->defaultButton(), box->button(QMessageBox::Save));
+        EXPECT_TRUE(paintsAccent(*box->button(QMessageBox::Save)));
+        EXPECT_FALSE(paintsAccent(*box->button(QMessageBox::Discard)));
+        box->button(QMessageBox::Discard)->click();
+    });
     ui->trigger("New Design");
+    EXPECT_EQ(discardText, QStringLiteral("Don't Save"));
     EXPECT_TRUE(ui->document().features().empty());
     EXPECT_FALSE(ui->state()["dirty"]);
+}
+
+TEST_F(FilesTest, ClosingTheRecoveryPromptKeepsTheAutosave)
+{
+    block(*ui);
+    const std::filesystem::path design = scratch() / "part.k137";
+    answerFile(design);
+    ui->trigger("Save");
+    ui.reset();
+
+    const std::filesystem::path folder =
+        std::filesystem::path(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation).toStdU16String()) /
+        "recovery";
+    std::filesystem::create_directories(folder);
+    const std::filesystem::path recovery = folder / "manual-recovery.k137";
+    std::filesystem::copy_file(design, recovery);
+
+    const auto closeAndCheck = [](QWidget& widget) {
+        auto* box = qobject_cast<QMessageBox*>(&widget);
+        ASSERT_NE(box, nullptr);
+        EXPECT_EQ(box->windowTitle(), QStringLiteral("Recover Design"));
+        EXPECT_NE(box->escapeButton(), nullptr) << "Close button is disabled without an escape button";
+        EXPECT_EQ(box->defaultButton()->text(), QStringLiteral("Recover"));
+        EXPECT_TRUE(paintsAccent(*box->defaultButton()));
+        box->close();
+    };
+    answerDialog(closeAndCheck);
+    ui = std::make_unique<UiDriver>();
+    EXPECT_EQ(pendingAnswers(), 0U);
+    EXPECT_TRUE(std::filesystem::exists(recovery)) << "Closing prompt must not delete autosave";
+    EXPECT_TRUE(ui->document().features().empty());
+    ui.reset();
+
+    answerDialog([](QWidget& widget) {
+        auto* box = qobject_cast<QMessageBox*>(&widget);
+        ASSERT_NE(box, nullptr);
+        for (QAbstractButton* button : box->buttons()) {
+            if (button->text() == QStringLiteral("Discard")) {
+                button->click();
+                return;
+            }
+        }
+        ADD_FAILURE() << "No Discard button";
+        box->close();
+    });
+    ui = std::make_unique<UiDriver>();
+    EXPECT_EQ(pendingAnswers(), 0U);
+    EXPECT_FALSE(std::filesystem::exists(recovery));
 }
 
 } // namespace

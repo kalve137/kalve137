@@ -16,6 +16,8 @@
 #include <QProxyStyle>
 #include <QStyleFactory>
 #include <QStyleHints>
+#include <QWidget>
+#include <QWindow>
 
 namespace kalve137::app::theme {
 
@@ -38,6 +40,27 @@ public:
             return kSpaceM;
         default:
             return QProxyStyle::pixelMetric(metric, option, widget);
+        }
+    }
+
+    using QProxyStyle::polish;
+
+    void polish(QWidget* widget) override
+    {
+        QProxyStyle::polish(widget);
+        if (!widget->isWindow() || widget->windowType() != Qt::Dialog ||
+            widget->windowFlags().testFlag(Qt::CustomizeWindowHint)) {
+            return;
+        }
+        if (widget->maximumSize() == QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX)) {
+            widget->setMaximumSize(QWIDGETSIZE_MAX - 1, QWIDGETSIZE_MAX - 1);
+        }
+        const Qt::WindowFlags flags =
+            (widget->windowFlags() & ~(Qt::WindowMinMaxButtonsHint | Qt::WindowContextHelpButtonHint)) |
+            Qt::CustomizeWindowHint | Qt::WindowTitleHint | Qt::WindowCloseButtonHint;
+        widget->overrideWindowFlags(flags);
+        if (QWindow* handle = widget->windowHandle()) {
+            handle->setFlags(flags);
         }
     }
 };

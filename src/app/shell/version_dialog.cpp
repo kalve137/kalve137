@@ -57,8 +57,9 @@ std::optional<std::filesystem::path> chooseVersion(QWidget* parent, const std::f
     auto* list = new QListWidget(&dialog);
     layout->addWidget(list);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
-    QPushButton* restore = buttons->addButton(QDialog::tr("Restore"), QDialogButtonBox::AcceptRole);
+    auto* restore = new QPushButton(QDialog::tr("Restore"), buttons);
     restore->setObjectName("primaryButton");
+    buttons->addButton(restore, QDialogButtonBox::AcceptRole);
     layout->addWidget(buttons);
 
     if (versions.empty()) {

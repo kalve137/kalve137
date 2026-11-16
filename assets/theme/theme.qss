@@ -226,13 +226,15 @@ QPushButton:checked {
     border-color: @accent;
     color: @accent;
 }
-QPushButton#primaryButton {
+QPushButton#primaryButton,
+QMessageBox QPushButton:default {
     background: @accent;
     color: @base;
     border-color: @accent;
     font-weight: 500;
 }
-QPushButton#primaryButton:hover {
+QPushButton#primaryButton:hover,
+QMessageBox QPushButton:default:hover {
     background: @accentHover;
 }
 QPushButton#primaryButton:disabled {

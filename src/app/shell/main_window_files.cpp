@@ -55,10 +55,20 @@ namespace {
 
 constexpr int kMaxRecentProjects = 8;
 const char* const kRecentProjectsKey = "recentProjects";
+const char* const kLastFolderKey = "lastFolder";
 
 QString defaultFolder()
 {
+    QString last = QSettings().value(kLastFolderKey).toString();
+    if (!last.isEmpty() && QDir(last).exists()) {
+        return last;
+    }
     return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+}
+
+void rememberFolder(const std::filesystem::path& folder)
+{
+    QSettings().setValue(kLastFolderKey, toQString(folder));
 }
 
 QStringList recentProjects()
@@ -212,19 +222,25 @@ void MainWindow::offerRecovery()
     box.setInformativeText(tr("Changes up to %1 were kept. Recover them?")
                                .arg(QLocale().toString(recovery->savedAt, QLocale::ShortFormat)));
     QPushButton* recover = box.addButton(tr("Recover"), QMessageBox::AcceptRole);
-    box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    QPushButton* discard = box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    QPushButton* later = box.addButton(QMessageBox::Cancel);
+    later->hide();
     box.setDefaultButton(recover);
+    box.setEscapeButton(later);
     box.exec();
-    K137_INFO(App, "Recovery offered for {}, {}", name.toStdString(),
-              box.clickedButton() == recover ? "recovered" : "discarded");
-    if (box.clickedButton() == recover) {
+    const QAbstractButton* clicked = box.clickedButton();
+    const char* choice = clicked == recover ? "recovered" : clicked == discard ? "discarded" : "postponed";
+    K137_INFO(App, "Recovery offered for {}, {}", name.toStdString(), choice);
+    if (clicked == recover) {
         leaveModes();
         m_session->recover(std::move(recovery->document), recovery->source);
         m_view->homeView();
         fitView();
         statusBar()->showMessage(tr("Recovered %1, save to keep it").arg(name), kMessageTimeoutMs);
     }
-    Autosave::remove(*recovery);
+    if (clicked == recover || clicked == discard) {
+        Autosave::remove(*recovery);
+    }
 }
 
 void MainWindow::showVersionHistory()
@@ -257,9 +273,11 @@ bool MainWindow::maybeSave()
     if (!m_session->isDirty()) {
         return true;
     }
-    const auto answer =
-        QMessageBox::question(this, tr("Kalve 137"), tr("Save changes to %1?").arg(m_session->displayName()),
-                              QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    QMessageBox box(QMessageBox::Question, tr("Kalve 137"), tr("Save changes to %1?").arg(m_session->displayName()),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
+    box.button(QMessageBox::Discard)->setText(tr("Don't Save"));
+    box.setDefaultButton(QMessageBox::Save);
+    const auto answer = static_cast<QMessageBox::StandardButton>(box.exec());
     if (answer == QMessageBox::Save) {
         return save();
     }
@@ -297,6 +315,7 @@ bool MainWindow::saveAs()
     if (path.extension() != core::kDesignExtension) {
         path += core::kDesignExtension;
     }
+    rememberFolder(path.parent_path());
     return writeDesign(path);
 }
 
@@ -346,6 +365,7 @@ void MainWindow::openDesign()
         return QFileDialog::getOpenFileName(this, tr("Open Design"), folder, tr("Kalve 137 design (*.k137)"));
     });
     if (!file.isEmpty()) {
+        rememberFolder(toPath(file).parent_path());
         openDesignAt(toPath(file));
     }
 }
@@ -390,6 +410,7 @@ void MainWindow::newProject()
     if (parent.isEmpty()) {
         return;
     }
+    rememberFolder(toPath(parent));
     const std::filesystem::path folder = toPath(parent) / toPath(name);
     try {
         setProject(core::Project::create(folder, name.toStdString()));
@@ -408,6 +429,7 @@ void MainWindow::openProject()
         return;
     }
     const std::filesystem::path path = toPath(folder);
+    rememberFolder(path.parent_path());
     if (!core::Project::isProjectFolder(path)) {
         const auto answer = QMessageBox::question(
             this, tr("Open Project"),
@@ -486,6 +508,7 @@ std::filesystem::path MainWindow::exportPath(const QString& extension, const QSt
     if (path.extension().empty()) {
         path += extension.toStdString();
     }
+    rememberFolder(path.parent_path());
     return path;
 }
 
@@ -498,6 +521,7 @@ void MainWindow::importStep()
         return;
     }
     const std::filesystem::path path = toPath(file);
+    rememberFolder(path.parent_path());
     const QString name = toQString(path.stem());
     statusBar()->showMessage(tr("Importing %1...").arg(toQString(path.filename())));
     std::vector<geometry::StepPart> parts;
