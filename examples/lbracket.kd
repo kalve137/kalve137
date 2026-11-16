@@ -1,0 +1,90 @@
+part lbracket
+
+param thick = 3 mm
+param width = 30 mm
+param reach = 40 mm
+param rise = 35 mm
+param bend = 3 mm
+param slot_w = 6 mm
+param slot_len = 14 mm
+param slot_x = 25 mm
+param bolt = M4
+param hole_pitch = 16 mm
+param hole_z = 24 mm
+
+sketch bracket on XZ {
+  point o
+  point a near (6 mm, 0 mm)
+  point b near (40 mm, 0 mm)
+  point c near (40 mm, 3 mm)
+  point d near (6 mm, 3 mm)
+  point e near (3 mm, 6 mm)
+  point f near (3 mm, 35 mm)
+  point g near (0 mm, 35 mm)
+  point h near (0 mm, 6 mm)
+  line bottom from a to b
+  line tip from b to c
+  line base_top from c to d
+  arc inner from e to d center o
+  line inside from e to f
+  line cap from f to g
+  line back from g to h
+  arc outer from h to a center o
+  at(o) = (bend + thick, bend + thick)
+  horizontal(bottom)
+  vertical(tip)
+  horizontal(base_top)
+  vertical(inside)
+  horizontal(cap)
+  vertical(back)
+  tangent(bottom, outer)
+  tangent(back, outer)
+  tangent(base_top, inner)
+  tangent(inside, inner)
+  radius(inner) = bend
+  radius(outer) = bend + thick
+  x(b) = reach
+  y(f) = rise
+}
+
+extrude body = bracket up width
+
+sketch slot on body.bracket.base_top {
+  point l near (18 mm, -15 mm)
+  point r near (32 mm, -15 mm)
+  point p near (18 mm, -18 mm)
+  point q near (32 mm, -18 mm)
+  point s near (32 mm, -12 mm)
+  point t near (18 mm, -12 mm)
+  line low from p to q
+  arc right from q to s center r
+  line high from s to t
+  arc left from t to p center l
+  at(l) = (slot_x - slot_len / 2, -width / 2)
+  at(r) = (slot_x + slot_len / 2, -width / 2)
+  tangent(low, right)
+  tangent(high, right)
+  tangent(high, left)
+  tangent(low, left)
+  radius(left) = slot_w / 2
+  equal(left, right)
+}
+
+cut slotted = slot through
+
+sketch mounts on body.bracket.back {
+  circle a center (width / 2 - hole_pitch / 2, hole_z) diameter clearance(bolt)
+  circle b center (width / 2 + hole_pitch / 2, hole_z) diameter clearance(bolt)
+}
+
+cut holes = mounts through
+
+check slot_bend: distance(slotted.slot.left, body.bracket.inner) >= 2 mm
+check slot_end: distance(slotted.slot.right, body.bracket.tip) >= 2 mm
+check hole_top: distance(holes.a.wall, body.bracket.cap) >= 3 mm
+check hole_side: distance(holes.a.wall, body.bracket.start) >= 3 mm
+check hole_side_b: distance(holes.b.wall, body.bracket.end) >= 3 mm
+check hole_bend: distance(holes.a.wall, body.bracket.inner) >= 2 mm
+check long: size_x() == reach
+check wide: size_y() == width
+check tall: size_z() == rise

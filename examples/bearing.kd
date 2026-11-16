@@ -1,0 +1,78 @@
+part bearing
+
+param base_w = 56 mm
+param base_h = 8 mm
+param upright = 32.5 mm
+param shaft_h = 22 mm
+param depth = 12 mm
+param seat = 22 mm
+param seat_depth = 7 mm
+param shaft_hole = 12 mm
+param bolt = M5
+param bolt_pitch = 44 mm
+
+sketch block on XZ {
+  point a
+  point b near (28 mm, 0 mm)
+  point c near (28 mm, 8 mm)
+  point d near (17 mm, 8 mm)
+  point e near (17 mm, 22 mm)
+  point f near (-17 mm, 22 mm)
+  point g near (-17 mm, 8 mm)
+  point h near (-28 mm, 8 mm)
+  point o near (0 mm, 22 mm)
+  line bottom from a to b
+  line right from b to c
+  line shelf_r from c to d
+  line side_r from d to e
+  arc top from e to f center o
+  line side_l from f to g
+  line shelf_l from g to h
+  line left from h to a
+  at(a) = (-base_w / 2, 0 mm)
+  horizontal(bottom)
+  vertical(right)
+  horizontal(shelf_r)
+  vertical(side_r)
+  vertical(side_l)
+  horizontal(shelf_l)
+  vertical(left)
+  tangent(side_r, top)
+  tangent(side_l, top)
+  length(bottom) = base_w
+  length(right) = base_h
+  horizontal(c, h)
+  equal(shelf_r, shelf_l)
+  distance(d, g) = upright
+  distance(o, bottom) = shaft_h
+}
+
+extrude body = block up depth
+
+sketch front on body.block.start {
+  circle bore center (0 mm, shaft_h) diameter seat
+}
+
+cut seat_cut = front depth seat_depth
+
+sketch back on seat_cut.bore.floor {
+  circle bore center (0 mm, shaft_h) diameter shaft_hole
+}
+
+cut shaft = back through
+
+sketch feet on XY {
+  circle l center (-bolt_pitch / 2, -depth / 2) diameter clearance(bolt)
+  circle r center (bolt_pitch / 2, -depth / 2) diameter clearance(bolt)
+}
+
+cut bolts = feet through
+
+check seat_top: distance(seat_cut.bore.wall, body.block.top) >= 4 mm
+check seat_side: distance(seat_cut.bore.wall, body.block.side_r) >= 4 mm
+check shoulder: distance(seat_cut.bore.wall, shaft.bore.wall) >= 2 mm
+check shoulder_thick: distance(seat_cut.bore.floor, body.block.end) >= 3 mm
+check bolt_end: distance(bolts.r.wall, body.block.right) >= 3 mm
+check bolt_upright: distance(bolts.r.wall, body.block.side_r) >= 3 mm
+check height: distance(seat_cut.bore.wall, body.block.bottom) == shaft_h - seat / 2
+check light: volume() < 20 cm3

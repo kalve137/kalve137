@@ -1,0 +1,42 @@
+part bracket
+
+param width = 60 mm
+param depth = 30 mm
+param plate = 6 mm
+param bolt = M5
+param edge = 8 mm
+param boss = 14 mm
+param rise = 10 mm
+
+sketch base on XY {
+  rect outline center (0 mm, 0 mm) size (width, depth)
+}
+
+extrude body = base up plate
+
+sketch post on body.outline.end {
+  circle collar center (0 mm, 0 mm) diameter boss
+}
+
+extrude riser = post up rise
+
+sketch holes on riser.collar.end {
+  circle bore center (0 mm, 0 mm) diameter tap(bolt)
+}
+
+cut tapped = holes depth 12 mm
+
+sketch mounts on body.outline.end {
+  circle left center (-width / 2 + edge, 0 mm) diameter clearance(bolt)
+  circle right center (width / 2 - edge, 0 mm) diameter clearance(bolt)
+}
+
+cut bolts = mounts through
+
+fillet soft = edge(riser.collar.wall, body.outline.end) radius 2 mm
+
+check wall: distance(bolts.left.wall, body.outline.west) >= 3 mm
+check web: distance(bolts.left.wall, riser.collar.wall) >= 4 mm
+check light: volume() <= 14 cm3
+check tall: size_z() == plate + rise
+check blind: count(tapped.bore.floor) == 1

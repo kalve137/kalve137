@@ -1,0 +1,81 @@
+part enclosure
+
+param length = 100 mm
+param width = 70 mm
+param height = 30 mm
+param wall = 2.5 mm
+param floor = 3 mm
+param corner = 4 mm
+param pitch_x = 72 mm
+param pitch_y = 42 mm
+param post = 7 mm
+param rise = 6 mm
+param screw = M3
+param tap_depth = 6 mm
+param inset = 6 mm
+param port_w = 10 mm
+param port_h = 4.5 mm
+param port_z = 11 mm
+
+sketch base on XY {
+  rect outline center (0 mm, 0 mm) size (length, width)
+}
+
+extrude box = base up height
+
+fillet ne = edge(box.outline.east, box.outline.north) radius corner
+fillet nw = edge(box.outline.west, box.outline.north) radius corner
+fillet se = edge(box.outline.east, box.outline.south) radius corner
+fillet sw = edge(box.outline.west, box.outline.south) radius corner
+
+sketch hollow on box.outline.end {
+  rect inner center (0 mm, 0 mm) size (length - 2 * wall, width - 2 * wall)
+}
+
+cut pocket = hollow depth height - floor
+
+sketch feet on pocket.inner.floor {
+  circle a center (pitch_x / 2, pitch_y / 2) diameter post
+  circle b center (-pitch_x / 2, pitch_y / 2) diameter post
+  circle c center (-pitch_x / 2, -pitch_y / 2) diameter post
+  circle d center (pitch_x / 2, -pitch_y / 2) diameter post
+}
+
+extrude posts = feet up rise
+
+sketch taps on box.outline.end {
+  circle a center (pitch_x / 2, pitch_y / 2) diameter tap(screw)
+  circle b center (-pitch_x / 2, pitch_y / 2) diameter tap(screw)
+  circle c center (-pitch_x / 2, -pitch_y / 2) diameter tap(screw)
+  circle d center (pitch_x / 2, -pitch_y / 2) diameter tap(screw)
+}
+
+cut threads = taps depth height - floor - rise + tap_depth
+
+sketch mounts on box.outline.start {
+  circle a center (length / 2 - inset, width / 2 - inset) diameter clearance(screw)
+  circle b center (-length / 2 + inset, width / 2 - inset) diameter clearance(screw)
+  circle c center (-length / 2 + inset, -width / 2 + inset) diameter clearance(screw)
+  circle d center (length / 2 - inset, -width / 2 + inset) diameter clearance(screw)
+}
+
+cut holes = mounts through
+
+sketch usb on box.outline.west {
+  rect port center (0 mm, port_z + port_h / 2) size (port_w, port_h)
+}
+
+cut opening = usb depth wall
+
+check walls: distance(pocket.inner.west, box.outline.west) >= 2 mm
+check tap_wall: distance(threads.a.wall, posts.a.wall) >= 1.5 mm
+check post_gap: distance(posts.a.wall, pocket.inner.east) >= 2 mm
+check post_gap_y: distance(posts.a.wall, pocket.inner.north) >= 2 mm
+check side_walls: distance(pocket.inner.north, box.outline.north) >= 2 mm
+check tap_floor: distance(threads.a.floor, box.outline.start) >= floor
+check port_up: distance(opening.port.bottom, box.outline.start) >= floor + rise + 1.6 mm
+check port_window: distance(opening.port.top, box.outline.end) >= 2 mm
+check long: size_x() == length
+check wide: size_y() == width
+check tall: size_z() == height
+check light: volume() < 45 cm3

@@ -47,6 +47,20 @@ kalve137_set_warnings(kalve137_tests)
 kalve137_copy_runtime_dlls(kalve137_tests)
 gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST)
 
+add_executable(kalve137_design_bench design/bench.cpp)
+target_compile_definitions(kalve137_design_bench PRIVATE KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(kalve137_design_bench PRIVATE kalve137_rebuild kalve137_look)
+kalve137_copy_runtime_dlls(kalve137_design_bench)
+
+add_executable(kalve137_design_tests design/boundary_test.cpp design/constraint_test.cpp design/design_test.cpp
+                                      design/pick_test.cpp
+                                      design/prism_test.cpp design/rebuild_test.cpp design/review_test.cpp
+                                      design/sweep_test.cpp)
+target_compile_definitions(kalve137_design_tests PRIVATE KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(kalve137_design_tests PRIVATE kalve137_rebuild kalve137_look GTest::gtest_main)
+kalve137_copy_runtime_dlls(kalve137_design_tests)
+gtest_discover_tests(kalve137_design_tests DISCOVERY_MODE PRE_TEST)
+
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
     ui/crash_trace.cpp

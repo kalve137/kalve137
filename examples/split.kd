@@ -1,0 +1,22 @@
+part split
+
+param length = 80 mm
+param slot = 10 mm
+
+sketch base on XY {
+  rect outline center (0 mm, 0 mm) size (length, 30 mm)
+}
+
+extrude body = base up 8 mm
+
+sketch groove on body.outline.end {
+  rect channel center (0 mm, 0 mm) size (slot, 40 mm)
+}
+
+cut slotted = groove depth 3 mm
+
+sketch label on body.outline.end {
+  circle dot center (20 mm, 0 mm) diameter 4 mm
+}
+
+cut marked = label depth 1 mm

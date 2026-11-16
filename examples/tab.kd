@@ -1,0 +1,33 @@
+part tab
+
+param reach = 50 mm
+param width = 20 mm
+param thick = 4 mm
+param hole = 6 mm
+
+sketch outline on XY {
+  point a
+  point b near (40 mm, 0 mm)
+  point c near (40 mm, 20 mm)
+  point d near (0 mm, 20 mm)
+  point e near (40 mm, 10 mm)
+  line base from a to b
+  arc nose from b to c center e
+  line top from c to d
+  line back from d to a
+  circle bore center e diameter hole
+  at(a) = (0 mm, 0 mm)
+  horizontal(base)
+  horizontal(top)
+  vertical(back)
+  tangent(base, nose)
+  tangent(nose, top)
+  length(base) = reach - width / 2
+  length(back) = width
+}
+
+extrude body = outline up thick
+
+check wall: distance(body.bore.wall, body.outline.nose) >= 2 mm
+check light: volume() <= 5 cm3
+check long: size_x() == reach

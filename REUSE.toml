@@ -10,6 +10,7 @@ path = [
     "**/*.gif",
     "**/*.ico",
     "**/*.k137",
+    "**/*.kd",
 ]
 SPDX-FileCopyrightText = "2026 Danius Kalvaitis"
 SPDX-License-Identifier = "GPL-3.0-or-later"
