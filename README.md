@@ -34,8 +34,6 @@
 
 Zip carries its own Qt, OpenCascade and Visual C++ runtime. To check an unpacked copy without opening a window, run `kalve137.exe --smoke <design.k137> <output folder>`. It loads the design, renders it offscreen, exports STEP and STL and writes `smoke.txt`.
 
-To measure how a folder of STEP files imports, run `kalve137.exe --import-batch <input folder> <output folder> [timeout seconds]`. Each file is imported in its own process, then saved, reopened, exported and read back. Times, peak memory, counts, volume, bounding box and the round trip result go to `import.csv`.
-
 ## Features
 
 - Sketches with lines, arcs, circles, rectangles, polygons, trim, fillet, mirror and construction geometry
