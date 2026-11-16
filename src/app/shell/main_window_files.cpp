@@ -8,6 +8,7 @@
 #include "app/session/autosave.h"
 #include "app/session/design_session.h"
 #include "app/session/paths.h"
+#include "app/session/step_import.h"
 #include "app/shell/command_search.h"
 #include "app/shell/modal_scrim.h"
 #include "app/shell/version_dialog.h"
@@ -510,17 +511,11 @@ void MainWindow::importStep()
         reportFailure(this, tr("Import Failed"), error);
         return;
     }
-    for (std::size_t i = 0; i < parts.size(); ++i) {
-        if (parts[i].name.empty()) {
-            parts[i].name = (parts.size() == 1 ? name : QStringLiteral("%1 %2").arg(name).arg(i + 1)).toStdString();
-        }
-    }
     leaveModes();
     {
         const BusyCursor busy;
-        m_session->edit(tr("Import %1").arg(name), [&](core::Document& document) {
-            document.add(core::ImportFeature{toQString(path.filename()).toStdString(), std::move(parts)});
-        });
+        m_session->edit(tr("Import %1").arg(name),
+                        [&](core::Document& document) { document.add(importFeature(path, std::move(parts))); });
         fitView();
     }
     statusBar()->showMessage(tr("Imported %1").arg(toQString(path.filename())), kMessageTimeoutMs);

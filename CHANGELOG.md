@@ -4,6 +4,10 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 
 ## [Unreleased]
 
+### Added
+
+- `--import-batch` command line mode that measures STEP import, save, reopen and export over a folder
+
 ## [0.1.0] - 2026-11-11
 
 First public release for 64-bit Windows.

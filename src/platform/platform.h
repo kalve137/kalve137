@@ -16,6 +16,7 @@ std::string_view name();
 void writeDebugger(std::string_view text);
 
 std::uint64_t totalMemory();
+std::uint64_t peakMemory();
 
 struct CrashOptions {
     std::filesystem::path folder;

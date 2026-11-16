@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include <dbghelp.h>
+#include <psapi.h>
 
 #include <atomic>
 #include <csignal>
@@ -140,6 +141,13 @@ std::uint64_t totalMemory()
     MEMORYSTATUSEX status{};
     status.dwLength = sizeof(status);
     return GlobalMemoryStatusEx(&status) ? status.ullTotalPhys : 0;
+}
+
+std::uint64_t peakMemory()
+{
+    PROCESS_MEMORY_COUNTERS counters{};
+    counters.cb = sizeof(counters);
+    return K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)) ? counters.PeakWorkingSetSize : 0;
 }
 
 void installCrashHandler(CrashOptions options)

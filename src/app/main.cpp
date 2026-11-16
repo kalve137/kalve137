@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "app/diagnostics/diagnostics.h"
+#include "app/shell/batch_import.h"
 #include "app/shell/main_window.h"
 #include "app/shell/smoke.h"
 #include "app/theme/theme.h"
@@ -15,6 +16,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSet>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QSvgRenderer>
 #include <QTimer>
@@ -92,12 +94,18 @@ int main(int argc, char** argv)
 
     Application app(argc, argv);
     const QStringList arguments = QApplication::arguments();
-    const bool smoke = arguments.size() > 1 && arguments.at(1) == QLatin1String(kalve137::app::kSmokeFlag);
+    const QString mode = arguments.size() > 1 ? arguments.at(1) : QString();
+    const bool smoke = mode == QLatin1String(kalve137::app::kSmokeFlag);
+    const bool importBatch = mode == QLatin1String(kalve137::app::kImportBatchFlag);
+    const bool importOne = mode == QLatin1String(kalve137::app::kImportOneFlag);
+    const bool headless = smoke || importBatch || importOne;
     QApplication::setApplicationName("Kalve 137");
-    QApplication::setOrganizationName(smoke ? kalve137::app::kSmokeOrganization : "Kalve 137");
+    QApplication::setOrganizationName(headless ? kalve137::app::kSmokeOrganization : "Kalve 137");
     QApplication::setApplicationVersion(KALVE137_VERSION);
     if (smoke) {
         kalve137::app::prepareSmoke();
+    } else if (headless) {
+        QStandardPaths::setTestModeEnabled(true);
     }
     kalve137::app::diagnostics::startLogging();
     kalve137::app::diagnostics::installCrashHandler();
@@ -110,6 +118,21 @@ int main(int argc, char** argv)
         result = arguments.size() == kSmokeArguments
                      ? kalve137::app::runSmoke(std::filesystem::path(arguments.at(2).toStdU16String()),
                                                std::filesystem::path(arguments.at(3).toStdU16String()))
+                     : 2;
+    } else if (importBatch) {
+        constexpr qsizetype kBatchArguments = 4;
+        constexpr qsizetype kBatchTimeoutArguments = 5;
+        const int timeout =
+            arguments.size() == kBatchTimeoutArguments ? arguments.at(4).toInt() : kalve137::app::kImportTimeoutSeconds;
+        result = (arguments.size() == kBatchArguments || arguments.size() == kBatchTimeoutArguments) && timeout > 0
+                     ? kalve137::app::runImportBatch(std::filesystem::path(arguments.at(2).toStdU16String()),
+                                                     std::filesystem::path(arguments.at(3).toStdU16String()), timeout)
+                     : 2;
+    } else if (importOne) {
+        constexpr qsizetype kOneArguments = 4;
+        result = arguments.size() == kOneArguments
+                     ? kalve137::app::runImportOne(std::filesystem::path(arguments.at(2).toStdU16String()),
+                                                   std::filesystem::path(arguments.at(3).toStdU16String()))
                      : 2;
     } else {
         kalve137::app::MainWindow window;
