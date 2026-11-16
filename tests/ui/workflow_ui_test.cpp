@@ -122,6 +122,35 @@ TEST_F(WorkflowTest, SketchOnAFaceFollowsTheFace)
     }
 }
 
+TEST_F(WorkflowTest, CutFromAFaceSketchGoesIntoTheBody)
+{
+    block(*ui);
+    ui->trigger("Create Sketch");
+    ui->click(gp_Pnt(5, 3, kBlockHeight));
+    ASSERT_EQ(ui->state()["sketch"], 3) << ui->state().dump(2);
+    ui->trigger("Rectangle");
+    ui->click(gp_Pnt(-5, -5, kBlockHeight));
+    ui->click(gp_Pnt(5, 5, kBlockHeight));
+    ui->save("sketch over face");
+    ui->trigger("Finish Sketch");
+
+    ui->trigger("Extrude");
+    ui->choose("Operation", "Cut");
+    ui->save("cut into face");
+    ui->fill("Distance", "5");
+    const nlohmann::json state = ui->state();
+    ASSERT_EQ(state["bodies"].size(), 1U) << state.dump(2);
+    EXPECT_NEAR(volume(*ui), kBlockVolume - 10.0 * 10.0 * 5.0, 1e-3) << state.dump(2);
+    for (const nlohmann::json& feature : state["features"]) {
+        EXPECT_EQ(feature["health"], "ok") << feature.dump();
+    }
+
+    ui->doubleClick(ui->timelineChip(4));
+    ui->choose("Operation", "Join");
+    ui->fill("Distance", "5");
+    EXPECT_NEAR(volume(*ui), kBlockVolume + 10.0 * 10.0 * 5.0, 1e-3) << ui->state().dump(2);
+}
+
 constexpr int kZoomSteps = 6;
 constexpr int kLineSamples = 200;
 constexpr int kLineTolerance = 64;

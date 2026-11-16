@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QMetaObject>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -24,6 +25,17 @@ namespace kalve137::app {
 
 using feature_panel_detail::kMaxLength;
 using feature_panel_detail::makeLengthBox;
+
+namespace {
+
+bool sketchesOnFace(const core::Document& document, core::FeatureId sketch)
+{
+    const core::Feature* feature = document.find(sketch);
+    const auto* data = feature != nullptr ? std::get_if<core::SketchFeature>(&feature->data) : nullptr;
+    return data != nullptr && data->face.has_value();
+}
+
+} // namespace
 
 ValueEdit* feature_panel_detail::makeLengthBox(double value, double minimum, QWidget* parent)
 {
@@ -171,6 +183,14 @@ void FeaturePanel::buildForm()
                     }
                 });
                 connect(flip, &QPushButton::toggled, this, apply);
+                connect(operation, &QComboBox::currentIndexChanged, this, [this, flip](int index) {
+                    if (!sketchesOnFace(m_base, std::get<core::ExtrudeFeature>(*m_data).profiles.sketch)) {
+                        return;
+                    }
+                    const auto chosen = static_cast<core::Operation>(index);
+                    const QSignalBlocker blocker(flip);
+                    flip->setChecked(chosen == core::Operation::Cut || chosen == core::Operation::Intersect);
+                });
                 connect(operation, &QComboBox::currentIndexChanged, this, apply);
             },
             [&](core::RevolveFeature& f) {
