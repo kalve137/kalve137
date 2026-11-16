@@ -45,7 +45,7 @@ target_link_libraries(kalve137_tests PRIVATE
 )
 kalve137_set_warnings(kalve137_tests)
 kalve137_copy_runtime_dlls(kalve137_tests)
-gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60)
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
@@ -85,5 +85,6 @@ kalve137_set_warnings(kalve137_uitests)
 kalve137_copy_runtime_dlls(kalve137_uitests)
 gtest_discover_tests(kalve137_uitests
     DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS ui RUN_SERIAL TRUE
 )
