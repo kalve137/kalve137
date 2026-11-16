@@ -267,6 +267,7 @@ std::optional<Id> SketchEditor::detectedConstraint() const
 
 SketchEditor::Hit SketchEditor::hitAt(QPointF pos) const
 {
+    m_view->detectAt(pos);
     const std::optional<Vec2> p = toSketch(pos);
     const Hit geometry = p ? geometryAt(*p) : Hit{};
     if (geometry.kind == Hit::Kind::Point) {
