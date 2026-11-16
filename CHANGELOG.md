@@ -10,6 +10,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Right Orbits, Ctrl Pans mouse scheme with marking menu on middle click
 - Dimension labels move by dragging them, as one undo step
 - Copy Details in About for bug reports
+- Help, Open Sample opens dodecahedron as an untitled copy
 
 ### Changed
 

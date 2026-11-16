@@ -176,5 +176,22 @@ TEST_F(FilesTest, ClosingTheRecoveryPromptKeepsTheAutosave)
     EXPECT_FALSE(std::filesystem::exists(recovery));
 }
 
+TEST_F(FilesTest, OpenSampleOpensAnUntitledCopyOfTheDodecahedron)
+{
+    ui->trigger("Open Sample");
+    const nlohmann::json state = ui->state();
+    ASSERT_EQ(state["bodies"].size(), 1U) << state.dump(2);
+    EXPECT_EQ(state["bodies"][0]["faces"], 12) << state.dump(2);
+    EXPECT_FALSE(state["dirty"]);
+    EXPECT_NE(state["title"].get<std::string>().find("Untitled"), std::string::npos) << state["title"];
+    ui->save("sample");
+
+    const std::filesystem::path copy = scratch() / "dodecahedron.k137";
+    answerFile(copy);
+    ui->trigger("Save");
+    EXPECT_TRUE(std::filesystem::exists(copy));
+    EXPECT_EQ(pendingAnswers(), 0U);
+}
+
 } // namespace
 } // namespace kalve137::uitest

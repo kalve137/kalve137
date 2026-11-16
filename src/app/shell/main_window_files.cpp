@@ -24,6 +24,7 @@
 #include <QDialog>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileDialog>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -393,6 +394,30 @@ void MainWindow::openDesignAt(const std::filesystem::path& path)
     m_session->reset(std::move(document), path);
     m_view->homeView();
     fitView();
+}
+
+void MainWindow::openSample()
+{
+    if (!maybeSave()) {
+        return;
+    }
+    QFile file(QStringLiteral(":/kalve137/samples/dodecahedron.k137"));
+    core::Document document;
+    try {
+        if (!file.open(QIODevice::ReadOnly)) {
+            throw std::runtime_error(file.errorString().toStdString());
+        }
+        core::ShapeStore shapes;
+        document = core::fromJson(file.readAll().toStdString(), shapes);
+    } catch (const std::exception& error) {
+        reportFailure(this, tr("Open Failed"), error);
+        return;
+    }
+    leaveModes();
+    m_session->reset(std::move(document), {});
+    m_view->homeView();
+    fitView();
+    statusBar()->showMessage(tr("Opened sample, save to keep a copy"), kMessageTimeoutMs);
 }
 
 void MainWindow::newProject()

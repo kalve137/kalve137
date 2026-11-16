@@ -74,6 +74,7 @@ void MainWindow::createHelpMenu()
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("&Keyboard Shortcuts"), QKeySequence(Qt::CTRL | Qt::Key_Slash), this,
                     [this] { showShortcuts(this); });
+    help->addAction(tr("Open &Sample"), this, &MainWindow::openSample);
     help->addSeparator();
     help->addAction(tr("&Report a Problem..."), this, [this] { showProblemReport(); });
     help->addAction(tr("Open &Log Folder"), this, [] { openFolder(diagnostics::logFolder()); });

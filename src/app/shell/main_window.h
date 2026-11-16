@@ -91,6 +91,7 @@ private:
     core::ShapeStore& shapesOf(const std::filesystem::path& design);
     void newDesign();
     void openDesign();
+    void openSample();
     void newProject();
     void openProject();
     void openProjectAt(const std::filesystem::path& folder);

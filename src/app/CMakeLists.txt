@@ -231,6 +231,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/undo.svg
         ${asset_dir}/icons/vertical.svg
         ${asset_dir}/icons/visual_style.svg
+        ${asset_dir}/samples/dodecahedron.k137
         ${branding_paths}
         ${notices_path}
 )
