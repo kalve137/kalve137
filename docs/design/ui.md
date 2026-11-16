@@ -157,7 +157,8 @@ Stroke widths, in OpenCascade line width units:
 | Hairline | 1.0 | Grid lines, inference guides, wire bodies, face boundaries, timeline chip outline, marking menu rings |
 | Thin | 1.5 | Body edges, grid axis lines, sketch previews, drag handle outline, marking menu dead zone |
 | Regular | 2.0 | Sketch curves, origin and construction axes, measure distance line, failed chip outline, marking menu spoke |
-| Bold | 3.0 | Hovered or selected curves, selected edges, trim preview, measure highlight, timeline rollback marker |
+| Bold | 3.0 | Hovered or selected curves, selected edges, trim preview, measure highlight, timeline rollback marker, dark under-stroke of sketch dimensions |
+| Halo | 5.0 | Dark under-stroke of sketch curves, so they read over light faces |
 
 The grid's axis lines and the origin axes used to share the name `kAxisWidth` with different values. They are different objects. The grid line marks where the axis crosses the floor and stays thin. The origin axis is a pickable datum and uses Regular.
 

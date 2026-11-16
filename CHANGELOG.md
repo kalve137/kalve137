@@ -8,12 +8,14 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 
 - `--import-batch` command line mode that measures STEP import, save, reopen and export over a folder
 - Right Orbits, Ctrl Pans mouse scheme with marking menu on middle click
+- Dimension labels move by dragging them, as one undo step
 - Copy Details in About for bug reports
 
 ### Changed
 
 - Finishing a sketch returns view to where it was before
 - Look at sketch plane preference has a clearer name
+- Editing a dimension opens value box in place of its label
 - About shows version and license, with graphics details in Copy Details
 - Close prompts say Don't Save instead of Discard
 - Repeat runs last command available in current mode
@@ -22,11 +24,13 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 
 - Closing Recover Design prompt keeps autosave
 - Default buttons are highlighted, including Save Zip and Restore
+- Line tool angle box stays clear of line
 - Status bar hint returns after a menu closes
 - Dialogs show only a close button
 - Third-Party Notices open wider
 - File dialogs start in last used folder when no project is open
 - Report a Problem notes missing crash report or unsaved design instead of disabling its checkbox
+- Dimension lines keep their contrast over light faces
 - Marking menu list sits lower and skips disabled and duplicate recent commands
 
 ## [0.1.0] - 2026-11-11

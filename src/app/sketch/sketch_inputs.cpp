@@ -131,7 +131,7 @@ void SketchInputs::setLive(std::size_t index, double value, QPointF anchor, QPoi
             box.edit->selectAll();
         }
     }
-    const QSize size(box.edit->width(), box.edit->sizeHint().height());
+    const QSize size = boxSize(index).toSize();
     anchor += away * (std::abs(away.x()) * size.width() / 2.0 + std::abs(away.y()) * size.height() / 2.0);
     const QPoint at = (anchor - QPointF(size.width() / 2.0, size.height() / 2.0)).toPoint();
     box.edit->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - size.width())),
@@ -144,6 +144,15 @@ void SketchInputs::setLive(std::size_t index, double value, QPointF anchor, QPoi
         m_pendingFocus.reset();
         focusBox(index);
     }
+}
+
+QSizeF SketchInputs::boxSize(std::size_t index) const
+{
+    if (index >= m_boxes.size()) {
+        return {};
+    }
+    const QLineEdit* edit = m_boxes[index].edit;
+    return {static_cast<double>(edit->width()), static_cast<double>(edit->sizeHint().height())};
 }
 
 std::optional<double> SketchInputs::held(std::size_t index) const

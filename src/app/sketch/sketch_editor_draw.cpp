@@ -50,6 +50,12 @@ void SketchEditor::show(const Handle(AIS_InteractiveObject)& object, std::vector
     into.push_back(object);
 }
 
+void SketchEditor::showUnder(const Handle(AIS_InteractiveObject)& halo)
+{
+    show(halo, m_objects, false);
+    m_view->aisContext()->SetDisplayPriority(halo, Graphic3d_DisplayPriority_Below);
+}
+
 void SketchEditor::clearObjects(std::vector<Handle(AIS_InteractiveObject)>& objects)
 {
     for (const Handle(AIS_InteractiveObject)& object : objects) {
@@ -110,6 +116,12 @@ void SketchEditor::redraw()
         } else if (m_hover == id) {
             color = theme::kGold.lighter(130);
         }
+        Handle(AIS_Shape) halo = new AIS_Shape(*edge);
+        halo->SetColor(occt(theme::kSlateDeep));
+        halo->SetWidth(style::kStrokeHalo);
+        halo->Attributes()->SetWireAspect(
+            new Prs3d_LineAspect(occt(theme::kSlateDeep), Aspect_TOL_SOLID, halo->Width()));
+        showUnder(halo);
         Handle(AIS_Shape) object = new AIS_Shape(*edge);
         object->SetColor(occt(color));
         object->SetWidth(m_selection.contains(id) || m_hover == id ? style::kStrokeBold : style::kStrokeRegular);
@@ -154,6 +166,7 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
     const double wpp = m_view->worldPerPixel();
     m_drawnScale = wpp;
     const double textScale = m_view->devicePixelRatioF();
+    m_editedLabel.reset();
     const std::set<Id> conflicting(solve.conflicting.begin(), solve.conflicting.end());
     std::map<Id, int> glyphCount;
 
@@ -255,114 +268,136 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
             continue;
         }
 
-        Handle(PrsDim_Dimension) dimension;
-        std::optional<double> flyout;
-        QString text = formatValue(constraint.value);
         const auto world = [&](Vec2 p) { return sketch::toWorld(ax, p); };
-        switch (constraint.kind) {
-        case ConstraintKind::Distance: {
-            const auto ends = sketch::measuredPoints(s, constraint);
-            if (ends && sketch::distance(ends->first, ends->second) > 1e-9) {
-                const auto [a, b] = *ends;
-                dimension = new PrsDim_LengthDimension(world(a), world(b), pln);
-                flyout = outwardFlyout(a, b, b - a);
-            }
-            break;
-        }
-        case ConstraintKind::HorizontalDistance:
-        case ConstraintKind::VerticalDistance: {
-            const auto ends = sketch::measuredPoints(s, constraint);
-            if (ends && sketch::distance(ends->first, ends->second) > 1e-9) {
-                const auto [a, b] = *ends;
-                Handle(PrsDim_LengthDimension) length = new PrsDim_LengthDimension(world(a), world(b), pln);
-                const bool horizontal = constraint.kind == ConstraintKind::HorizontalDistance;
-                length->SetDirection(horizontal ? ax.XDirection() : ax.YDirection());
-                dimension = length;
-                flyout = outwardFlyout(a, b, horizontal ? Vec2{b.x - a.x, 0.0} : Vec2{0.0, b.y - a.y});
-            }
-            break;
-        }
-        case ConstraintKind::Radius:
-        case ConstraintKind::Diameter: {
-            const sketch::Curve* curve = s.curve(constraint.refs[0]);
-            const gp_Ax2 frame(world(s.point(curve->points[0])->pos), ax.Direction(), ax.XDirection());
-            const gp_Circ circle(frame, curve->radius);
-            if (constraint.kind == ConstraintKind::Radius) {
-                dimension = new PrsDim_RadiusDimension(circle, world(anchorOf(s, constraint.refs[0])));
-                text = QStringLiteral("R") + text;
-            } else {
-                dimension = new PrsDim_DiameterDimension(circle, pln);
-                text = QString::fromUtf8("\u00D8") + text;
-            }
-            break;
-        }
-        case ConstraintKind::Angle: {
-            const sketch::Curve* l1 = s.curve(constraint.refs[0]);
-            const sketch::Curve* l2 = s.curve(constraint.refs[1]);
-            const Vec2 a0 = s.point(l1->points[0])->pos;
-            const Vec2 a1 = s.point(l1->points[1])->pos;
-            const Vec2 b0 = s.point(l2->points[0])->pos;
-            const Vec2 b1 = s.point(l2->points[1])->pos;
-            const Vec2 da = a1 - a0;
-            const Vec2 db = b1 - b0;
-            const double denom = da.x * db.y - da.y * db.x;
-            if (std::abs(denom) > 1e-12) {
-                const double t = ((b0.x - a0.x) * db.y - (b0.y - a0.y) * db.x) / denom;
-                const Vec2 corner = a0 + da * t;
-                const Vec2 far1 = sketch::distance(a0, corner) > sketch::distance(a1, corner) ? a0 : a1;
-                const Vec2 far3 = sketch::distance(b0, corner) > sketch::distance(b1, corner) ? b0 : b1;
-                const double reach = std::min(sketch::distance(far1, corner), sketch::distance(far3, corner));
-                if (reach > 1e-9) {
-                    const double radius = std::min(kAngleDimensionPixels * wpp, 0.6 * reach);
-                    const Vec2 p1 = corner + normalized(far1 - corner) * radius;
-                    const Vec2 p3 = corner + normalized(far3 - corner) * radius;
-                    dimension = new PrsDim_AngleDimension(world(p1), world(corner), world(p3));
+        const auto build = [&](QString& text, std::optional<double>& flyout) {
+            Handle(PrsDim_Dimension) dimension;
+            switch (constraint.kind) {
+            case ConstraintKind::Distance: {
+                const auto ends = sketch::measuredPoints(s, constraint);
+                if (ends && sketch::distance(ends->first, ends->second) > 1e-9) {
+                    const auto [a, b] = *ends;
+                    dimension = new PrsDim_LengthDimension(world(a), world(b), pln);
+                    flyout = outwardFlyout(a, b, b - a);
                 }
+                break;
             }
-            text += QString::fromUtf8("\u00B0");
-            break;
-        }
-        case ConstraintKind::Coincident:
-        case ConstraintKind::Horizontal:
-        case ConstraintKind::Vertical:
-        case ConstraintKind::Parallel:
-        case ConstraintKind::Perpendicular:
-        case ConstraintKind::Tangent:
-        case ConstraintKind::Equal:
-        case ConstraintKind::PointOnCurve:
-        case ConstraintKind::Midpoint:
-        case ConstraintKind::Symmetric:
-            break;
-        }
+            case ConstraintKind::HorizontalDistance:
+            case ConstraintKind::VerticalDistance: {
+                const auto ends = sketch::measuredPoints(s, constraint);
+                if (ends && sketch::distance(ends->first, ends->second) > 1e-9) {
+                    const auto [a, b] = *ends;
+                    Handle(PrsDim_LengthDimension) length = new PrsDim_LengthDimension(world(a), world(b), pln);
+                    const bool horizontal = constraint.kind == ConstraintKind::HorizontalDistance;
+                    length->SetDirection(horizontal ? ax.XDirection() : ax.YDirection());
+                    dimension = length;
+                    flyout = outwardFlyout(a, b, horizontal ? Vec2{b.x - a.x, 0.0} : Vec2{0.0, b.y - a.y});
+                }
+                break;
+            }
+            case ConstraintKind::Radius:
+            case ConstraintKind::Diameter: {
+                const sketch::Curve* curve = s.curve(constraint.refs[0]);
+                const gp_Ax2 frame(world(s.point(curve->points[0])->pos), ax.Direction(), ax.XDirection());
+                const gp_Circ circle(frame, curve->radius);
+                if (constraint.kind == ConstraintKind::Radius) {
+                    dimension = new PrsDim_RadiusDimension(circle, world(anchorOf(s, constraint.refs[0])));
+                    text = QStringLiteral("R") + text;
+                } else {
+                    dimension = new PrsDim_DiameterDimension(circle, pln);
+                    text = QString::fromUtf8("\u00D8") + text;
+                }
+                break;
+            }
+            case ConstraintKind::Angle: {
+                const sketch::Curve* l1 = s.curve(constraint.refs[0]);
+                const sketch::Curve* l2 = s.curve(constraint.refs[1]);
+                const Vec2 a0 = s.point(l1->points[0])->pos;
+                const Vec2 a1 = s.point(l1->points[1])->pos;
+                const Vec2 b0 = s.point(l2->points[0])->pos;
+                const Vec2 b1 = s.point(l2->points[1])->pos;
+                const Vec2 da = a1 - a0;
+                const Vec2 db = b1 - b0;
+                const double denom = da.x * db.y - da.y * db.x;
+                if (std::abs(denom) > 1e-12) {
+                    const double t = ((b0.x - a0.x) * db.y - (b0.y - a0.y) * db.x) / denom;
+                    const Vec2 corner = a0 + da * t;
+                    const Vec2 far1 = sketch::distance(a0, corner) > sketch::distance(a1, corner) ? a0 : a1;
+                    const Vec2 far3 = sketch::distance(b0, corner) > sketch::distance(b1, corner) ? b0 : b1;
+                    const double reach = std::min(sketch::distance(far1, corner), sketch::distance(far3, corner));
+                    if (reach > 1e-9) {
+                        const double radius = std::min(kAngleDimensionPixels * wpp, 0.6 * reach);
+                        const Vec2 p1 = corner + normalized(far1 - corner) * radius;
+                        const Vec2 p3 = corner + normalized(far3 - corner) * radius;
+                        dimension = new PrsDim_AngleDimension(world(p1), world(corner), world(p3));
+                    }
+                }
+                text += QString::fromUtf8("\u00B0");
+                break;
+            }
+            case ConstraintKind::Coincident:
+            case ConstraintKind::Horizontal:
+            case ConstraintKind::Vertical:
+            case ConstraintKind::Parallel:
+            case ConstraintKind::Perpendicular:
+            case ConstraintKind::Tangent:
+            case ConstraintKind::Equal:
+            case ConstraintKind::PointOnCurve:
+            case ConstraintKind::Midpoint:
+            case ConstraintKind::Symmetric:
+                break;
+            }
+            if (dimension.IsNull()) {
+                return dimension;
+            }
+            Handle(Prs3d_DimensionAspect) aspect = new Prs3d_DimensionAspect();
+            aspect->MakeArrows3d(false);
+            aspect->MakeText3d(false);
+            aspect->ArrowAspect()->SetLength(wpp * 10.0);
+            aspect->TextAspect()->SetHeight(kDimensionTextPixels * textScale);
+            aspect->SetTextVerticalPosition(Prs3d_DTVP_Center);
+            if (flyout) {
+                aspect->SetTextHorizontalPosition(Prs3d_DTHP_Center);
+                aspect->SetArrowOrientation(Prs3d_DAO_Internal);
+            }
+            aspect->TextAspect()->SetFont(fonts::families().occtRegular.toUtf8().constData());
+            dimension->SetDimensionAspect(aspect);
+            dimension->SetDisplaySpecialSymbol(PrsDim_DisplaySpecialSymbol_No);
+            if (const std::optional<Vec2> label = sketch::labelPosition(s, constraint)) {
+                dimension->SetTextPosition(world(*label));
+            } else if (flyout) {
+                dimension->SetFlyout(*flyout);
+            }
+            dimension->SetCustomValue(TCollection_ExtendedString());
+            return dimension;
+        };
+
+        QString text = formatValue(constraint.value);
+        std::optional<double> flyout;
+        const Handle(PrsDim_Dimension) dimension = build(text, flyout);
         if (dimension.IsNull()) {
             continue;
         }
+        QString haloText = formatValue(constraint.value);
+        std::optional<double> haloFlyout;
+        const Handle(PrsDim_Dimension) halo = build(haloText, haloFlyout);
+        halo->DimensionAspect()->SetCommonColor(occt(theme::kSlateDeep));
+        halo->DimensionAspect()->LineAspect()->SetWidth(style::kStrokeHalo);
+        showUnder(halo);
+
         const QColor color = colorFor(id);
-        Handle(Prs3d_DimensionAspect) aspect = new Prs3d_DimensionAspect();
-        aspect->MakeArrows3d(false);
-        aspect->MakeText3d(false);
-        aspect->SetCommonColor(occt(color));
-        aspect->ArrowAspect()->SetLength(wpp * 10.0);
-        aspect->TextAspect()->SetHeight(kDimensionTextPixels * textScale);
-        aspect->SetTextVerticalPosition(Prs3d_DTVP_Center);
-        if (flyout) {
-            aspect->SetTextHorizontalPosition(Prs3d_DTHP_Center);
-            aspect->SetArrowOrientation(Prs3d_DAO_Internal);
-        }
-        aspect->TextAspect()->SetFont(fonts::families().occtRegular.toUtf8().constData());
-        dimension->SetDimensionAspect(aspect);
-        dimension->SetDisplaySpecialSymbol(PrsDim_DisplaySpecialSymbol_No);
-        if (const std::optional<Vec2> label = sketch::labelPosition(s, constraint)) {
-            dimension->SetTextPosition(world(*label));
-        } else if (flyout) {
-            dimension->SetFlyout(*flyout);
-        }
-        dimension->SetCustomValue(TCollection_ExtendedString());
+        dimension->DimensionAspect()->SetCommonColor(occt(color));
+        dimension->DimensionAspect()->LineAspect()->SetWidth(style::kStrokeThin);
         show(dimension, m_objects, true);
         m_constraintObjects.emplace(dimension.get(), id);
 
         const DimensionLabel label = makeDimensionLabel(dimension->GetTextPosition(), text, color,
                                                         m_selection.contains(id), kDimensionTextPixels, textScale);
+        if (id == m_editingLabel) {
+            const QSizeF size = QSizeF(label.pixels) / textScale;
+            m_editedLabel = QRectF(
+                m_view->toScreen(dimension->GetTextPosition()) - QPointF(size.width(), size.height()) / 2.0, size);
+            continue;
+        }
         show(label.object, m_objects, true);
         m_view->aisContext()->SetSelectionSensitivity(label.object, 0,
                                                       std::max(label.pixels.width(), label.pixels.height()) / 2);

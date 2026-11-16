@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <utility>
@@ -370,8 +371,21 @@ void SketchEditor::placeInputs(Vec2 cursor)
         }
         const QPointF joint = screen(start);
         const QPointF along = unitScreen(screen(start + normalized(bisector)) - joint);
-        m_inputs->setLive(1, sketch::interiorAngle(reference, dir), joint + along * (kAngleArcPixels + kInputGapPixels),
-                          along);
+        const QPointF ray = unitScreen(screen(start + dir) - joint);
+        const QSizeF box = m_inputs->boxSize(1);
+        const auto support = [&](QPointF n) {
+            return std::abs(n.x()) * box.width() / 2.0 + std::abs(n.y()) * box.height() / 2.0;
+        };
+        const double spread = std::abs(along.x() * ray.y() - along.y() * ray.x());
+        const double clear = spread > 1e-6 ? (support(QPointF(-ray.y(), ray.x())) + kInputGapPixels) / spread
+                                           : std::numeric_limits<double>::infinity();
+        const double reach = std::max(kAngleArcPixels + kInputGapPixels + support(along), clear);
+        const double angle = sketch::interiorAngle(reference, dir);
+        if (reach <= kAngleReachPixels) {
+            m_inputs->setLive(1, angle, joint + along * reach);
+        } else {
+            m_inputs->setLive(1, angle, joint - along * kInputGapPixels, -along);
+        }
         return;
     }
     case Tool::Rectangle: {
@@ -514,7 +528,7 @@ void SketchEditor::clickFillet(QPointF screen, Vec2 pos)
         return;
     }
     const Id point = *corner;
-    promptValue(screen, m_filletRadius, core::Quantity::Length, false, [this, point](double radius) {
+    promptValue(screen, m_filletRadius, core::Quantity::Length, 0, [this, point](double radius) {
         std::optional<sketch::Sketch> rounded = sketch::filletCorner(current(), point, radius);
         if (!rounded) {
             emit message(tr("A %1 mm radius doesn't fit between those lines").arg(formatValue(radius)));
