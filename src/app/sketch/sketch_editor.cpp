@@ -7,9 +7,12 @@
 #include "app/session/design_session.h"
 #include "app/sketch/sketch_editor_detail.h"
 #include "app/sketch/sketch_inputs.h"
+#include "app/theme/fonts.h"
+#include "app/theme/theme.h"
 
 #include "geometry/shapes.h"
 #include "log/log.h"
+#include "sketch/dimension.h"
 #include "sketch/draft.h"
 #include "sketch/profiles.h"
 #include "sketch/select.h"
@@ -20,6 +23,8 @@
 #include <PrsDim_Dimension.hxx>
 #include <gp_Pln.hxx>
 
+#include <QFont>
+#include <QFontMetricsF>
 #include <QLineEdit>
 #include <QScopedValueRollback>
 #include <QStringList>
@@ -41,7 +46,7 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
 {
     m_valueEditor = new QLineEdit(view);
     m_valueEditor->setObjectName("dimensionEditor");
-    m_valueEditor->setFixedWidth(90);
+    m_valueEditor->setFixedWidth(kValueEditorWidth);
     m_valueEditor->hide();
     connect(m_valueEditor, &QLineEdit::returnPressed, this, [this] {
         const std::optional<double> parsed = parseValue(m_valueEditor->text(), m_valueQuantity);
@@ -151,7 +156,7 @@ void SketchEditor::cancel()
         closeValueEditor();
         return;
     }
-    if (m_dragPoint != 0) {
+    if (m_dragPoint != 0 || m_dragLabel != 0) {
         dropDrag();
         redraw();
         return;
@@ -416,6 +421,8 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         clickSelect(hit, modifiers);
         if (hit.kind == Hit::Kind::None) {
             m_boxStart = pos;
+        } else if (hit.kind == Hit::Kind::Constraint) {
+            startLabelDrag(hit.id, pos, *p);
         }
         break;
     }
@@ -487,15 +494,18 @@ void SketchEditor::onRelease(QPointF pos)
         }
         return;
     }
-    if (m_dragPoint == 0) {
+    if (m_dragPoint == 0 && m_dragLabel == 0) {
         return;
     }
+    const QString label = m_dragLabel != 0 ? tr("Move Dimension") : tr("Move");
     m_dragPoint = 0;
+    m_dragLabel = 0;
+    m_draggingLabel = false;
     std::optional<sketch::Sketch> moved = std::move(m_dragPreview);
     m_dragPreview.reset();
     m_dragStart.reset();
     if (moved) {
-        commit(tr("Move"), std::move(*moved));
+        commit(label, std::move(*moved));
     } else {
         redraw();
     }
@@ -518,6 +528,10 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     m_cursor = *p;
     m_hasCursor = true;
 
+    if (m_dragLabel != 0 && (buttons & Qt::LeftButton) && m_dragStart) {
+        dragLabel(pos, *p);
+        return;
+    }
     if (m_dragPoint != 0 && (buttons & Qt::LeftButton) && m_dragStart) {
         sketch::Sketch candidate = *m_dragStart;
         sketch::Point* point = candidate.point(m_dragPoint);
@@ -660,6 +674,54 @@ void SketchEditor::clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers)
     redraw();
 }
 
+std::optional<QPointF> SketchEditor::labelOnScreen(Id constraint) const
+{
+    for (const auto& [object, id] : m_constraintObjects) {
+        if (const auto* dimension = dynamic_cast<const PrsDim_Dimension*>(object);
+            dimension != nullptr && id == constraint) {
+            return m_view->toScreen(dimension->GetTextPosition());
+        }
+    }
+    return std::nullopt;
+}
+
+void SketchEditor::startLabelDrag(Id constraint, QPointF pos, Vec2 at)
+{
+    const sketch::Constraint* c = current().constraint(constraint);
+    if (c == nullptr || !sketch::isDimension(c->kind)) {
+        return;
+    }
+    const std::optional<QPointF> screen = labelOnScreen(constraint);
+    const std::optional<Vec2> label = screen ? toSketch(*screen) : std::nullopt;
+    if (!label) {
+        return;
+    }
+    m_dragLabel = constraint;
+    m_dragLabelPress = pos;
+    m_dragLabelGrab = at;
+    m_dragLabelStart = *label;
+    m_draggingLabel = false;
+    m_dragStart = current();
+    m_dragPreview.reset();
+}
+
+void SketchEditor::dragLabel(QPointF pos, Vec2 at)
+{
+    if (!m_draggingLabel && !viewer::isBoxDrag(m_dragLabelPress, pos)) {
+        return;
+    }
+    m_draggingLabel = true;
+    sketch::Sketch candidate = *m_dragStart;
+    sketch::Constraint* c = candidate.constraint(m_dragLabel);
+    const std::optional<Vec2> anchor = c != nullptr ? sketch::dimensionAnchor(candidate, *c) : std::nullopt;
+    if (!anchor) {
+        return;
+    }
+    c->labelOffset = m_dragLabelStart + (at - m_dragLabelGrab) - *anchor;
+    m_dragPreview = std::move(candidate);
+    redraw();
+}
+
 bool SketchEditor::commit(const QString& label, sketch::Sketch candidate)
 {
     const sketch::SolveResult result = sketch::solve(candidate);
@@ -687,6 +749,7 @@ void SketchEditor::addDimension(sketch::Constraint constraint, QPointF pos)
 {
     const ConstraintKind kind = constraint.kind;
     const double value = constraint.value;
+    const Id label = current().nextId();
     const auto build = [this, constraint = std::move(constraint)](double typed) {
         sketch::Sketch candidate = current();
         const Id id = candidate.addConstraint(constraint.kind, constraint.refs, typed);
@@ -694,7 +757,7 @@ void SketchEditor::addDimension(sketch::Constraint constraint, QPointF pos)
         return candidate;
     };
     promptValue(
-        pos, value, quantityOf(kind), true,
+        pos, value, quantityOf(kind), label,
         [this, kind, build](double typed) {
             if (typed <= 0.0 && kind != ConstraintKind::Angle) {
                 emit message(tr("Dimensions must be greater than zero"));
@@ -712,14 +775,8 @@ void SketchEditor::editDimension(Id constraint, QPointF pos)
         return;
     }
     const ConstraintKind kind = c->kind;
-    bool onLabel = false;
-    for (const auto& [object, id] : m_constraintObjects) {
-        if (const auto* dimension = dynamic_cast<const PrsDim_Dimension*>(object);
-            dimension != nullptr && id == constraint) {
-            pos = m_view->toScreen(dimension->GetTextPosition());
-            onLabel = true;
-            break;
-        }
+    if (const std::optional<QPointF> label = labelOnScreen(constraint)) {
+        pos = *label;
     }
     const auto build = [this, constraint](double typed) {
         sketch::Sketch candidate = current();
@@ -729,7 +786,7 @@ void SketchEditor::editDimension(Id constraint, QPointF pos)
         return candidate;
     };
     promptValue(
-        pos, c->value, quantityOf(kind), onLabel,
+        pos, c->value, quantityOf(kind), constraint,
         [this, kind, build](double typed) {
             if (typed <= 0.0 && kind != ConstraintKind::Angle) {
                 emit message(tr("Dimensions must be greater than zero"));
@@ -740,17 +797,34 @@ void SketchEditor::editDimension(Id constraint, QPointF pos)
         build);
 }
 
-void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quantity, bool centered,
+void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quantity, Id label,
                                std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview)
 {
     m_valueApply = std::move(apply);
     m_valuePreview = std::move(preview);
     m_valueQuantity = quantity;
+    m_editingLabel = label;
     m_valueEditor->setText(formatValue(initial));
     previewValue(m_valueEditor->text());
-    const int height = m_valueEditor->sizeHint().height();
-    const QPoint at = centered ? pos.toPoint() - QPoint(m_valueEditor->width() / 2, height / 2)
-                               : pos.toPoint() + QPoint(12, -height - 4);
+    QPoint at;
+    if (label != 0 && m_editedLabel) {
+        QFont font(fonts::families().qt);
+        font.setPixelSize(static_cast<int>(kDimensionTextPixels));
+        m_valueEditor->setFont(font);
+        const QFontMetricsF metrics(font);
+        const double room = metrics.horizontalAdvance(QStringLiteral("0000.00")) + 2.0 * theme::kSpaceS;
+        const QSize size(
+            static_cast<int>(std::ceil(std::max(m_editedLabel->width(), room))),
+            static_cast<int>(std::ceil(std::max(m_editedLabel->height(), double(m_valueEditor->sizeHint().height())))));
+        m_valueEditor->setFixedSize(size);
+        m_valueEditor->setAlignment(Qt::AlignCenter);
+        at = (m_editedLabel->center() - QPointF(size.width(), size.height()) / 2.0).toPoint();
+    } else {
+        m_valueEditor->setFont(m_view->font());
+        m_valueEditor->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        m_valueEditor->setFixedSize(kValueEditorWidth, m_valueEditor->sizeHint().height());
+        at = pos.toPoint() + QPoint(static_cast<int>(kInputGapPixels), -m_valueEditor->height() - theme::kSpaceXs);
+    }
     m_valueEditor->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - m_valueEditor->width())),
                         std::clamp(at.y(), 0, std::max(0, m_view->height() - m_valueEditor->height())));
     m_valueEditor->show();
@@ -781,8 +855,11 @@ void SketchEditor::closeValueEditor()
 {
     m_valueApply = nullptr;
     m_valuePreview = nullptr;
+    const bool labelHidden = std::exchange(m_editingLabel, 0) != 0;
     if (std::exchange(m_previewingValue, false)) {
         m_dragPreview.reset();
+        redraw();
+    } else if (labelHidden) {
         redraw();
     }
     if (m_valueEditor->isVisible()) {
@@ -809,6 +886,8 @@ void SketchEditor::resetProgress()
 void SketchEditor::dropDrag()
 {
     m_dragPoint = 0;
+    m_dragLabel = 0;
+    m_draggingLabel = false;
     m_dragStart.reset();
     m_dragPreview.reset();
     dropBox();

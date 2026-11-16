@@ -56,6 +56,7 @@ add_executable(kalve137_uitests
     ui/files_ui_test.cpp
     ui/harness_test.cpp
     ui/hero_ui_test.cpp
+    ui/line_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/preferences_ui_test.cpp
     ui/scenario.cpp

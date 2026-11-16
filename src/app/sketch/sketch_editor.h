@@ -13,6 +13,7 @@
 
 #include <QObject>
 #include <QPointF>
+#include <QRectF>
 #include <QString>
 
 #include <cstddef>
@@ -177,6 +178,9 @@ private:
     void clickDimension(QPointF pos, const Hit& hit);
     void clickConstraint(const Hit& hit);
     void clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers);
+    void startLabelDrag(sketch::Id constraint, QPointF pos, sketch::Vec2 at);
+    void dragLabel(QPointF pos, sketch::Vec2 at);
+    std::optional<QPointF> labelOnScreen(sketch::Id constraint) const;
     void selectInBox(QPointF from, QPointF to);
     void dropBox();
 
@@ -187,7 +191,7 @@ private:
     void placeDimension(QPointF pos, sketch::Vec2 at);
     void addDimension(sketch::Constraint constraint, QPointF pos);
     void editDimension(sketch::Id constraint, QPointF pos);
-    void promptValue(QPointF pos, double initial, core::Quantity quantity, bool centered,
+    void promptValue(QPointF pos, double initial, core::Quantity quantity, sketch::Id label,
                      std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview = {});
     void previewValue(const QString& text);
     void closeValueEditor();
@@ -197,6 +201,7 @@ private:
     void redraw();
     void redrawPreview();
     void clearObjects(std::vector<Handle(AIS_InteractiveObject)>& objects);
+    void showUnder(const Handle(AIS_InteractiveObject)& halo);
     void drawConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
     void show(const Handle(AIS_InteractiveObject)& object, std::vector<Handle(AIS_InteractiveObject)>& into,
               bool selectable);
@@ -232,6 +237,11 @@ private:
     bool m_boxing = false;
 
     sketch::Id m_dragPoint = 0;
+    sketch::Id m_dragLabel = 0;
+    QPointF m_dragLabelPress;
+    sketch::Vec2 m_dragLabelGrab;
+    sketch::Vec2 m_dragLabelStart;
+    bool m_draggingLabel = false;
     std::optional<sketch::Sketch> m_dragStart;
     std::optional<sketch::Sketch> m_dragPreview;
     bool m_committing = false;
@@ -240,6 +250,8 @@ private:
     std::function<void(double)> m_valueApply;
     std::function<sketch::Sketch(double)> m_valuePreview;
     bool m_previewingValue = false;
+    sketch::Id m_editingLabel = 0;
+    std::optional<QRectF> m_editedLabel;
     core::Quantity m_valueQuantity = core::Quantity::Length;
     SketchInputs* m_inputs = nullptr;
     sketch::Id m_chainLine = 0;

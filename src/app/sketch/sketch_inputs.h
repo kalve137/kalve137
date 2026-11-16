@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QPointF>
+#include <QSizeF>
 
 #include <cstddef>
 #include <optional>
@@ -29,6 +30,7 @@ public:
     bool isOpen() const { return !m_boxes.empty(); }
 
     void setLive(std::size_t index, double value, QPointF anchor, QPointF away = {});
+    QSizeF boxSize(std::size_t index) const;
     std::optional<double> held(std::size_t index) const;
 
 signals:
