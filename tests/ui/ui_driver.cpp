@@ -8,6 +8,7 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/sketch/sketch_editor.h"
+#include "app/theme/theme.h"
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "log/log.h"
@@ -69,6 +70,7 @@ constexpr int kOriginPlanePixels = 80;
 constexpr int kPlaneSearchStep = 8;
 constexpr int kPlaneSearchDirections = 24;
 constexpr double kParallelTolerance = 1e-6;
+constexpr int kAccentTolerance = 24;
 
 struct Problems {
     std::mutex mutex;
@@ -376,6 +378,16 @@ std::size_t pendingAnswers()
     answers().clear();
     menuChoices().clear();
     return count;
+}
+
+bool paintsAccent(QWidget& button)
+{
+    const QImage image = button.grab().toImage();
+    const QColor fill = image.pixelColor(image.width() / 6, image.height() / 2);
+    const QColor accent = app::theme::kGold;
+    return std::abs(fill.red() - accent.red()) + std::abs(fill.green() - accent.green()) +
+               std::abs(fill.blue() - accent.blue()) <
+           kAccentTolerance;
 }
 
 UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>())
@@ -784,7 +796,12 @@ void UiDriver::enterValue(const QString& text, bool accept)
 
 QString UiDriver::statusText() const
 {
-    return m_window->statusBar()->currentMessage();
+    QString message = m_window->statusBar()->currentMessage();
+    if (!message.isEmpty()) {
+        return message;
+    }
+    const auto* hint = m_window->statusBar()->findChild<QLabel*>(QStringLiteral("statusHint"));
+    return hint != nullptr ? hint->text() : QString();
 }
 
 QString UiDriver::selectionText() const

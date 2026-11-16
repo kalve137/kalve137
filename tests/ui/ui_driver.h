@@ -48,6 +48,7 @@ void answerMessage(QMessageBox::StandardButton button);
 void answerText(const QString& text);
 void chooseFromMenu(const QString& item);
 std::size_t pendingAnswers();
+bool paintsAccent(QWidget& button);
 
 class UiDriver {
 public:

@@ -102,6 +102,7 @@ private:
     std::filesystem::path exportPath(const QString& extension, const QString& filter);
 
     void trackCommand(QAction* action);
+    QAction* repeatableCommand() const;
     void repeatLastCommand();
     void updateRepeatAction();
     void showMarkingMenu(QPoint center);
@@ -138,6 +139,7 @@ private:
     QToolBar* m_sketchBar = nullptr;
     QLabel* m_selectionStatus = nullptr;
     QLabel* m_sketchStatus = nullptr;
+    QLabel* m_hint = nullptr;
     QMenu* m_recentMenu = nullptr;
 
     std::optional<core::Project> m_project;

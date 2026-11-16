@@ -37,14 +37,16 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
@@ -118,6 +120,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     statusBar()->addPermanentWidget(m_selectionStatus);
     m_sketchStatus = new QLabel(this);
     statusBar()->addPermanentWidget(m_sketchStatus);
+    m_hint = new QLabel(this);
+    m_hint->setObjectName(QStringLiteral("statusHint"));
+    m_hint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    statusBar()->addWidget(m_hint, 1);
     new ModalScrim(this);
 
     if (!restoreGeometry(QSettings().value(kWindowGeometryKey).toByteArray()) ||
@@ -699,7 +705,7 @@ void MainWindow::updateStatus()
     if (m_sketchEditor->isActive()) {
         m_sketchStatus->setText(m_sketchEditor->solveSummary());
         m_selectionStatus->setText(m_sketchEditor->selectionSummary());
-        statusBar()->showMessage(m_sketchEditor->hint());
+        m_hint->setText(m_sketchEditor->hint());
         return;
     }
     m_sketchStatus->clear();
@@ -707,10 +713,10 @@ void MainWindow::updateStatus()
         m_selectionStatus->setText(idleSelectionSummary());
     }
     if (m_pickingPlane) {
-        statusBar()->showMessage(tr("Click a plane or a flat face to sketch on, Esc to cancel"));
+        m_hint->setText(tr("Click a plane or a flat face to sketch on, Esc to cancel"));
         return;
     }
-    statusBar()->showMessage(navigationHint(m_preferences.navigation.preset));
+    m_hint->setText(navigationHint(m_preferences.navigation.preset));
 }
 
 void MainWindow::refreshScene()
@@ -822,18 +828,48 @@ void MainWindow::showAbout()
     painter.end();
     pixmap.setDevicePixelRatio(scale);
 
-    QMessageBox box(this);
-    box.setWindowTitle(tr("About Kalve 137"));
-    box.setIconPixmap(pixmap);
-    box.setText(tr("Version %1 on %2<br><br>%3<br><br>Free software under the GNU GPL version 3 or later.")
-                    .arg(QApplication::applicationVersion(), platformName,
-                         m_view->glInfo().toHtmlEscaped().replace('\n', "<br>")));
-    QPushButton* notices = box.addButton(tr("Third-Party Notices"), QMessageBox::ActionRole);
-    box.addButton(QMessageBox::Close);
-    box.exec();
-    if (box.clickedButton() == notices) {
-        showThirdPartyNotices(this);
-    }
+    QDialog dialog(this);
+    dialog.setObjectName("aboutDialog");
+    dialog.setWindowTitle(tr("About Kalve 137"));
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+    layout->setContentsMargins(theme::kSpaceXxl, theme::kSpaceXxl, theme::kSpaceXxl, theme::kSpaceXl);
+    layout->setSpacing(theme::kSpaceM);
+
+    auto* logo = new QLabel(&dialog);
+    logo->setPixmap(pixmap);
+    logo->setAlignment(Qt::AlignCenter);
+    layout->addWidget(logo);
+    layout->addSpacing(theme::kSpaceL);
+    auto* version = new QLabel(tr("Version %1 on %2").arg(QApplication::applicationVersion(), platformName), &dialog);
+    version->setObjectName("aboutVersion");
+    version->setAlignment(Qt::AlignCenter);
+    version->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(version);
+    auto* license = new QLabel(tr("Free software under GNU GPL version 3 or later"), &dialog);
+    license->setObjectName("panelHint");
+    license->setAlignment(Qt::AlignCenter);
+    layout->addWidget(license);
+    layout->addSpacing(theme::kSpaceXl);
+
+    auto* buttons = new QDialogButtonBox(&dialog);
+    QPushButton* copy = buttons->addButton(tr("Copy Details"), QDialogButtonBox::ActionRole);
+    copy->setToolTip(tr("Copies version, system and graphics details for a bug report"));
+    QPushButton* notices = buttons->addButton(tr("Third-Party Notices"), QDialogButtonBox::ActionRole);
+    auto* close = new QPushButton(tr("Close"), buttons);
+    close->setObjectName("primaryButton");
+    close->setDefault(true);
+    buttons->addButton(close, QDialogButtonBox::RejectRole);
+    layout->addWidget(buttons);
+    dialog.setMinimumWidth(theme::kWidthRegular);
+
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(copy, &QPushButton::clicked, &dialog, [this] {
+        QGuiApplication::clipboard()->setText(diagnostics::systemInfo());
+        statusBar()->showMessage(tr("Copied version and system details"), kMessageTimeoutMs);
+    });
+    connect(notices, &QPushButton::clicked, &dialog, [this] { showThirdPartyNotices(this); });
+    dialog.exec();
 }
 
 } // namespace kalve137::app

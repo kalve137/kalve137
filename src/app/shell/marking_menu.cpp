@@ -30,7 +30,7 @@ constexpr int kPillPadding = theme::kSpaceL;
 constexpr int kPillInset = 14;
 constexpr int kIconSize = 16;
 constexpr int kIconGap = theme::kSpaceM;
-constexpr int kListGap = theme::kSpaceL;
+constexpr int kListGap = theme::kSpaceXxl;
 constexpr int kRowHeight = theme::kDensity.rowHeight;
 constexpr int kRowPadding = theme::kSpaceL;
 constexpr int kSeparatorHeight = 9;
@@ -66,6 +66,11 @@ MarkingMenu::MarkingMenu(QWidget* parent)
 void MarkingMenu::setSlot(Slot slot, QAction* action)
 {
     m_slots[static_cast<std::size_t>(slot)] = action;
+}
+
+bool MarkingMenu::inRing(const QAction* action) const
+{
+    return std::ranges::find(m_slots, action) != m_slots.end();
 }
 
 void MarkingMenu::addListAction(QAction* action)
