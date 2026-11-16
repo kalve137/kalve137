@@ -99,6 +99,7 @@ public:
     bool isAnimating() const;
     const Handle(AIS_InteractiveContext)& aisContext() const { return m_context; }
     const QString& glInfo() const { return m_glInfo; }
+    Graphic3d_ZLayerId linesLayer() const { return m_linesLayer; }
 
     QSize minimumSizeHint() const override { return {200, 200}; }
     QSize sizeHint() const override { return {1280, 800}; }
@@ -159,6 +160,7 @@ private:
     Handle(GridObject) m_grid;
     Handle(GridObject) m_gridWash;
     std::optional<GridExtent> m_gridExtent;
+    Graphic3d_ZLayerId m_linesLayer = Graphic3d_ZLayerId_Default;
     Handle(SelectMgr_EntityOwner) m_hovered;
     Handle(Graphic3d_Camera) m_lastGoodCamera = new Graphic3d_Camera();
     Handle(Graphic3d_Camera) m_savedView;

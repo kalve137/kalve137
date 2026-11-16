@@ -498,6 +498,7 @@ void Scene::showSketches()
             Handle(AIS_Shape) object =
                 makeWire(*edge, curve.construction ? theme::kSketchConstruction : theme::kSketchFree,
                          curve.construction ? 1.0 : 1.5, curve.construction ? Aspect_TOL_DASH : Aspect_TOL_SOLID);
+            object->SetZLayer(m_view->linesLayer());
             const bool pickable = linesPickable && curve.kind == sketch::CurveKind::Line;
             Pick pick;
             pick.kind = Pick::Kind::SketchLine;
