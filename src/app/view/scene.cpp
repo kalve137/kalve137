@@ -70,7 +70,7 @@ void paintFaces(const Handle(AIS_ColoredShape)& object, const core::Body& body)
 std::pair<Handle(AIS_ColoredShape), int> makeBody(const core::Body& body, VisualStyle style)
 {
     Handle(AIS_ColoredShape) object = new AIS_ColoredShape(body.shape);
-    const Quantity_Color surface = body.color ? occt(*body.color) : occt(theme::kTitanium);
+    const Quantity_Color surface = body.color ? occt(*body.color) : occt(theme::palette().viewport.body);
     int displayMode = AIS_Shaded;
     switch (style) {
     case VisualStyle::Shaded:
@@ -82,20 +82,20 @@ std::pair<Handle(AIS_ColoredShape), int> makeBody(const core::Body& body, Visual
         paintFaces(object, body);
         object->Attributes()->SetFaceBoundaryDraw(true);
         object->Attributes()->SetFaceBoundaryAspect(
-            new Prs3d_LineAspect(occt(theme::kSlateDeep), Aspect_TOL_SOLID, kBodyEdgeWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.bodyEdge), Aspect_TOL_SOLID, kBodyEdgeWidth));
         break;
     case VisualStyle::Wireframe:
         displayMode = AIS_WireFrame;
-        object->SetColor(occt(theme::kTitaniumLight));
+        object->SetColor(occt(theme::palette().viewport.wire));
         object->Attributes()->SetWireAspect(
-            new Prs3d_LineAspect(occt(theme::kTitaniumLight), Aspect_TOL_SOLID, kWireWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.wire), Aspect_TOL_SOLID, kWireWidth));
         break;
     case VisualStyle::VisibleEdges:
-        object->SetColor(occt(theme::kCanvas));
+        object->SetColor(occt(theme::palette().viewport.canvas));
         object->Attributes()->SetShadingModel(Graphic3d_TypeOfShadingModel_Unlit);
         object->Attributes()->SetFaceBoundaryDraw(true);
         object->Attributes()->SetFaceBoundaryAspect(
-            new Prs3d_LineAspect(occt(theme::kTitaniumLight), Aspect_TOL_SOLID, kBodyEdgeWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.wire), Aspect_TOL_SOLID, kBodyEdgeWidth));
         break;
     }
     return {object, displayMode};
@@ -496,7 +496,9 @@ void Scene::showSketches()
                 continue;
             }
             Handle(AIS_Shape) object =
-                makeWire(*edge, curve.construction ? theme::kSketchConstruction : theme::kSketchFree,
+                makeWire(*edge,
+                         curve.construction ? theme::palette().viewport.sketchConstruction
+                                            : theme::palette().viewport.sketchFree,
                          curve.construction ? 1.0 : 1.5, curve.construction ? Aspect_TOL_DASH : Aspect_TOL_SOLID);
             object->SetZLayer(m_view->linesLayer());
             const bool pickable = linesPickable && curve.kind == sketch::CurveKind::Line;
@@ -511,7 +513,7 @@ void Scene::showSketches()
                 const gp_Pnt world = sketch::toWorld(state->second.plane, point.pos);
                 Handle(AIS_Point) marker = new AIS_Point(new Geom_CartesianPoint(world));
                 marker->SetMarker(Aspect_TOM_O_POINT);
-                marker->SetColor(occt(theme::kSketchFree));
+                marker->SetColor(occt(theme::palette().viewport.sketchFree));
                 marker->Attributes()->PointAspect()->SetScale(kSketchPointScale);
                 marker->SetZLayer(Graphic3d_ZLayerId_Topmost);
                 Pick pick;
@@ -528,8 +530,9 @@ void Scene::showSketches()
         const std::vector<TopoDS_Face>& profiles = state->second.profiles;
         for (std::size_t i = 0; i < profiles.size(); ++i) {
             const bool highlighted = m_highlightedProfiles.contains({feature.id, i});
-            Handle(AIS_Shape) object = makeSurface(profiles[i], highlighted ? theme::kGold : theme::kPlane,
-                                                   highlighted ? kHighlightTransparency : kProfileTransparency);
+            Handle(AIS_Shape) object =
+                makeSurface(profiles[i], highlighted ? theme::palette().chrome.accent : theme::palette().viewport.plane,
+                            highlighted ? kHighlightTransparency : kProfileTransparency);
             if (highlighted) {
                 object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
             } else {
@@ -598,21 +601,21 @@ std::size_t Scene::showBodies()
 void Scene::showHighlights()
 {
     for (const TopoDS_Edge& edge : m_highlightedEdges) {
-        Handle(AIS_Shape) object = makeWire(edge, theme::kGold, kHighlightEdgeWidth);
+        Handle(AIS_Shape) object = makeWire(edge, theme::palette().chrome.accent, kHighlightEdgeWidth);
         object->SetZLayer(Graphic3d_ZLayerId_Topmost);
         Pick pick;
         pick.kind = Pick::Kind::Edge;
         display(object, kWholeObject, pick);
     }
     for (const TopoDS_Face& face : m_highlightedFaces) {
-        Handle(AIS_Shape) object = makeSurface(face, theme::kGold, kHighlightTransparency);
+        Handle(AIS_Shape) object = makeSurface(face, theme::palette().chrome.accent, kHighlightTransparency);
         object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
         Pick pick;
         pick.kind = Pick::Kind::Face;
         display(object, kWholeObject, pick);
     }
     for (const TopoDS_Shape& body : m_highlightedBodies) {
-        Handle(AIS_Shape) object = makeSurface(body, theme::kGold, kHighlightTransparency);
+        Handle(AIS_Shape) object = makeSurface(body, theme::palette().chrome.accent, kHighlightTransparency);
         object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
         display(object, kNotSelectable, std::nullopt);
     }

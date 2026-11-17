@@ -48,7 +48,7 @@ QString mm(double value)
 QString row(const QString& name, const QString& value)
 {
     return QStringLiteral("<tr><td style='color:%1; padding-right:%2px'>%3</td><td>%4</td></tr>")
-        .arg(theme::kTitanium.name())
+        .arg(theme::palette().chrome.textDim.name())
         .arg(theme::kSpaceL)
         .arg(name, value);
 }
@@ -170,10 +170,10 @@ void MeasurePanel::refresh()
     for (const Pick& pick : m_picks) {
         names << nameOf(pick);
         Handle(AIS_Shape) highlight = new AIS_Shape(pick.shape);
-        highlight->SetColor(occt(theme::kGold));
+        highlight->SetColor(occt(theme::palette().chrome.accent));
         highlight->SetWidth(style::kStrokeBold);
         highlight->Attributes()->SetPointAspect(
-            new Prs3d_PointAspect(Aspect_TOM_BALL, occt(theme::kGold), style::kMarkerSmall));
+            new Prs3d_PointAspect(Aspect_TOM_BALL, occt(theme::palette().chrome.accent), style::kMarkerSmall));
         highlight->SetTransparency(style::kTintStrong);
         highlight->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
         showOverlay(highlight);
@@ -208,15 +208,15 @@ void MeasurePanel::refresh()
             table += row(QStringLiteral("\u0394Z"), mm(std::abs(d.Z())));
             if (*m.distance > kSameSpot) {
                 Handle(AIS_Shape) line = new AIS_Shape(BRepBuilderAPI_MakeEdge(m.from, m.to));
-                line->SetColor(occt(theme::kGold));
+                line->SetColor(occt(theme::palette().chrome.accent));
                 line->Attributes()->SetWireAspect(
-                    new Prs3d_LineAspect(occt(theme::kGold), Aspect_TOL_DASH, style::kStrokeRegular));
+                    new Prs3d_LineAspect(occt(theme::palette().chrome.accent), Aspect_TOL_DASH, style::kStrokeRegular));
                 line->SetZLayer(Graphic3d_ZLayerId_Topmost);
                 showOverlay(line);
                 for (const gp_Pnt& end : {m.from, m.to}) {
                     Handle(AIS_Shape) dot = new AIS_Shape(BRepBuilderAPI_MakeVertex(end));
-                    dot->Attributes()->SetPointAspect(
-                        new Prs3d_PointAspect(Aspect_TOM_BALL, occt(theme::kGold), style::kMarkerSmall));
+                    dot->Attributes()->SetPointAspect(new Prs3d_PointAspect(
+                        Aspect_TOM_BALL, occt(theme::palette().chrome.accent), style::kMarkerSmall));
                     dot->SetZLayer(Graphic3d_ZLayerId_Topmost);
                     showOverlay(dot);
                 }

@@ -12,9 +12,9 @@
 
 namespace kalve137::app::icons {
 
-QIcon tinted(const QString& name, const QColor& color = theme::kTitaniumLight);
+QIcon tinted(const QString& name, const QColor& color = theme::palette().chrome.text);
 
-QIcon fixed(const QString& name, const QColor& color = theme::kTitaniumLight);
+QIcon fixed(const QString& name, const QColor& color = theme::palette().chrome.text);
 
 QString featureIconName(const core::FeatureData& data);
 

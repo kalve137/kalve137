@@ -323,7 +323,7 @@ void DistanceHandle::paint(QPainter& painter) const
     }
     const QPointF base = m_view->toScreen(tip());
     if (m_dragOffset) {
-        QColor guide = theme::kHandleOutline;
+        QColor guide = theme::palette().viewport.handleOutline;
         guide.setAlpha(kGuideAlpha);
         QPen pen(guide, 1.5, Qt::DotLine, Qt::RoundCap);
         painter.setPen(pen);
@@ -343,8 +343,8 @@ void DistanceHandle::paint(QPainter& painter) const
     painter.translate(base);
     painter.rotate(std::atan2(unit->y(), unit->x()) * 180.0 / std::numbers::pi);
     const QPainterPath arrow = arrowPath();
-    const QColor fill = m_active ? theme::kHandle : theme::kHandleOutline;
-    const QColor outline = m_active ? theme::kHandleOutline : theme::kSlateDeep;
+    const QColor fill = m_active ? theme::palette().viewport.handle : theme::palette().viewport.handleOutline;
+    const QColor outline = m_active ? theme::palette().viewport.handleOutline : theme::palette().viewport.halo;
     const bool lit = m_hover || m_dragOffset;
     if (lit) {
         QColor glow = fill;

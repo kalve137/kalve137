@@ -27,7 +27,7 @@ int goldPixels(UiDriver& ui)
 {
     const QImage view = ui.view().grabFramebuffer();
     const auto close = [](int a, int b) { return std::abs(a - b) <= kColorTolerance; };
-    const QColor& gold = app::theme::kGold;
+    const QColor& gold = app::theme::palette().chrome.accent;
     int count = 0;
     for (int y = 0; y < view.height(); ++y) {
         for (int x = 0; x < view.width(); ++x) {

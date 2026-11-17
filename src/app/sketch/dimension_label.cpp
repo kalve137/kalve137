@@ -51,8 +51,8 @@ Rendered render(const QString& text, const QColor& color, bool selected, double 
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::TextAntialiasing);
         const QRectF box = QRectF(image.rect()).adjusted(ratio * 0.5, ratio * 0.5, -ratio * 0.5, -ratio * 0.5);
-        painter.setPen(QPen(selected ? theme::kGold : theme::kSlateEdge, ratio));
-        painter.setBrush(theme::kCanvas);
+        painter.setPen(QPen(selected ? theme::palette().chrome.accent : theme::palette().chrome.border, ratio));
+        painter.setBrush(theme::palette().viewport.canvas);
         painter.drawRoundedRect(box, theme::kRadiusControl * ratio, theme::kRadiusControl * ratio);
         painter.setFont(font);
         painter.setPen(color);

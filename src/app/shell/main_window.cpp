@@ -83,26 +83,26 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     m_autosave = new Autosave(*m_session, this);
 
     m_view = new viewer::OcctViewWidget(this);
-    m_view->setBackgroundColor(theme::kCanvas);
+    m_view->setBackgroundColor(theme::palette().viewport.canvas);
     m_view->setGridStyle({
-        .background = OcctQtTools::qtColorToOcct(theme::kCanvas),
-        .minor = OcctQtTools::qtColorToOcct(theme::kGridMinor),
-        .major = OcctQtTools::qtColorToOcct(theme::kGridMajor),
-        .axisX = OcctQtTools::qtColorToOcct(theme::kAxisX),
-        .axisY = OcctQtTools::qtColorToOcct(theme::kAxisY),
-        .axisZ = OcctQtTools::qtColorToOcct(theme::kAxisZ),
-        .label = OcctQtTools::qtColorToOcct(theme::kGridLabel),
+        .background = OcctQtTools::qtColorToOcct(theme::palette().viewport.canvas),
+        .minor = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridMinor),
+        .major = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridMajor),
+        .axisX = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisX),
+        .axisY = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisY),
+        .axisZ = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisZ),
+        .label = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridLabel),
         .labelFont = fonts::families().occtRegular.toStdString(),
     });
-    m_view->setHighlightColors(theme::kHover, theme::kGold);
+    m_view->setHighlightColors(theme::palette().viewport.hover, theme::palette().chrome.accent);
     m_view->setViewCubeStyle({
-        .face = theme::kSlateLight,
-        .edge = theme::kSlateEdge,
-        .label = theme::kTitaniumLight,
-        .hover = theme::kGold,
-        .axisX = theme::kAxisX,
-        .axisY = theme::kAxisY,
-        .axisZ = theme::kAxisZ,
+        .face = theme::palette().chrome.raised,
+        .edge = theme::palette().chrome.border,
+        .label = theme::palette().chrome.text,
+        .hover = theme::palette().chrome.accent,
+        .axisX = theme::palette().viewport.axisX,
+        .axisY = theme::palette().viewport.axisY,
+        .axisZ = theme::palette().viewport.axisZ,
         .labelFont = fonts::families().occtMedium,
     });
     setCentralWidget(m_view);
@@ -279,7 +279,8 @@ void MainWindow::createActions()
         m_measurePanel->start();
     });
 
-    m_finishSketch = new QAction(icons::tinted("finish_sketch", theme::kSlateDeep), tr("Finish Sketch"), this);
+    m_finishSketch =
+        new QAction(icons::tinted("finish_sketch", theme::palette().chrome.onAccent), tr("Finish Sketch"), this);
     connect(m_finishSketch, &QAction::triggered, this, &MainWindow::finishSketch);
 
     m_construction = new QAction(icons::tinted("construction"), tr("Construction"), this);
