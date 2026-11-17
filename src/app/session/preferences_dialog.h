@@ -51,6 +51,7 @@ private:
     std::vector<Row> m_rows;
     Preferences m_loaded;
 
+    QComboBox* m_theme = nullptr;
     QCheckBox* m_reopenLastProject = nullptr;
     QComboBox* m_preset = nullptr;
     QLabel* m_presetHint = nullptr;

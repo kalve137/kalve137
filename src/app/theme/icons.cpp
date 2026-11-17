@@ -16,13 +16,13 @@ namespace kalve137::app::icons {
 
 namespace {
 
-constexpr int kHoverLighterPercent = 125;
+constexpr int kHoverPercent = 125;
+
+using Tint = std::variant<ChromeRole, ViewportRole, QColor>;
 
 class TintedSvgEngine final : public QIconEngine {
 public:
-    TintedSvgEngine(const QString& path, const QColor& color, bool stateful)
-        : m_path(path), m_color(color), m_stateful(stateful)
-    {}
+    TintedSvgEngine(const QString& path, Tint tint, bool stateful) : m_path(path), m_tint(tint), m_stateful(stateful) {}
 
     void paint(QPainter* painter, const QRect& rect, QIcon::Mode mode, QIcon::State state) override
     {
@@ -62,16 +62,27 @@ public:
         return result;
     }
 
-    QIconEngine* clone() const override { return new TintedSvgEngine(m_path, m_color, m_stateful); }
+    QIconEngine* clone() const override { return new TintedSvgEngine(m_path, m_tint, m_stateful); }
 
 private:
+    QColor baseColor() const
+    {
+        return std::visit(core::Overloaded{
+                              [](ChromeRole role) { return theme::palette().chrome.*role; },
+                              [](ViewportRole role) { return theme::palette().viewport.*role; },
+                              [](const QColor& color) { return color; },
+                          },
+                          m_tint);
+    }
+
     QColor colorFor(QIcon::Mode mode, QIcon::State state) const
     {
         if (mode == QIcon::Disabled) {
             return theme::palette().chrome.textDisabled;
         }
+        const QColor color = baseColor();
         if (!m_stateful) {
-            return m_color;
+            return color;
         }
         switch (mode) {
         case QIcon::Disabled:
@@ -79,15 +90,20 @@ private:
         case QIcon::Selected:
             return theme::palette().chrome.accent;
         case QIcon::Active:
-            return state == QIcon::On ? theme::palette().chrome.accent : m_color.lighter(kHoverLighterPercent);
+            return state == QIcon::On ? theme::palette().chrome.accent : hovered(color);
         case QIcon::Normal:
-            return state == QIcon::On ? theme::palette().chrome.accent : m_color;
+            return state == QIcon::On ? theme::palette().chrome.accent : color;
         }
-        return m_color;
+        return color;
+    }
+
+    static QColor hovered(const QColor& color)
+    {
+        return theme::isDark() ? color.lighter(kHoverPercent) : color.darker(kHoverPercent);
     }
 
     QString m_path;
-    QColor m_color;
+    Tint m_tint;
     bool m_stateful;
 };
 
@@ -98,9 +114,24 @@ QString pathOf(const QString& name)
 
 } // namespace
 
-QIcon tinted(const QString& name, const QColor& color)
+QIcon tinted(const QString& name, ChromeRole role)
 {
-    return QIcon(new TintedSvgEngine(pathOf(name), color, true));
+    return QIcon(new TintedSvgEngine(pathOf(name), role, true));
+}
+
+QIcon tinted(const QString& name, ViewportRole role)
+{
+    return QIcon(new TintedSvgEngine(pathOf(name), role, true));
+}
+
+QIcon fixed(const QString& name, ChromeRole role)
+{
+    return QIcon(new TintedSvgEngine(pathOf(name), role, false));
+}
+
+QIcon fixed(const QString& name, ViewportRole role)
+{
+    return QIcon(new TintedSvgEngine(pathOf(name), role, false));
 }
 
 QIcon fixed(const QString& name, const QColor& color)

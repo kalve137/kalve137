@@ -65,15 +65,27 @@ public:
     }
 };
 
-} // namespace
+struct State {
+    Scheme scheme = Scheme::System;
+    const Palette* active = &kDarkPalette;
+    bool applied = false;
+    QString family;
+    QString sheet;
+};
 
-void apply(QApplication& app)
+State& state()
 {
-    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks): QApplication takes ownership of the style.
-    QApplication::setStyle(new Style);
-    QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
-    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
+    static State instance;
+    return instance;
+}
 
+bool systemIsDark()
+{
+    return QGuiApplication::styleHints()->colorScheme() != Qt::ColorScheme::Light;
+}
+
+void applyColors()
+{
     const ChromeColors& colors = palette().chrome;
     QPalette qtPalette;
     qtPalette.setColor(QPalette::Window, colors.surface);
@@ -88,24 +100,91 @@ void apply(QApplication& app)
     qtPalette.setColor(QPalette::Highlight, colors.accent);
     qtPalette.setColor(QPalette::HighlightedText, colors.onAccent);
     qtPalette.setColor(QPalette::Link, colors.accent);
-    app.setPalette(qtPalette);
+    QApplication::setPalette(qtPalette);
 
-    const QString family = fonts::load().qt;
+    const Tokens tokens = styleTokens(state().family, QFontMetrics(QApplication::font()).height());
+    const ResolvedSheet resolved = resolveTokens(state().sheet, tokens);
+    for (const QString& name : resolved.unknown) {
+        K137_WARN(App, "theme.qss uses unknown token @{}", name.toStdString());
+    }
+    qApp->setStyleSheet(resolved.sheet);
+}
+
+void refresh()
+{
+    State& s = state();
+    const bool dark = s.scheme == Scheme::Dark || (s.scheme == Scheme::System && systemIsDark());
+    const Palette* next = dark ? &kDarkPalette : &kLightPalette;
+    if (s.applied && next == s.active) {
+        return;
+    }
+    s.active = next;
+    s.applied = true;
+    applyColors();
+    emit notifier() -> changed();
+}
+
+} // namespace
+
+const Palette& palette()
+{
+    return *state().active;
+}
+
+bool isDark()
+{
+    return state().active == &kDarkPalette;
+}
+
+Scheme scheme()
+{
+    return state().scheme;
+}
+
+Notifier* notifier()
+{
+    static Notifier instance;
+    return &instance;
+}
+
+void setScheme(Scheme scheme)
+{
+    state().scheme = scheme;
+    QStyleHints* hints = QGuiApplication::styleHints();
+    switch (scheme) {
+    case Scheme::System:
+        hints->unsetColorScheme();
+        break;
+    case Scheme::Light:
+        hints->setColorScheme(Qt::ColorScheme::Light);
+        break;
+    case Scheme::Dark:
+        hints->setColorScheme(Qt::ColorScheme::Dark);
+        break;
+    }
+    refresh();
+}
+
+void apply(QApplication& app, Scheme scheme)
+{
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks): QApplication takes ownership of the style.
+    QApplication::setStyle(new Style);
+    State& s = state();
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
+    s.family = fonts::load().qt;
     QFont font = QApplication::font();
-    font.setFamily(family);
+    font.setFamily(s.family);
     font.setPointSizeF(kTextBody);
     font.setFeature("tnum", 1);
     QApplication::setFont(font);
 
     QFile styleSheet(":/kalve137/theme.qss");
     if (styleSheet.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        const Tokens tokens = styleTokens(family, QFontMetrics(font).height());
-        const ResolvedSheet resolved = resolveTokens(QString::fromUtf8(styleSheet.readAll()), tokens);
-        for (const QString& name : resolved.unknown) {
-            K137_WARN(App, "theme.qss uses unknown token @{}", name.toStdString());
-        }
-        app.setStyleSheet(resolved.sheet);
+        s.sheet = QString::fromUtf8(styleSheet.readAll());
     }
+
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, &app, [] { refresh(); });
+    setScheme(scheme);
 }
 
 } // namespace kalve137::app::theme

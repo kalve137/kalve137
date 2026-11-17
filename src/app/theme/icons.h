@@ -12,9 +12,15 @@
 
 namespace kalve137::app::icons {
 
-QIcon tinted(const QString& name, const QColor& color = theme::palette().chrome.text);
+using ChromeRole = QColor theme::ChromeColors::*;
+using ViewportRole = QColor theme::ViewportColors::*;
 
-QIcon fixed(const QString& name, const QColor& color = theme::palette().chrome.text);
+QIcon tinted(const QString& name, ChromeRole role = &theme::ChromeColors::text);
+QIcon tinted(const QString& name, ViewportRole role);
+
+QIcon fixed(const QString& name, ChromeRole role = &theme::ChromeColors::text);
+QIcon fixed(const QString& name, ViewportRole role);
+QIcon fixed(const QString& name, const QColor& color);
 
 QString featureIconName(const core::FeatureData& data);
 

@@ -11,6 +11,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Dimension labels move by dragging them, as one undo step
 - Copy Details in About for bug reports
 - Help, Open Sample opens dodecahedron as an untitled copy
+- Light theme. Follows system setting by default, Preferences switches it live
 
 ### Changed
 

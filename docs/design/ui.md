@@ -16,38 +16,43 @@ American English in identifiers, user-facing strings, comments and docs. Third-p
 
 ## Color roles
 
-Surfaces form one ladder from dark to light. Each step is a role, not a widget, so a new widget picks the role it plays instead of a new hex value.
+Surfaces form one ladder. Each step is a role, not a widget, so a new widget picks the role it plays instead of a new hex value. The dark theme climbs from dark to light and the light theme steps down from white, so in both `raised` sits further from `base` than `surface` does.
 
-| Token | Value | Role |
-| --- | --- | --- |
-| `base` | `#121A24` | Window frame, toolbars, menu bar, status bar, input fields |
-| `inputDisabled` | `#18212D` | Disabled input field |
-| `surface` | `#1E2A3A` | Panels, menus, trees, floating panels |
-| `borderDisabled` | `#222E3D` | Border of a disabled input |
-| `raisedPressed` | `#24324A` | Pressed state of anything that raises on hover |
-| `surfaceHover` | `#26344A` | Hovered row in a list that also shows a selection |
-| `raised` | `#2B3A4E` | Push buttons, selected rows, hovered tool buttons and menu items. Also dividers and resting input borders |
-| `raisedHover` | `#34465E` | Hovered push button or nested button |
-| `border` | `#3A4B62` | Panel and popup outlines, hovered input border |
-| `borderHover` | `#4A5D78` | Hovered push button border |
-| `canvas` | `#232D3B` | 3D view background |
-| `scrim` | `#0B1016` at 55% | Laid over the main window while a modal dialog is open |
+The theme follows the system setting by default. Preferences, General, Theme picks Light or Dark instead and switches live. Code reads colors through `theme::palette()` at the moment it draws, never caches them, so a switch needs no restart.
+
+| Token | Dark | Light | Role |
+| --- | --- | --- | --- |
+| `base` | `#121A24` | `#FFFFFF` | Window frame, toolbars, menu bar, status bar, input fields |
+| `inputDisabled` | `#18212D` | `#F0F3F7` | Disabled input field |
+| `surface` | `#1E2A3A` | `#F1F4F8` | Panels, menus, trees, floating panels |
+| `borderDisabled` | `#222E3D` | `#DCE3EC` | Border of a disabled input |
+| `raisedPressed` | `#24324A` | `#E6ECF3` | Pressed state of anything that raises on hover |
+| `surfaceHover` | `#26344A` | `#E7EDF4` | Hovered row in a list that also shows a selection |
+| `raised` | `#2B3A4E` | `#DAE3EE` | Push buttons, selected rows, hovered tool buttons and menu items. Also dividers and resting input borders |
+| `raisedHover` | `#34465E` | `#CCD8E6` | Hovered push button or nested button |
+| `border` | `#3A4B62` | `#A9B8CC` | Panel and popup outlines, hovered input border |
+| `borderHover` | `#4A5D78` | `#8A9DB8` | Hovered push button border |
+| `canvas` | `#232D3B` | `#E3E9F0` | 3D view background |
+| `scrim` | `#0B1016` at 55% | `#0B1016` at 30% | Laid over the main window while a modal dialog is open |
 
 Pressed sits below rest, so a click reads as pushing in. A list row hover uses `surfaceHover` rather than `raised` because `raised` already means selected there.
 
 Foreground roles:
 
-| Token | Value | Role |
-| --- | --- | --- |
-| `text` | `#C5C9CF` | Body text on any surface |
-| `textBright` | `#EDEFF2` | Focused sketch input, fully constrained sketch geometry |
-| `textDim` | `#8A9099` | Secondary text, base and panel surfaces only |
-| `textDisabled` | `#6E7682` | Disabled text and disabled icons |
-| `accent` | `#F2B705` | Selection, checked, focus, current tab, primary action. The logo gold. |
-| `accentHover` | `#F5C537` | Hovered primary action |
-| `conflict` | `#E5484D` | Error graphics: invalid borders, sketch conflicts, failed timeline chips, trim preview |
-| `conflictText` | `#F78B8D` | Error text: panel errors, failed browser rows, conflicting sketch dimensions |
-| `warning` | `#E8A33D` | Warning graphics and text |
+| Token | Dark | Light | Role |
+| --- | --- | --- | --- |
+| `text` | `#C5C9CF` | `#1E2B3D` | Body text on any surface |
+| `textBright` | `#EDEFF2` | `#0F1825` | Focused sketch input, fully constrained sketch geometry |
+| `textDim` | `#8A9099` | `#4A5D78` | Secondary text, base and panel surfaces only |
+| `textDisabled` | `#6E7682` | `#7A8BA3` | Disabled text and disabled icons |
+| `accent` | `#F2B705` | `#875C00` | Selection, checked, focus, current tab, primary action. The logo gold. |
+| `accentHover` | `#F5C537` | `#704C00` | Hovered primary action |
+| `accentFill` | `#F2B705` | `#F2B705` | Fill of the primary button and Finish Sketch. The logo gold in both themes |
+| `accentFillHover` | `#F5C537` | `#E3AA00` | Hovered primary fill |
+| `onAccentFill` | `#121A24` | `#1E2B3D` | Text and icon on `accentFill` |
+| `conflict` | `#E5484D` | `#C62A30` | Error graphics: invalid borders, sketch conflicts, failed timeline chips, trim preview |
+| `conflictText` | `#F78B8D` | `#B0161D` | Error text: panel errors, failed browser rows, conflicting sketch dimensions |
+| `warning` | `#E8A33D` | `#8F5400` | Warning graphics and text |
 
 ### Contrast floors
 
@@ -60,6 +65,10 @@ What that forced:
 - **`textDim` stays on `base` and `surface`.** It measures 4.51:1 on `surface` but 3.59:1 on `raised`. Text on raised surfaces uses `text` or `accent`, which is why marking menu shortcuts brighten on the hovered row.
 - **Disabled text moved from `#5A626D` to `#6E7682`**, from 2.35:1 to 3.16:1 on `surface`. The same color tints disabled icons, so a disabled label and its icon fade together.
 - **`warning` needs no text role.** It measures 5.36:1 on `raised`, the worst surface it can sit on.
+- **Light `accent` is a dark gold.** The logo gold measures 1.8:1 on white, and accent is also the text of selected rows on `raised`. `#875C00` reaches 4.55:1 there. Fills have no such limit, so the primary button and Finish Sketch keep the logo gold through `accentFill`, with navy text at 7.87:1.
+- **Light chrome takes the steel of the mark.** Surfaces lean toward the steel faces' hue, text uses the navy of the light wordmark, and the view cube draws its edges in steel. Bodies without an appearance are light steel with navy edges at 5.09:1.
+
+A test checks both palettes against these floors, so a new value that breaks one fails the build.
 
 The full table, recomputed from the shipped values, is under [Contrast table](#contrast-table).
 
@@ -71,7 +80,7 @@ One answer per control class. A state not listed keeps the rest appearance.
 | --- | --- | --- | --- | --- | --- |
 | Tool button, menu item, menu bar item | `raised` fill | `raisedPressed` fill | `raised` fill, `accent` border and text | | `textDisabled` text and icon |
 | Push button | `raisedHover` fill, `borderHover` border | `raisedPressed` fill | `raised` fill, `accent` border and text | | `textDisabled` text, `raised` border |
-| Primary button | `accentHover` fill | | | | `textDisabled` fill, `raised` text |
+| Primary button | `accentFillHover` fill | | | | `textDisabled` fill, `raised` text |
 | Input, spin box, combo box | `border` border | | | `accent` border | `inputDisabled` fill, `borderDisabled` border, `textDisabled` text |
 | Check box, radio button, row check box | `text` ring | | `accent` ring and mark | | `inputDisabled` fill, `textDisabled` ring and mark |
 | Tree and list row | `surfaceHover` fill | | | | |
@@ -182,7 +191,7 @@ Point marker scales:
 
 ## Contrast table
 
-WCAG contrast ratios of each foreground role on each surface, computed from the values in `theme.h`:
+WCAG contrast ratios of each foreground role on each surface, computed from the values in `palette.cpp`. Dark theme:
 
 | Foreground | `base` | `surface` | `canvas` | `surfaceHover` | `raised` | `raisedHover` |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -200,5 +209,24 @@ WCAG contrast ratios of each foreground role on each surface, computed from the 
 | `borderHover` | 2.61 | 2.16 | 2.07 | 1.87 | 1.72 | 1.43 |
 
 Text on the gold primary button, `base` on `accent`, measures 9.63:1 and 10.78:1 hovered.
+
+Light theme:
+
+| Foreground | `base` | `surface` | `canvas` | `surfaceHover` | `raised` | `raisedHover` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `text` | 14.30 | 12.97 | 11.70 | 12.14 | 11.04 | 9.90 |
+| `textBright` | 17.83 | 16.16 | 14.59 | 15.13 | 13.76 | 12.34 |
+| `textDim` | 6.71 | 6.09 | 5.49 | 5.70 | 5.18 | 4.65 |
+| `textDisabled` | 3.47 | 3.15 | 2.84 | 2.95 | 2.68 | 2.40 |
+| `accent` | 5.90 | 5.35 | 4.82 | 5.00 | 4.55 | 4.08 |
+| `accentHover` | 7.71 | 6.99 | 6.31 | 6.54 | 5.95 | 5.34 |
+| `conflict` | 5.56 | 5.04 | 4.55 | 4.72 | 4.29 | 3.85 |
+| `conflictText` | 7.05 | 6.39 | 5.77 | 5.98 | 5.44 | 4.88 |
+| `warning` | 6.11 | 5.54 | 5.00 | 5.19 | 4.72 | 4.23 |
+| `gridLabel` | 6.71 | 6.09 | 5.49 | 5.70 | 5.18 | 4.65 |
+| `border` | 2.02 | 1.83 | 1.65 | 1.71 | 1.56 | 1.40 |
+| `borderHover` | 2.76 | 2.51 | 2.26 | 2.35 | 2.13 | 1.91 |
+
+Navy text on the gold primary button, `onAccentFill` on `accentFill`, measures 7.87:1 and 6.82:1 hovered. Dark uses the same colors as `base` on `accent`.
 
 Cells under a floor are pairs the UI does not use: `textDim` never sits on a raised surface and `conflict` is never text. Borders are the exception. Input and button outlines stay under 3:1, so a control is found by its fill step and its label rather than its outline. That is a known shortfall against WCAG 1.4.11.

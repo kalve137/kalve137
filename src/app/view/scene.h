@@ -96,6 +96,7 @@ public:
     void setEditingSketch(core::FeatureId sketch);
     void setVisualStyle(VisualStyle style);
     VisualStyle visualStyle() const { return m_style; }
+    void restyle();
     void setHighlightedProfiles(std::set<std::pair<core::FeatureId, std::size_t>> profiles);
     void setHighlightedEdges(std::vector<TopoDS_Edge> edges);
     void setHighlightedFaces(std::vector<TopoDS_Face> faces);

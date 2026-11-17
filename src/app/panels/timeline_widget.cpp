@@ -38,9 +38,9 @@ constexpr int kMaxNameWidth = 140;
 
 QIcon featureIcon(const core::FeatureData& data)
 {
-    const bool sketch = std::holds_alternative<core::SketchFeature>(data);
-    return icons::tinted(icons::featureIconName(data),
-                         sketch ? theme::palette().viewport.sketchFree : theme::palette().chrome.text);
+    const QString name = icons::featureIconName(data);
+    return std::holds_alternative<core::SketchFeature>(data) ? icons::tinted(name, &theme::ViewportColors::sketchFree)
+                                                             : icons::tinted(name);
 }
 
 } // namespace

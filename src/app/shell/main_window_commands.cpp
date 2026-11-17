@@ -94,7 +94,7 @@ void MainWindow::showMarkingMenu(QPoint center)
     menu->setSlot(Slot::West, m_undo);
     menu->setSlot(Slot::NorthWest, m_delete);
     if (sketching) {
-        menu->setSlot(Slot::South, temporary(icons::tinted("finish_sketch", theme::palette().chrome.accent),
+        menu->setSlot(Slot::South, temporary(icons::tinted("finish_sketch", &theme::ChromeColors::accent),
                                              m_finishSketch->text(), {}, [this] { finishSketch(); }));
         menu->setSlot(Slot::SouthWest, m_toolActions.at(SketchEditor::Tool::Line));
     } else {

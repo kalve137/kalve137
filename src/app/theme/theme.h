@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QMargins>
+#include <QObject>
 
 class QApplication;
 
@@ -30,6 +31,9 @@ struct ChromeColors {
     QColor accent;
     QColor accentHover;
     QColor onAccent;
+    QColor accentFill;
+    QColor accentFillHover;
+    QColor onAccentFill;
     QColor conflict;
     QColor conflictText;
     QColor warning;
@@ -48,6 +52,8 @@ struct ViewportColors {
     QColor wire;
     QColor halo;
     QColor hover;
+    QColor cubeEdge;
+    QColor cubeLabel;
     QColor plane;
     QColor originPlane;
     QColor originPoint;
@@ -65,8 +71,22 @@ struct Palette {
 };
 
 extern const Palette kDarkPalette;
+extern const Palette kLightPalette;
+
+enum class Scheme { System, Light, Dark };
+
+class Notifier : public QObject {
+    Q_OBJECT
+
+signals:
+    void changed();
+};
 
 const Palette& palette();
+bool isDark();
+Scheme scheme();
+void setScheme(Scheme scheme);
+Notifier* notifier();
 
 inline constexpr double kTextBody = 9.0;
 inline constexpr double kTextTitle = 11.0;
@@ -99,6 +119,6 @@ inline constexpr int kWidthNarrow = 320;
 inline constexpr int kWidthRegular = 480;
 inline constexpr int kWidthWide = 640;
 
-void apply(QApplication& app);
+void apply(QApplication& app, Scheme scheme = Scheme::System);
 
 } // namespace kalve137::app::theme

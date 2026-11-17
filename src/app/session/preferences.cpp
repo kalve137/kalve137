@@ -18,6 +18,7 @@ constexpr std::array kPresets = {NavigationPreset::MiddleOrbitsCtrlPans, Navigat
                                  NavigationPreset::MiddleOrbitsShiftPans, NavigationPreset::RightOrbitsCtrlPans};
 constexpr std::array kStyles = {VisualStyle::Shaded, VisualStyle::ShadedWithEdges, VisualStyle::Wireframe,
                                 VisualStyle::VisibleEdges};
+constexpr std::array kSchemes = {theme::Scheme::System, theme::Scheme::Light, theme::Scheme::Dark};
 
 const char* keyOf(NavigationPreset preset)
 {
@@ -47,6 +48,19 @@ const char* keyOf(VisualStyle style)
         return "visibleEdges";
     }
     return "shadedWithEdges";
+}
+
+const char* keyOf(theme::Scheme scheme)
+{
+    switch (scheme) {
+    case theme::Scheme::System:
+        return "system";
+    case theme::Scheme::Light:
+        return "light";
+    case theme::Scheme::Dark:
+        return "dark";
+    }
+    return "system";
 }
 
 template <typename Enum, std::size_t N>
@@ -82,6 +96,7 @@ Preferences Preferences::load()
     QSettings settings;
     settings.beginGroup("preferences");
     p.reopenLastProject = settings.value("reopenLastProject", defaults.reopenLastProject).toBool();
+    p.colorScheme = readEnum(settings, "appearance/theme", kSchemes, defaults.colorScheme);
 
     p.navigation.preset = readEnum(settings, "navigation/mouseScheme", kPresets, defaults.navigation.preset);
     p.navigation.reverseZoom = settings.value("navigation/reverseZoom", defaults.navigation.reverseZoom).toBool();
@@ -121,6 +136,7 @@ void Preferences::save() const
     QSettings settings;
     settings.beginGroup("preferences");
     settings.setValue("reopenLastProject", reopenLastProject);
+    settings.setValue("appearance/theme", QString::fromLatin1(keyOf(colorScheme)));
 
     settings.remove("navigation/preset");
     settings.setValue("navigation/mouseScheme", QString::fromLatin1(keyOf(navigation.preset)));
@@ -178,6 +194,19 @@ QString displayName(VisualStyle style)
         return tr("Wireframe");
     case VisualStyle::VisibleEdges:
         return tr("Visible Edges Only");
+    }
+    return {};
+}
+
+QString displayName(theme::Scheme scheme)
+{
+    switch (scheme) {
+    case theme::Scheme::System:
+        return tr("Use System Setting");
+    case theme::Scheme::Light:
+        return tr("Light");
+    case theme::Scheme::Dark:
+        return tr("Dark");
     }
     return {};
 }

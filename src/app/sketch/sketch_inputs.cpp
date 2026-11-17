@@ -75,7 +75,7 @@ void SketchInputs::open(const std::vector<Kind>& kinds)
         box.edit = new QLineEdit(m_view);
         box.edit->setObjectName("sketchInput");
         box.edit->setFixedWidth(kBoxWidth);
-        box.lock = box.edit->addAction(icons::fixed(QStringLiteral("lock"), theme::palette().chrome.accent),
+        box.lock = box.edit->addAction(icons::fixed(QStringLiteral("lock"), &theme::ChromeColors::accent),
                                        QLineEdit::TrailingPosition);
         box.lock->setVisible(false);
         box.edit->installEventFilter(this);

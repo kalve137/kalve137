@@ -64,9 +64,9 @@ Handle(Graphic3d_AspectMarker3d) renderBadge(const QString& icon, const QColor& 
 Handle(AIS_InteractiveObject) makeConstraintBadge(const gp_Pnt& at, const QString& icon, const QColor& color,
                                                   bool selected, double devicePixelRatio)
 {
-    using Key = std::tuple<QString, QRgb, bool, double>;
+    using Key = std::tuple<QString, QRgb, bool, double, bool>;
     static std::map<Key, Handle(Graphic3d_AspectMarker3d)> cache;
-    const Key key{icon, color.rgba(), selected, devicePixelRatio};
+    const Key key{icon, color.rgba(), selected, devicePixelRatio, theme::isDark()};
     auto it = cache.find(key);
     if (it == cache.end()) {
         it = cache.emplace(key, renderBadge(icon, color, selected, devicePixelRatio)).first;

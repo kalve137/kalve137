@@ -46,6 +46,7 @@ Tokens styleTokens(const QString& fontFamily, int lineHeight)
     const int itemPadding = std::max(0, rowPadding - 1);
     return {
         {QStringLiteral("fontFamily"), QStringLiteral("\"%1\"").arg(fontFamily)},
+        {QStringLiteral("scheme"), isDark() ? QStringLiteral("dark") : QStringLiteral("light")},
         {QStringLiteral("textTitle"), pt(kTextTitle)},
         {QStringLiteral("controlPadY"), px(controlPadding)},
         {QStringLiteral("rowPadY"), px(rowPadding)},
@@ -76,6 +77,9 @@ Tokens styleTokens(const QString& fontFamily, int lineHeight)
         {QStringLiteral("textDisabled"), color(colors.textDisabled)},
         {QStringLiteral("accent"), color(colors.accent)},
         {QStringLiteral("accentHover"), color(colors.accentHover)},
+        {QStringLiteral("accentFill"), color(colors.accentFill)},
+        {QStringLiteral("accentFillHover"), color(colors.accentFillHover)},
+        {QStringLiteral("onAccentFill"), color(colors.onAccentFill)},
         {QStringLiteral("conflict"), color(colors.conflict)},
         {QStringLiteral("conflictText"), color(colors.conflictText)},
         {QStringLiteral("warning"), color(colors.warning)},
