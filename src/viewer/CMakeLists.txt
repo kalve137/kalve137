@@ -14,6 +14,8 @@ add_library(kalve137_viewer STATIC
     occt_view_widget_box.cpp
     occt_view_widget_grid.cpp
     style.h
+    view_cube.h
+    view_cube.cpp
     view_turn.h
     view_turn.cpp
 )

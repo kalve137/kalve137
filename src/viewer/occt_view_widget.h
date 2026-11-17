@@ -16,6 +16,7 @@
 #include "viewer/box_band.h"
 #include "viewer/grid.h"
 #include "viewer/navigation.h"
+#include "viewer/style.h"
 #include "viewer/view_turn.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -28,15 +29,16 @@
 #include <optional>
 #include <vector>
 
-class AIS_ViewCube;
-
 namespace kalve137::viewer {
+
+class ViewCube;
 
 struct ViewCubeStyle {
     QColor face;
-    QColor edge;
+    style::Shading shading;
     QColor label;
     QColor hover;
+    QColor hoverLabel;
     QColor axisX;
     QColor axisY;
     QColor axisZ;
@@ -156,7 +158,7 @@ private:
     Handle(V3d_View) m_view;
     Handle(V3d_View) m_focusView;
     Handle(AIS_InteractiveContext) m_context;
-    Handle(AIS_ViewCube) m_viewCube;
+    Handle(ViewCube) m_viewCube;
     Handle(GridObject) m_grid;
     Handle(GridObject) m_gridWash;
     std::optional<GridExtent> m_gridExtent;

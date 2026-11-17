@@ -790,9 +790,10 @@ void MainWindow::applyViewportTheme()
     m_view->setHighlightColors(colors.viewport.hover, colors.chrome.accent);
     m_view->setViewCubeStyle({
         .face = colors.chrome.raised,
-        .edge = colors.viewport.cubeEdge,
+        .shading = theme::isDark() ? viewer::style::kCubeShadingDark : viewer::style::kCubeShadingLight,
         .label = colors.viewport.cubeLabel,
         .hover = colors.chrome.accentFill,
+        .hoverLabel = colors.chrome.onAccentFill,
         .axisX = colors.viewport.axisX,
         .axisY = colors.viewport.axisY,
         .axisZ = colors.viewport.axisZ,

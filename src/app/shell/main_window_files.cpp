@@ -417,7 +417,6 @@ void MainWindow::openSample()
     m_session->reset(std::move(document), {});
     m_view->homeView();
     fitView();
-    statusBar()->showMessage(tr("Opened sample, save to keep a copy"), kMessageTimeoutMs);
 }
 
 void MainWindow::newProject()

@@ -26,6 +26,7 @@
 #include <cmath>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 namespace kalve137::uitest {
 namespace {
@@ -33,6 +34,8 @@ namespace {
 using PreferencesTest = UiTest;
 
 constexpr int kCubeMargin = 40;
+constexpr QPointF kCubeEdgeOffset(0.0, 0.3);
+constexpr QPointF kCubeFaceOffset(-0.33, 0.15);
 using viewer::NavigationPreset;
 
 TEST_F(PreferencesTest, EveryMouseSchemeSurvivesASaveAndLoad)
@@ -172,14 +175,22 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
     ui->trigger("Open Sample");
     const std::filesystem::path folder = ui->save("light body").parent_path();
     const QRectF cube = ui->view().viewCubeRect();
-    const auto saveCube = [&](const char* name) {
+    const auto saveCube = [&](const std::string& name) {
         const QRect area = cube.toAlignedRect().adjusted(-kCubeMargin, -kCubeMargin, kCubeMargin, kCubeMargin);
         const QPoint corner = ui->view().mapTo(ui->view().window(), area.topLeft());
         ui->shot().copy(QRect(corner, area.size())).save(QString::fromStdU16String((folder / name).u16string()));
     };
-    saveCube("light view cube.png");
-    ui->move(cube.center());
-    saveCube("light view cube hover.png");
+    const auto saveCubeHovers = [&](const std::string& theme) {
+        saveCube(theme + " view cube.png");
+        const auto hover = [&](const QPointF& offset, const std::string& part) {
+            ui->move(cube.center() + QPointF(offset.x() * cube.width(), offset.y() * cube.height()));
+            saveCube(theme + " view cube " + part + ".png");
+        };
+        hover(QPointF(), "hover");
+        hover(kCubeEdgeOffset, "edge");
+        hover(kCubeFaceOffset, "face");
+    };
+    saveCubeHovers("light");
     ui->move(ui->centerOf(&ui->view()));
 
     ui->trigger("Create Sketch");
@@ -205,9 +216,7 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
 
     app::theme::setScheme(app::theme::Scheme::Dark);
     ui->move(ui->centerOf(&ui->view()));
-    saveCube("dark view cube.png");
-    ui->move(cube.center());
-    saveCube("dark view cube hover.png");
+    saveCubeHovers("dark");
 }
 
 TEST_F(PreferencesTest, AnUnknownMouseSchemeFallsBackToTheDefault)
