@@ -31,7 +31,7 @@ SketchPalette::SketchPalette(QWidget* parent) : QWidget(parent)
     m_snap = addToggle(tr("Snap to Grid"));
 
     auto* lookAt = new QPushButton(tr("Look At"), this);
-    lookAt->setToolTip(tr("Turn the view to face the sketch plane"));
+    lookAt->setToolTip(tr("Turn view to face sketch plane"));
     auto* grid = new QPushButton(tr("Grid Settings..."), this);
     layout->addWidget(lookAt);
     layout->addWidget(grid);

@@ -135,7 +135,7 @@ private:
             return;
         }
         m_cancel->setEnabled(false);
-        m_label->setText(MainWindow::tr("Stopping the import..."));
+        m_label->setText(MainWindow::tr("Stopping import..."));
         m_bar->setRange(0, 0);
         m_onCancel();
     }

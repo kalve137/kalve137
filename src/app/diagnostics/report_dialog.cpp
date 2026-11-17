@@ -131,7 +131,7 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
     });
     QObject::connect(copy, &QPushButton::clicked, &dialog, [&] {
         QApplication::clipboard()->setText(issueText(current(), savedZip));
-        status->setText(QDialog::tr("Issue text copied to the clipboard"));
+        status->setText(QDialog::tr("Issue text copied to clipboard"));
     });
     QObject::connect(openFolder, &QPushButton::clicked, &dialog,
                      [] { QDesktopServices::openUrl(QUrl::fromLocalFile(toQString(diagnostics::logFolder()))); });
