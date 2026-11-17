@@ -73,6 +73,7 @@ function(kalve137_install_notices)
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/occt_qt/LICENSE.txt" DESTINATION ${notices}
         RENAME "occt-qt-tools.txt"
     )
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/tinybvh/LICENSE" DESTINATION ${notices} RENAME "tinybvh.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/roboto/OFL.txt" DESTINATION ${notices} RENAME "Roboto.txt")
 
     get_filename_component(qt_licenses "${Qt6_DIR}/../../../../../Licenses/LICENSE" ABSOLUTE)

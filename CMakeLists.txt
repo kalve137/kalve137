@@ -30,6 +30,7 @@ qt_standard_project_setup()
 
 add_subdirectory(third_party/occt_qt)
 add_subdirectory(third_party/planegcs)
+add_subdirectory(third_party/tinybvh)
 add_subdirectory(src/platform)
 add_subdirectory(src/log)
 add_subdirectory(src/geometry)

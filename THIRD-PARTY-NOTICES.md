@@ -8,6 +8,7 @@ Kalve 137 is free software under GPL-3.0-or-later. It is built on the components
 | [Open CASCADE Technology](https://github.com/Open-Cascade-SAS/OCCT) | 8.0.1 | LGPL-2.1-only with the OCCT exception | Modeling kernel and 3D view |
 | [PlaneGCS](third_party/planegcs/README.md) | 1.1.4 | LGPL-2.0-or-later | Sketch constraint solver |
 | [occt-qt-tools](third_party/occt_qt/README.md) | 72e32d3 | MIT | OpenGL glue between the kernel and Qt |
+| [tinybvh](third_party/tinybvh/README.md) | 769343f | MIT | Ray casting for box selection |
 | [Boost](https://www.boost.org) | 1.92.0 | BSL-1.0 | Used by the solver |
 | [Eigen](https://eigen.tuxfamily.org) | 5.0.1 | MPL-2.0 | Used by the solver |
 | [spdlog](https://github.com/gabime/spdlog) | 1.17.0 | MIT | Logging |
