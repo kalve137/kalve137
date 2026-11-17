@@ -201,7 +201,7 @@ TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
 
     const QImage frame = ui->view().grabFramebuffer();
     const qreal ratio = ui->view().devicePixelRatioF();
-    const QColor line = app::theme::kSketchFree;
+    const QColor line = app::theme::palette().viewport.sketchFree;
     int sampled = 0;
     int solid = 0;
     for (int i = 0; i <= kLineSamples; ++i) {

@@ -64,7 +64,7 @@ void Scene::showOrigin()
     const double size = kOriginPlanePixels * m_view->devicePixelRatioF();
     for (core::OriginPlane plane : {core::OriginPlane::XY, core::OriginPlane::XZ, core::OriginPlane::YZ}) {
         const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(core::originPlane(plane)), 0.0, size, 0.0, size);
-        Handle(AIS_Shape) object = makeSurface(face, theme::kOriginPlane, kOriginPlaneTransparency);
+        Handle(AIS_Shape) object = makeSurface(face, theme::palette().viewport.originPlane, kOriginPlaneTransparency);
         pinTo(object, gp::Origin());
         object->SetZLayer(Graphic3d_ZLayerId_Topmost);
         hoverInOwnLayer(object, context);
@@ -73,8 +73,9 @@ void Scene::showOrigin()
         pick.plane = plane;
         display(object, m_mode == PickMode::Planes ? kWholeObject : kNotSelectable, pick);
     }
-    const std::pair<core::AxisKind, QColor> axes[] = {
-        {core::AxisKind::X, theme::kAxisX}, {core::AxisKind::Y, theme::kAxisY}, {core::AxisKind::Z, theme::kAxisZ}};
+    const std::pair<core::AxisKind, QColor> axes[] = {{core::AxisKind::X, theme::palette().viewport.axisX},
+                                                      {core::AxisKind::Y, theme::palette().viewport.axisY},
+                                                      {core::AxisKind::Z, theme::palette().viewport.axisZ}};
     for (const auto& [kind, color] : axes) {
         const gp_Dir direction = kind == core::AxisKind::X ? gp::DX() : kind == core::AxisKind::Y ? gp::DY() : gp::DZ();
         const gp_Pnt end = gp::Origin().Translated(gp_Vec(direction) * size * kOriginAxisToPlane);
@@ -90,7 +91,7 @@ void Scene::showOrigin()
     }
     Handle(AIS_Point) point = new AIS_Point(new Geom_CartesianPoint(gp::Origin()));
     point->SetMarker(Aspect_TOM_BALL);
-    point->SetColor(occt(theme::kOriginPoint));
+    point->SetColor(occt(theme::palette().viewport.originPoint));
     point->Attributes()->PointAspect()->SetScale(kOriginPointScale);
     point->SetZLayer(Graphic3d_ZLayerId_Topmost);
     display(point, kNotSelectable, std::nullopt, AIS_WireFrame);
@@ -105,7 +106,7 @@ void Scene::showConstructionPlanes()
         }
         const gp_Ax3 local(gp::Origin(), plane.frame.Direction(), plane.frame.XDirection());
         const TopoDS_Face face = BRepBuilderAPI_MakeFace(gp_Pln(local), -half, half, -half, half);
-        Handle(AIS_Shape) object = makeSurface(face, theme::kOriginPlane, kOriginPlaneTransparency);
+        Handle(AIS_Shape) object = makeSurface(face, theme::palette().viewport.originPlane, kOriginPlaneTransparency);
         pinTo(object, plane.center);
         hoverInOwnLayer(object, m_view->aisContext());
         Pick pick;
@@ -127,8 +128,8 @@ void Scene::showConstructionAxes()
         const gp_Vec along = gp_Vec(axis.Direction()) * half;
         const gp_Pnt from = gp::Origin().Translated(-along);
         const gp_Pnt to = gp::Origin().Translated(along);
-        Handle(AIS_Shape) object =
-            makeWire(BRepBuilderAPI_MakeEdge(from, to), theme::kOriginPlane, kDatumAxisWidth, Aspect_TOL_DASH);
+        Handle(AIS_Shape) object = makeWire(BRepBuilderAPI_MakeEdge(from, to), theme::palette().viewport.originPlane,
+                                            kDatumAxisWidth, Aspect_TOL_DASH);
         pinTo(object, axis.Location());
         Pick pick;
         pick.kind = Pick::Kind::ConstructionAxis;
@@ -146,7 +147,7 @@ void Scene::showConstructionPoints()
         }
         Handle(AIS_Point) point = new AIS_Point(new Geom_CartesianPoint(location));
         point->SetMarker(Aspect_TOM_O_PLUS);
-        point->SetColor(occt(theme::kOriginPlane));
+        point->SetColor(occt(theme::palette().viewport.originPlane));
         point->Attributes()->PointAspect()->SetScale(kConstructionPointScale);
         point->SetZLayer(Graphic3d_ZLayerId_Topmost);
         Pick pick;

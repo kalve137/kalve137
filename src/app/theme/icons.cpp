@@ -68,20 +68,20 @@ private:
     QColor colorFor(QIcon::Mode mode, QIcon::State state) const
     {
         if (mode == QIcon::Disabled) {
-            return theme::kTitaniumDim;
+            return theme::palette().chrome.textDisabled;
         }
         if (!m_stateful) {
             return m_color;
         }
         switch (mode) {
         case QIcon::Disabled:
-            return theme::kTitaniumDim;
+            return theme::palette().chrome.textDisabled;
         case QIcon::Selected:
-            return theme::kGold;
+            return theme::palette().chrome.accent;
         case QIcon::Active:
-            return state == QIcon::On ? theme::kGold : m_color.lighter(kHoverLighterPercent);
+            return state == QIcon::On ? theme::palette().chrome.accent : m_color.lighter(kHoverLighterPercent);
         case QIcon::Normal:
-            return state == QIcon::On ? theme::kGold : m_color;
+            return state == QIcon::On ? theme::palette().chrome.accent : m_color;
         }
         return m_color;
     }

@@ -81,6 +81,7 @@ add_library(kalve137_app STATIC
     theme/fonts.h
     theme/icons.cpp
     theme/icons.h
+    theme/palette.cpp
     theme/theme.cpp
     theme/theme.h
     theme/theme_tokens.cpp

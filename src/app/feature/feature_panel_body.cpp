@@ -410,8 +410,8 @@ void FeaturePanel::buildAppearanceForm(core::AppearanceFeature& f, QFormLayout* 
     }
     connect(custom, &QPushButton::clicked, this, [this, setColor] {
         const auto& data = std::get<core::AppearanceFeature>(*m_data);
-        const QColor picked =
-            QColorDialog::getColor(data.color ? toQColor(*data.color) : theme::kTitanium, this, tr("Appearance"));
+        const QColor picked = QColorDialog::getColor(
+            data.color ? toQColor(*data.color) : theme::palette().viewport.body, this, tr("Appearance"));
         if (picked.isValid()) {
             setColor(toColor(picked));
         }

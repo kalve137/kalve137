@@ -384,7 +384,7 @@ bool paintsAccent(QWidget& button)
 {
     const QImage image = button.grab().toImage();
     const QColor fill = image.pixelColor(image.width() / 6, image.height() / 2);
-    const QColor accent = app::theme::kGold;
+    const QColor accent = app::theme::palette().chrome.accent;
     return std::abs(fill.red() - accent.red()) + std::abs(fill.green() - accent.green()) +
                std::abs(fill.blue() - accent.blue()) <
            kAccentTolerance;

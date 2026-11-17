@@ -89,7 +89,7 @@ void SketchEditor::redraw()
     if (m_display.profiles) {
         for (const TopoDS_Face& profile : sketch::findProfiles(shown, ax)) {
             Handle(AIS_Shape) object = new AIS_Shape(profile);
-            object->SetColor(occt(theme::kPlane));
+            object->SetColor(occt(theme::palette().viewport.plane));
             object->SetTransparency(kProfileTransparency);
             object->SetZLayer(Graphic3d_ZLayerId_Top);
             m_view->aisContext()->Display(object, AIS_Shaded, -1, false);
@@ -104,23 +104,24 @@ void SketchEditor::redraw()
         if (!edge) {
             continue;
         }
-        QColor color = m_solve.fullyConstrained.contains(id) ? theme::kSketchConstrained : theme::kSketchFree;
+        QColor color = m_solve.fullyConstrained.contains(id) ? theme::palette().viewport.sketchConstrained
+                                                             : theme::palette().viewport.sketchFree;
         if (curve.construction) {
-            color = theme::kSketchConstruction;
+            color = theme::palette().viewport.sketchConstruction;
         }
         if (conflicted.contains(id)) {
-            color = theme::kConflict;
+            color = theme::palette().chrome.conflict;
         }
         if (m_selection.contains(id)) {
-            color = theme::kGold;
+            color = theme::palette().chrome.accent;
         } else if (m_hover == id) {
-            color = theme::kGold.lighter(130);
+            color = theme::palette().chrome.accent.lighter(130);
         }
         Handle(AIS_Shape) halo = new AIS_Shape(*edge);
-        halo->SetColor(occt(theme::kSlateDeep));
+        halo->SetColor(occt(theme::palette().viewport.halo));
         halo->SetWidth(style::kStrokeHalo);
         halo->Attributes()->SetWireAspect(
-            new Prs3d_LineAspect(occt(theme::kSlateDeep), Aspect_TOL_SOLID, halo->Width()));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.halo), Aspect_TOL_SOLID, halo->Width()));
         showUnder(halo);
         Handle(AIS_Shape) object = new AIS_Shape(*edge);
         object->SetColor(occt(color));
@@ -134,13 +135,14 @@ void SketchEditor::redraw()
         if (!m_display.points && !m_selection.contains(id) && m_hover != id) {
             continue;
         }
-        QColor color =
-            m_solve.fullyConstrained.contains(id) || point.fixed ? theme::kSketchConstrained : theme::kSketchFree;
+        QColor color = m_solve.fullyConstrained.contains(id) || point.fixed
+                           ? theme::palette().viewport.sketchConstrained
+                           : theme::palette().viewport.sketchFree;
         if (id == sketch::kOriginId) {
-            color = theme::kTitaniumLight;
+            color = theme::palette().viewport.annotation;
         }
         if (m_selection.contains(id) || m_hover == id) {
-            color = theme::kGold;
+            color = theme::palette().chrome.accent;
         }
         Handle(AIS_Shape) object = new AIS_Shape(BRepBuilderAPI_MakeVertex(sketch::toWorld(ax, point.pos)));
         object->Attributes()->SetPointAspect(new Prs3d_PointAspect(
@@ -185,15 +187,16 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
 
     const auto colorFor = [&](Id id) {
         if (m_selection.contains(id)) {
-            return theme::kGold;
+            return theme::palette().chrome.accent;
         }
-        return conflicting.contains(id) ? theme::kConflictText : theme::kTitaniumLight;
+        return conflicting.contains(id) ? theme::palette().chrome.conflictText : theme::palette().viewport.annotation;
     };
     const auto placeGlyph = [&](Id constraint, Vec2 at, const QString& icon) {
         if (!m_display.constraints) {
             return;
         }
-        const QColor color = conflicting.contains(constraint) ? theme::kConflict : theme::kTitaniumLight;
+        const QColor color =
+            conflicting.contains(constraint) ? theme::palette().chrome.conflict : theme::palette().viewport.annotation;
         Handle(AIS_InteractiveObject) badge =
             makeConstraintBadge(sketch::toWorld(ax, at), icon, color, m_selection.contains(constraint), textScale);
         show(badge, m_objects, true);
@@ -380,7 +383,7 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
         QString haloText = formatValue(constraint.value);
         std::optional<double> haloFlyout;
         const Handle(PrsDim_Dimension) halo = build(haloText, haloFlyout);
-        halo->DimensionAspect()->SetCommonColor(occt(theme::kSlateDeep));
+        halo->DimensionAspect()->SetCommonColor(occt(theme::palette().viewport.halo));
         halo->DimensionAspect()->LineAspect()->SetWidth(style::kStrokeHalo);
         showUnder(halo);
 
@@ -427,10 +430,10 @@ void SketchEditor::redrawPreview()
     const auto world = [&](Vec2 p) { return sketch::toWorld(ax, p); };
     const auto addEdge = [&](const TopoDS_Shape& shape) {
         Handle(AIS_Shape) object = new AIS_Shape(shape);
-        object->SetColor(occt(theme::kGold));
+        object->SetColor(occt(theme::palette().chrome.accent));
         object->SetWidth(style::kStrokeThin);
         object->Attributes()->SetWireAspect(
-            new Prs3d_LineAspect(occt(theme::kGold), Aspect_TOL_DOT, style::kStrokeThin));
+            new Prs3d_LineAspect(occt(theme::palette().chrome.accent), Aspect_TOL_DOT, style::kStrokeThin));
         show(object, m_preview, false);
     };
     const auto addSegment = [&](Vec2 a, Vec2 b) {
@@ -553,7 +556,7 @@ void SketchEditor::redrawPreview()
                         : BRepBuilderAPI_MakeEdge(circle, piece->startAngle, end).Shape();
         }
         Handle(AIS_Shape) object = new AIS_Shape(shape);
-        object->SetColor(occt(theme::kConflict));
+        object->SetColor(occt(theme::palette().chrome.conflict));
         object->SetWidth(style::kStrokeBold);
         show(object, m_preview, false);
         break;
@@ -562,7 +565,7 @@ void SketchEditor::redrawPreview()
         if (const std::optional<Id> corner = cornerAt(cursor)) {
             Handle(AIS_Shape) marker = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(current().point(*corner)->pos)));
             marker->Attributes()->SetPointAspect(
-                new Prs3d_PointAspect(Aspect_TOM_O_POINT, occt(theme::kGold), style::kMarkerMedium));
+                new Prs3d_PointAspect(Aspect_TOM_O_POINT, occt(theme::palette().chrome.accent), style::kMarkerMedium));
             show(marker, m_preview, false);
         }
         break;
@@ -602,24 +605,24 @@ void SketchEditor::redrawPreview()
              {m_cursorSnap.alignedX, m_cursorSnap.alignedY, m_cursorSnap.extendedFrom}) {
             if (source && sketch::distance(*source, cursor) > 1e-9) {
                 Handle(AIS_Shape) guide = new AIS_Shape(BRepBuilderAPI_MakeEdge(world(*source), world(cursor)));
-                guide->SetColor(occt(theme::kTitaniumLight));
+                guide->SetColor(occt(theme::palette().viewport.annotation));
                 guide->SetWidth(kInferenceLineWidth);
-                guide->Attributes()->SetWireAspect(
-                    new Prs3d_LineAspect(occt(theme::kTitaniumLight), Aspect_TOL_DASH, kInferenceLineWidth));
+                guide->Attributes()->SetWireAspect(new Prs3d_LineAspect(occt(theme::palette().viewport.annotation),
+                                                                        Aspect_TOL_DASH, kInferenceLineWidth));
                 show(guide, m_preview, false);
             }
         }
         Handle(AIS_Shape) crosshair = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(cursor)));
         crosshair->Attributes()->SetPointAspect(
-            new Prs3d_PointAspect(Aspect_TOM_PLUS, occt(theme::kGold), kCursorMarkerScale));
+            new Prs3d_PointAspect(Aspect_TOM_PLUS, occt(theme::palette().chrome.accent), kCursorMarkerScale));
         show(crosshair, m_preview, false);
     }
     if (snapUsed && (m_cursorSnap.point != 0 || m_cursorSnap.midpointOf != 0 || m_cursorSnap.onCurve != 0)) {
         Handle(AIS_Shape) marker = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(cursor)));
         const bool midpoint = m_cursorSnap.midpointOf != 0;
         const Aspect_TypeOfMarker type = midpoint ? Aspect_TOM_O_STAR : Aspect_TOM_O_POINT;
-        marker->Attributes()->SetPointAspect(
-            new Prs3d_PointAspect(type, occt(theme::kGold), midpoint ? kMidpointMarkerScale : kSnapMarkerScale));
+        marker->Attributes()->SetPointAspect(new Prs3d_PointAspect(type, occt(theme::palette().chrome.accent),
+                                                                   midpoint ? kMidpointMarkerScale : kSnapMarkerScale));
         show(marker, m_preview, false);
     }
     placeInputs(cursor);

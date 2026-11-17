@@ -62,10 +62,10 @@ void BrowserPanel::rebuild()
     const core::Document& document = m_session.document();
     const core::Model& model = m_session.model();
 
-    const QIcon folder = icons::fixed("folder", theme::kTitanium);
+    const QIcon folder = icons::fixed("folder", theme::palette().chrome.textDim);
     auto* root = new QTreeWidgetItem(this, {m_session.displayName()});
     root->setData(0, kKindRole, static_cast<int>(ItemKind::Group));
-    root->setIcon(0, icons::fixed("body", theme::kGold));
+    root->setIcon(0, icons::fixed("body", theme::palette().chrome.accent));
 
     const auto addCheckable = [&](QTreeWidgetItem* parent, const QString& text, ItemKind kind, int id, bool visible) {
         auto* item = new QTreeWidgetItem(parent, {text});
@@ -79,10 +79,10 @@ void BrowserPanel::rebuild()
             item->setIcon(0, icons::fixed("body"));
             break;
         case ItemKind::Sketch:
-            item->setIcon(0, icons::fixed("create_sketch", theme::kSketchFree));
+            item->setIcon(0, icons::fixed("create_sketch", theme::palette().viewport.sketchFree));
             break;
         case ItemKind::Component:
-            item->setIcon(0, icons::fixed("body", theme::kGold));
+            item->setIcon(0, icons::fixed("body", theme::palette().chrome.accent));
             break;
         case ItemKind::Construction:
             break;
@@ -109,7 +109,7 @@ void BrowserPanel::rebuild()
         }
         QTreeWidgetItem* item = addCheckable(construction, QString::fromStdString(feature.name), ItemKind::Construction,
                                              feature.id, m_session.isVisible(feature.id));
-        item->setIcon(0, icons::fixed(icons::featureIconName(feature.data), theme::kTitanium));
+        item->setIcon(0, icons::fixed(icons::featureIconName(feature.data), theme::palette().chrome.textDim));
     }
 
     auto* bodies = new QTreeWidgetItem(root, {tr("Bodies")});
@@ -151,7 +151,7 @@ void BrowserPanel::rebuild()
             switch (status->second.health) {
             case core::FeatureHealth::Warning:
             case core::FeatureHealth::Failed:
-                item->setForeground(0, theme::kConflictText);
+                item->setForeground(0, theme::palette().chrome.conflictText);
                 item->setToolTip(0, QString::fromStdString(status->second.message));
                 break;
             case core::FeatureHealth::Ok:

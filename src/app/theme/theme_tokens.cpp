@@ -37,6 +37,7 @@ ResolvedSheet resolveTokens(const QString& sheet, const Tokens& tokens)
 
 Tokens styleTokens(const QString& fontFamily, int lineHeight)
 {
+    const ChromeColors& colors = palette().chrome;
     const auto color = [](const QColor& value) { return value.name(QColor::HexRgb); };
     const auto px = [](int value) { return QStringLiteral("%1px").arg(value); };
     const auto pt = [](double value) { return QStringLiteral("%1pt").arg(value); };
@@ -59,25 +60,25 @@ Tokens styleTokens(const QString& fontFamily, int lineHeight)
         {QStringLiteral("radiusControl"), px(kRadiusControl)},
         {QStringLiteral("radiusPanel"), px(kRadiusPanel)},
 
-        {QStringLiteral("base"), color(kSlateDeep)},
-        {QStringLiteral("inputDisabled"), color(kSlateDisabled)},
-        {QStringLiteral("surface"), color(kSlate)},
-        {QStringLiteral("borderDisabled"), color(kSlateEdgeDisabled)},
-        {QStringLiteral("raisedPressed"), color(kSlatePressed)},
-        {QStringLiteral("surfaceHover"), color(kSlateHover)},
-        {QStringLiteral("raised"), color(kSlateLight)},
-        {QStringLiteral("raisedHover"), color(kSlateLightHover)},
-        {QStringLiteral("border"), color(kSlateEdge)},
-        {QStringLiteral("borderHover"), color(kSlateEdgeHover)},
-        {QStringLiteral("text"), color(kTitaniumLight)},
-        {QStringLiteral("textBright"), color(kTitaniumBright)},
-        {QStringLiteral("textDim"), color(kTitanium)},
-        {QStringLiteral("textDisabled"), color(kTitaniumDim)},
-        {QStringLiteral("accent"), color(kGold)},
-        {QStringLiteral("accentHover"), color(kGoldLight)},
-        {QStringLiteral("conflict"), color(kConflict)},
-        {QStringLiteral("conflictText"), color(kConflictText)},
-        {QStringLiteral("warning"), color(kWarning)},
+        {QStringLiteral("base"), color(colors.base)},
+        {QStringLiteral("inputDisabled"), color(colors.inputDisabled)},
+        {QStringLiteral("surface"), color(colors.surface)},
+        {QStringLiteral("borderDisabled"), color(colors.borderDisabled)},
+        {QStringLiteral("raisedPressed"), color(colors.raisedPressed)},
+        {QStringLiteral("surfaceHover"), color(colors.surfaceHover)},
+        {QStringLiteral("raised"), color(colors.raised)},
+        {QStringLiteral("raisedHover"), color(colors.raisedHover)},
+        {QStringLiteral("border"), color(colors.border)},
+        {QStringLiteral("borderHover"), color(colors.borderHover)},
+        {QStringLiteral("text"), color(colors.text)},
+        {QStringLiteral("textBright"), color(colors.textBright)},
+        {QStringLiteral("textDim"), color(colors.textDim)},
+        {QStringLiteral("textDisabled"), color(colors.textDisabled)},
+        {QStringLiteral("accent"), color(colors.accent)},
+        {QStringLiteral("accentHover"), color(colors.accentHover)},
+        {QStringLiteral("conflict"), color(colors.conflict)},
+        {QStringLiteral("conflictText"), color(colors.conflictText)},
+        {QStringLiteral("warning"), color(colors.warning)},
     };
 }
 

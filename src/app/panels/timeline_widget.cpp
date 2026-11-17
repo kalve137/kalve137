@@ -39,7 +39,8 @@ constexpr int kMaxNameWidth = 140;
 QIcon featureIcon(const core::FeatureData& data)
 {
     const bool sketch = std::holds_alternative<core::SketchFeature>(data);
-    return icons::tinted(icons::featureIconName(data), sketch ? theme::kSketchFree : theme::kTitaniumLight);
+    return icons::tinted(icons::featureIconName(data),
+                         sketch ? theme::palette().viewport.sketchFree : theme::palette().chrome.text);
 }
 
 } // namespace
@@ -168,7 +169,7 @@ void TimelineWidget::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(rect(), theme::kSlateDeep);
+    painter.fillRect(rect(), theme::palette().chrome.base);
 
     const QFontMetrics metrics(font());
     const core::Document& document = m_session.document();
@@ -185,17 +186,17 @@ void TimelineWidget::paintEvent(QPaintEvent*)
             health = core::FeatureHealth::RolledBack;
         }
 
-        QColor border = theme::kSlateEdge;
+        QColor border = theme::palette().chrome.border;
         qreal opacity = 1.0;
         bool strike = false;
         switch (health) {
         case core::FeatureHealth::Ok:
             break;
         case core::FeatureHealth::Warning:
-            border = theme::kWarning;
+            border = theme::palette().chrome.warning;
             break;
         case core::FeatureHealth::Failed:
-            border = theme::kConflict;
+            border = theme::palette().chrome.conflict;
             break;
         case core::FeatureHealth::Suppressed:
             strike = true;
@@ -206,13 +207,13 @@ void TimelineWidget::paintEvent(QPaintEvent*)
             break;
         }
         if (chip.id == m_editing && health == core::FeatureHealth::Ok) {
-            border = theme::kGold;
+            border = theme::palette().chrome.accent;
         }
 
         painter.setOpacity(opacity);
         QPainterPath path;
         path.addRoundedRect(chip.rect, 6, 6);
-        painter.fillPath(path, theme::kSlate);
+        painter.fillPath(path, theme::palette().chrome.surface);
         const bool failed = health == core::FeatureHealth::Failed;
         painter.setPen(QPen(border, failed ? style::kStrokeRegular : style::kStrokeHairline));
         painter.setBrush(Qt::NoBrush);
@@ -224,7 +225,7 @@ void TimelineWidget::paintEvent(QPaintEvent*)
         const QRect text(badge.right() + 6, chip.rect.top(), chip.rect.right() - badge.right() - 10,
                          chip.rect.height());
         const QString name = metrics.elidedText(QString::fromStdString(feature->name), Qt::ElideRight, text.width());
-        painter.setPen(theme::kTitaniumLight);
+        painter.setPen(theme::palette().chrome.text);
         painter.drawText(text, Qt::AlignVCenter | Qt::AlignLeft, name);
         if (strike) {
             const int y = text.center().y();
@@ -235,14 +236,14 @@ void TimelineWidget::paintEvent(QPaintEvent*)
 
     const std::size_t marker = m_dragging ? m_dragMarker : document.marker();
     const int x = markerX(marker);
-    painter.setPen(QPen(theme::kGold, style::kStrokeBold));
+    painter.setPen(QPen(theme::palette().chrome.accent, style::kStrokeBold));
     painter.drawLine(x, kMargin - 4, x, kMargin + kChipHeight + 4);
     QPainterPath handle;
     handle.moveTo(x - 6, kMargin - 8);
     handle.lineTo(x + 6, kMargin - 8);
     handle.lineTo(x, kMargin - 2);
     handle.closeSubpath();
-    painter.fillPath(handle, theme::kGold);
+    painter.fillPath(handle, theme::palette().chrome.accent);
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event)

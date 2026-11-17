@@ -38,10 +38,10 @@ Handle(Graphic3d_AspectMarker3d) renderBadge(const QString& icon, const QColor& 
     {
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing);
-        QColor background = theme::kSlate;
+        QColor background = theme::palette().chrome.surface;
         background.setAlpha(kBackgroundAlpha);
         const QRectF box = QRectF(image.rect()).adjusted(ratio * 0.5, ratio * 0.5, -ratio * 0.5, -ratio * 0.5);
-        painter.setPen(QPen(selected ? theme::kGold : theme::kSlateEdge, ratio));
+        painter.setPen(QPen(selected ? theme::palette().chrome.accent : theme::palette().chrome.border, ratio));
         painter.setBrush(background);
         painter.drawRoundedRect(box, size * kCornerFraction, size * kCornerFraction);
         const int iconSize = static_cast<int>(std::lround(size * kIconFraction));

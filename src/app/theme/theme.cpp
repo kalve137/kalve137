@@ -74,20 +74,21 @@ void apply(QApplication& app)
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
     // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 
-    QPalette palette;
-    palette.setColor(QPalette::Window, kSlate);
-    palette.setColor(QPalette::WindowText, kTitaniumLight);
-    palette.setColor(QPalette::Base, kSlateDeep);
-    palette.setColor(QPalette::AlternateBase, kSlateLight);
-    palette.setColor(QPalette::Text, kTitaniumLight);
-    palette.setColor(QPalette::Button, kSlateLight);
-    palette.setColor(QPalette::ButtonText, kTitaniumLight);
-    palette.setColor(QPalette::ToolTipBase, kSlateDeep);
-    palette.setColor(QPalette::ToolTipText, kTitaniumLight);
-    palette.setColor(QPalette::Highlight, kGold);
-    palette.setColor(QPalette::HighlightedText, kSlateDeep);
-    palette.setColor(QPalette::Link, kGold);
-    app.setPalette(palette);
+    const ChromeColors& colors = palette().chrome;
+    QPalette qtPalette;
+    qtPalette.setColor(QPalette::Window, colors.surface);
+    qtPalette.setColor(QPalette::WindowText, colors.text);
+    qtPalette.setColor(QPalette::Base, colors.base);
+    qtPalette.setColor(QPalette::AlternateBase, colors.raised);
+    qtPalette.setColor(QPalette::Text, colors.text);
+    qtPalette.setColor(QPalette::Button, colors.raised);
+    qtPalette.setColor(QPalette::ButtonText, colors.text);
+    qtPalette.setColor(QPalette::ToolTipBase, colors.base);
+    qtPalette.setColor(QPalette::ToolTipText, colors.text);
+    qtPalette.setColor(QPalette::Highlight, colors.accent);
+    qtPalette.setColor(QPalette::HighlightedText, colors.onAccent);
+    qtPalette.setColor(QPalette::Link, colors.accent);
+    app.setPalette(qtPalette);
 
     const QString family = fonts::load().qt;
     QFont font = QApplication::font();
