@@ -20,6 +20,7 @@ add_executable(kalve137_tests
     geometry/measure_test.cpp
     integration/workflow_test.cpp
     log/log_test.cpp
+    pick/ray_scene_test.cpp
     platform/crash_test.cpp
     sketch/build_test.cpp
     sketch/dimension_test.cpp
@@ -37,6 +38,7 @@ target_link_libraries(kalve137_tests PRIVATE
     kalve137_core
     kalve137_geometry
     kalve137_log
+    kalve137_pick
     kalve137_platform
     kalve137_sketch
     kalve137_viewer

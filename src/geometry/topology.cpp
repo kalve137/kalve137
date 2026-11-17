@@ -4,30 +4,28 @@
 #include "geometry/topology.h"
 
 #include "geometry/modeling.h"
+#include "pick/ray_scene.h"
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Curve2d.hxx>
 #include <BRepAdaptor_Surface.hxx>
-#include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
-#include <BVH_BoxSet.hxx>
-#include <BVH_Tools.hxx>
-#include <BVH_Traverse.hxx>
-#include <Bnd_Box.hxx>
-#include <IntCurvesFace_Intersector.hxx>
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <NCollection_List.hxx>
+#include <Poly_Triangulation.hxx>
 #include <Precision.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Vertex.hxx>
@@ -36,12 +34,19 @@
 #include <gp_Cylinder.hxx>
 #include <gp_Lin.hxx>
 #include <gp_Pnt2d.hxx>
+#include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <utility>
 
 namespace kalve137::geometry {
@@ -52,7 +57,12 @@ constexpr double kTangentDegrees = 1.0;
 constexpr double kMatchTolerance = 1e-4;
 constexpr int kEdgeSamples = 5;
 constexpr int kFaceSteps = 4;
+constexpr int kPointSteps = 8;
 constexpr double kViewClearance = 1e-3;
+constexpr double kStepPerClearance = 0.01;
+constexpr double kMarginPerDeflection = 2.0;
+constexpr double kMeshDeflection = 0.001;
+constexpr double kMeshAngle = 0.5;
 
 std::optional<gp_Vec> tangentAt(const TopoDS_Edge& edge, const TopoDS_Vertex& vertex)
 {
@@ -122,38 +132,71 @@ std::optional<TopoDS_Edge> sourceIn(Op& op, const std::vector<TopoDS_Edge>& edge
     return std::nullopt;
 }
 
-using FaceBoxes = BVH_BoxSet<double, 3, int>;
+bool inTriangle(const gp_XY& p, const gp_XY& a, const gp_XY& b, const gp_XY& c)
+{
+    const double ab = (b - a) ^ (p - a);
+    const double bc = (c - b) ^ (p - b);
+    const double ca = (a - c) ^ (p - c);
+    return (ab >= 0.0 && bc >= 0.0 && ca >= 0.0) || (ab <= 0.0 && bc <= 0.0 && ca <= 0.0);
+}
 
-class RayHit : public BVH_Traverse<double, 3, FaceBoxes, bool> {
-public:
-    RayHit(const gp_Lin& ray, std::function<bool(int)> hits)
-        : m_origin(ray.Location().X(), ray.Location().Y(), ray.Location().Z()),
-          m_direction(ray.Direction().X(), ray.Direction().Y(), ray.Direction().Z()), m_hits(std::move(hits))
-    {}
-
-    bool RejectNode(const BVH_Vec3d& low, const BVH_Vec3d& high, bool&) const override
-    {
-        double enter = 0.0;
-        double leave = 0.0;
-        return !BVH_Tools<double, 3>::RayBoxIntersection(m_origin, m_direction, low, high, enter, leave);
+std::optional<std::vector<gp_Pnt>> meshSamples(const TopoDS_Face& face, double uMin, double uMax, double vMin,
+                                               double vMax)
+{
+    TopLoc_Location location;
+    const Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
+    if (triangulation.IsNull() || !triangulation->HasUVNodes() || uMax <= uMin || vMax <= vMin) {
+        return std::nullopt;
     }
-
-    bool Accept(const int index, const bool&) override
-    {
-        m_found = m_hits(myBVHSet->Element(index));
-        return m_found;
+    const double du = (uMax - uMin) / kPointSteps;
+    const double dv = (vMax - vMin) / kPointSteps;
+    std::array<std::array<bool, kPointSteps>, kPointSteps> inside{};
+    for (int t = 1; t <= triangulation->NbTriangles(); ++t) {
+        int a = 0;
+        int b = 0;
+        int c = 0;
+        triangulation->Triangle(t).Get(a, b, c);
+        const gp_XY pa = triangulation->UVNode(a).XY();
+        const gp_XY pb = triangulation->UVNode(b).XY();
+        const gp_XY pc = triangulation->UVNode(c).XY();
+        const int iFirst = std::max(1, static_cast<int>(std::ceil((std::min({pa.X(), pb.X(), pc.X()}) - uMin) / du)));
+        const int iLast =
+            std::min(kPointSteps - 1, static_cast<int>(std::floor((std::max({pa.X(), pb.X(), pc.X()}) - uMin) / du)));
+        const int jFirst = std::max(1, static_cast<int>(std::ceil((std::min({pa.Y(), pb.Y(), pc.Y()}) - vMin) / dv)));
+        const int jLast =
+            std::min(kPointSteps - 1, static_cast<int>(std::floor((std::max({pa.Y(), pb.Y(), pc.Y()}) - vMin) / dv)));
+        for (int i = iFirst; i <= iLast; ++i) {
+            for (int j = jFirst; j <= jLast; ++j) {
+                if (!inside[i][j] && inTriangle(gp_XY(uMin + du * i, vMin + dv * j), pa, pb, pc)) {
+                    inside[i][j] = true;
+                }
+            }
+        }
     }
-
-    bool Stop() const override { return m_found; }
-
-    bool found() const { return m_found; }
-
-private:
-    BVH_Vec3d m_origin;
-    BVH_Vec3d m_direction;
-    std::function<bool(int)> m_hits;
-    bool m_found = false;
-};
+    const BRepAdaptor_Surface surface(face);
+    const auto at = [&](int i, int j) { return surface.Value(uMin + du * i, vMin + dv * j); };
+    std::optional<gp_Pnt> center;
+    int bestOffset = std::numeric_limits<int>::max();
+    for (int i = 1; i < kPointSteps; ++i) {
+        for (int j = 1; j < kPointSteps; ++j) {
+            const int offset = std::abs(i - kPointSteps / 2) + std::abs(j - kPointSteps / 2);
+            if (inside[i][j] && offset < bestOffset) {
+                center = at(i, j);
+                bestOffset = offset;
+            }
+        }
+    }
+    std::vector<gp_Pnt> points{center.value_or(surface.Value((uMin + uMax) / 2.0, (vMin + vMax) / 2.0))};
+    constexpr int kStride = kPointSteps / kFaceSteps;
+    for (int i = kStride; i < kPointSteps; i += kStride) {
+        for (int j = kStride; j < kPointSteps; j += kStride) {
+            if (inside[i][j]) {
+                points.push_back(at(i, j));
+            }
+        }
+    }
+    return points;
+}
 
 std::vector<gp_Pnt> faceSamples(const TopoDS_Face& face)
 {
@@ -163,6 +206,9 @@ std::vector<gp_Pnt> faceSamples(const TopoDS_Face& face)
     double vMin = 0.0;
     double vMax = 0.0;
     BRepTools::UVBounds(face, uMin, uMax, vMin, vMax);
+    if (std::optional<std::vector<gp_Pnt>> points = meshSamples(face, uMin, uMax, vMin, vMax)) {
+        return *std::move(points);
+    }
     std::vector<gp_Pnt> points{facePoint(face)};
     for (int i = 1; i < kFaceSteps; ++i) {
         for (int j = 1; j < kFaceSteps; ++j) {
@@ -368,54 +414,61 @@ std::vector<gp_Pnt> samplePoints(const TopoDS_Shape& shape)
 }
 
 struct ViewBlockers::Faces {
-    std::vector<TopoDS_Face> faces;
-    std::vector<std::unique_ptr<IntCurvesFace_Intersector>> intersectors;
-    opencascade::handle<FaceBoxes> boxes = new FaceBoxes();
+    std::unique_ptr<pick::RayScene> scene;
+    std::vector<double> margins;
 };
 
 ViewBlockers::ViewBlockers(const std::vector<TopoDS_Shape>& shapes) : m_faces(std::make_unique<Faces>())
 {
+    pick::Mesh mesh;
     for (const TopoDS_Shape& shape : shapes) {
+        if (!BRepTools::Triangulation(shape, Precision::Infinite())) {
+            BRepMesh_IncrementalMesh(shape, kMeshDeflection, true, kMeshAngle);
+        }
         for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) {
-            Bnd_Box box;
-            BRepBndLib::Add(it.Current(), box);
-            if (box.IsVoid()) {
+            TopLoc_Location location;
+            const Handle(Poly_Triangulation) triangulation =
+                BRep_Tool::Triangulation(TopoDS::Face(it.Current()), location);
+            if (triangulation.IsNull()) {
                 continue;
             }
-            box.Enlarge(Precision::Confusion());
-            const gp_Pnt low = box.CornerMin();
-            const gp_Pnt high = box.CornerMax();
-            m_faces->boxes->Add(
-                static_cast<int>(m_faces->faces.size()),
-                BVH_Box<double, 3>(BVH_Vec3d(low.X(), low.Y(), low.Z()), BVH_Vec3d(high.X(), high.Y(), high.Z())));
-            m_faces->faces.push_back(TopoDS::Face(it.Current()));
+            const gp_Trsf placement = location.Transformation();
+            const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
+            for (int i = 1; i <= triangulation->NbNodes(); ++i) {
+                const gp_Pnt node = triangulation->Node(i).Transformed(placement);
+                mesh.vertices.push_back({node.X(), node.Y(), node.Z()});
+            }
+            const auto face = static_cast<std::uint32_t>(m_faces->margins.size());
+            for (int i = 1; i <= triangulation->NbTriangles(); ++i) {
+                int a = 0;
+                int b = 0;
+                int c = 0;
+                triangulation->Triangle(i).Get(a, b, c);
+                mesh.triangles.push_back({base + static_cast<std::uint32_t>(a - 1),
+                                          base + static_cast<std::uint32_t>(b - 1),
+                                          base + static_cast<std::uint32_t>(c - 1)});
+                mesh.faces.push_back(face);
+            }
+            m_faces->margins.push_back(kViewClearance + kMarginPerDeflection * triangulation->Deflection());
         }
     }
-    m_faces->intersectors.resize(m_faces->faces.size());
-    m_faces->boxes->Build();
+    m_faces->scene = std::make_unique<pick::RayScene>(mesh);
 }
 
 ViewBlockers::~ViewBlockers() = default;
 
 bool ViewBlockers::blocks(const gp_Pnt& point, const gp_Dir& towardViewer) const
 {
-    const gp_Lin ray(point, towardViewer);
-    RayHit hit(ray, [&](int index) {
-        try {
-            std::unique_ptr<IntCurvesFace_Intersector>& intersector = m_faces->intersectors[index];
-            if (!intersector) {
-                intersector =
-                    std::make_unique<IntCurvesFace_Intersector>(m_faces->faces[index], Precision::Confusion());
-            }
-            intersector->Perform(ray, kViewClearance, Precision::Infinite());
-            return intersector->IsDone() && intersector->NbPnt() > 0;
-        } catch (const Standard_Failure&) {
-            return false;
+    const pick::Point origin{point.X(), point.Y(), point.Z()};
+    const pick::Point direction{towardViewer.X(), towardViewer.Y(), towardViewer.Z()};
+    double from = 0.0;
+    while (const std::optional<pick::Hit> hit = m_faces->scene->first(origin, direction, from)) {
+        if (hit->distance > m_faces->margins[hit->face]) {
+            return true;
         }
-    });
-    hit.SetBVHSet(m_faces->boxes.get());
-    hit.Select();
-    return hit.found();
+        from = std::max(hit->distance, from) + kViewClearance * kStepPerClearance;
+    }
+    return false;
 }
 
 } // namespace kalve137::geometry

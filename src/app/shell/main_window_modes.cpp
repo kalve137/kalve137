@@ -24,6 +24,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace kalve137::app {
 
@@ -50,22 +51,22 @@ viewer::GridExtent previewGridExtent(const core::Model& model)
 
 QString MainWindow::idleSelectionSummary() const
 {
-    int faces = 0;
-    int edges = 0;
-    double area = 0.0;
-    double length = 0.0;
+    std::vector<TopoDS_Shape> faceShapes;
+    std::vector<TopoDS_Shape> edgeShapes;
     for (const Pick& pick : m_scene->selected()) {
         if (pick.shape.IsNull()) {
             continue;
         }
         if (pick.kind == Pick::Kind::Face) {
-            ++faces;
-            area += geometry::area(pick.shape);
+            faceShapes.push_back(pick.shape);
         } else if (pick.kind == Pick::Kind::Edge) {
-            ++edges;
-            length += geometry::length(pick.shape);
+            edgeShapes.push_back(pick.shape);
         }
     }
+    const auto faces = static_cast<int>(faceShapes.size());
+    const auto edges = static_cast<int>(edgeShapes.size());
+    const double area = geometry::totalArea(faceShapes);
+    const double length = geometry::totalLength(edgeShapes);
     QStringList parts;
     if (faces > 0) {
         parts

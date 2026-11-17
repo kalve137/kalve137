@@ -11,14 +11,31 @@
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <GProp_GProps.hxx>
 #include <NCollection_IndexedMap.hxx>
+#include <OSD_Parallel.hxx>
 #include <TopExp.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Dir.hxx>
 
+#include <cstddef>
+#include <numeric>
 #include <stdexcept>
 
 namespace kalve137::geometry {
+
+namespace {
+
+template <typename Measure>
+double sumOver(const std::vector<TopoDS_Shape>& shapes, Measure measure)
+{
+    std::vector<double> values(shapes.size(), 0.0);
+    OSD_Parallel::For(0, static_cast<int>(shapes.size()), [&](int i) {
+        values[static_cast<std::size_t>(i)] = measure(shapes[static_cast<std::size_t>(i)]);
+    });
+    return std::accumulate(values.begin(), values.end(), 0.0);
+}
+
+} // namespace
 
 TopoDS_Shape makeBox(double dx, double dy, double dz)
 {
@@ -73,6 +90,16 @@ double length(const TopoDS_Shape& shape)
         total += props.Mass();
     }
     return total;
+}
+
+double totalArea(const std::vector<TopoDS_Shape>& shapes)
+{
+    return sumOver(shapes, [](const TopoDS_Shape& shape) { return area(shape); });
+}
+
+double totalLength(const std::vector<TopoDS_Shape>& shapes)
+{
+    return sumOver(shapes, [](const TopoDS_Shape& shape) { return length(shape); });
 }
 
 } // namespace kalve137::geometry

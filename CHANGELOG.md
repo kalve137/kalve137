@@ -21,6 +21,8 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - About shows version and license, with graphics details in Copy Details
 - Close prompts say Don't Save instead of Discard
 - Repeat runs last command available in current mode
+- Window and crossing selection over large imports takes about a second instead of up to several minutes
+- Large STEP imports show up sooner since faces are meshed in parallel
 
 ### Fixed
 
