@@ -52,6 +52,7 @@ BrowserPanel::BrowserPanel(DesignSession& session, QWidget* parent) : QTreeWidge
     connect(&session, &DesignSession::changed, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
     connect(&session, &DesignSession::fileStateChanged, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
     connect(&session, &DesignSession::visibilityChanged, this, &BrowserPanel::syncVisibility);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &BrowserPanel::rebuild);
     rebuild();
 }
 
@@ -62,10 +63,10 @@ void BrowserPanel::rebuild()
     const core::Document& document = m_session.document();
     const core::Model& model = m_session.model();
 
-    const QIcon folder = icons::fixed("folder", theme::palette().chrome.textDim);
+    const QIcon folder = icons::fixed("folder", &theme::ChromeColors::textDim);
     auto* root = new QTreeWidgetItem(this, {m_session.displayName()});
     root->setData(0, kKindRole, static_cast<int>(ItemKind::Group));
-    root->setIcon(0, icons::fixed("body", theme::palette().chrome.accent));
+    root->setIcon(0, icons::fixed("body", &theme::ChromeColors::accent));
 
     const auto addCheckable = [&](QTreeWidgetItem* parent, const QString& text, ItemKind kind, int id, bool visible) {
         auto* item = new QTreeWidgetItem(parent, {text});
@@ -79,10 +80,10 @@ void BrowserPanel::rebuild()
             item->setIcon(0, icons::fixed("body"));
             break;
         case ItemKind::Sketch:
-            item->setIcon(0, icons::fixed("create_sketch", theme::palette().viewport.sketchFree));
+            item->setIcon(0, icons::fixed("create_sketch", &theme::ViewportColors::sketchFree));
             break;
         case ItemKind::Component:
-            item->setIcon(0, icons::fixed("body", theme::palette().chrome.accent));
+            item->setIcon(0, icons::fixed("body", &theme::ChromeColors::accent));
             break;
         case ItemKind::Construction:
             break;
@@ -109,7 +110,7 @@ void BrowserPanel::rebuild()
         }
         QTreeWidgetItem* item = addCheckable(construction, QString::fromStdString(feature.name), ItemKind::Construction,
                                              feature.id, m_session.isVisible(feature.id));
-        item->setIcon(0, icons::fixed(icons::featureIconName(feature.data), theme::palette().chrome.textDim));
+        item->setIcon(0, icons::fixed(icons::featureIconName(feature.data), &theme::ChromeColors::textDim));
     }
 
     auto* bodies = new QTreeWidgetItem(root, {tr("Bodies")});

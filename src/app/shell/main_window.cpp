@@ -83,28 +83,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     m_autosave = new Autosave(*m_session, this);
 
     m_view = new viewer::OcctViewWidget(this);
-    m_view->setBackgroundColor(theme::palette().viewport.canvas);
-    m_view->setGridStyle({
-        .background = OcctQtTools::qtColorToOcct(theme::palette().viewport.canvas),
-        .minor = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridMinor),
-        .major = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridMajor),
-        .axisX = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisX),
-        .axisY = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisY),
-        .axisZ = OcctQtTools::qtColorToOcct(theme::palette().viewport.axisZ),
-        .label = OcctQtTools::qtColorToOcct(theme::palette().viewport.gridLabel),
-        .labelFont = fonts::families().occtRegular.toStdString(),
-    });
-    m_view->setHighlightColors(theme::palette().viewport.hover, theme::palette().chrome.accent);
-    m_view->setViewCubeStyle({
-        .face = theme::palette().chrome.raised,
-        .edge = theme::palette().chrome.border,
-        .label = theme::palette().chrome.text,
-        .hover = theme::palette().chrome.accent,
-        .axisX = theme::palette().viewport.axisX,
-        .axisY = theme::palette().viewport.axisY,
-        .axisZ = theme::palette().viewport.axisZ,
-        .labelFont = fonts::families().occtMedium,
-    });
+    applyViewportTheme();
     setCentralWidget(m_view);
 
     m_scene = std::make_unique<Scene>(m_view);
@@ -182,6 +161,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     connect(m_featurePanel, &FeaturePanel::message, this,
             [this](const QString& text) { statusBar()->showMessage(text, kMessageTimeoutMs); });
     connect(m_featurePanel, &FeaturePanel::selectionSummary, m_selectionStatus, &QLabel::setText);
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this] {
+        applyViewportTheme();
+        if (m_view->isReady()) {
+            m_scene->restyle();
+        }
+    });
 
     m_preferences = Preferences::load();
     applyPreferences();
@@ -280,7 +265,7 @@ void MainWindow::createActions()
     });
 
     m_finishSketch =
-        new QAction(icons::tinted("finish_sketch", theme::palette().chrome.onAccent), tr("Finish Sketch"), this);
+        new QAction(icons::tinted("finish_sketch", &theme::ChromeColors::onAccentFill), tr("Finish Sketch"), this);
     connect(m_finishSketch, &QAction::triggered, this, &MainWindow::finishSketch);
 
     m_construction = new QAction(icons::tinted("construction"), tr("Construction"), this);
@@ -757,6 +742,7 @@ void MainWindow::showPreferences()
 {
     PreferencesDialog dialog(m_preferences, this);
     if (dialog.exec() != QDialog::Accepted) {
+        theme::setScheme(m_preferences.colorScheme);
         return;
     }
     m_preferences = dialog.preferences();
@@ -786,8 +772,37 @@ void MainWindow::lookAtSketch()
     }
 }
 
+void MainWindow::applyViewportTheme()
+{
+    const theme::Palette& colors = theme::palette();
+    const auto occt = [](const QColor& color) { return OcctQtTools::qtColorToOcct(color); };
+    m_view->setBackgroundColor(colors.viewport.canvas);
+    m_view->setGridStyle({
+        .background = occt(colors.viewport.canvas),
+        .minor = occt(colors.viewport.gridMinor),
+        .major = occt(colors.viewport.gridMajor),
+        .axisX = occt(colors.viewport.axisX),
+        .axisY = occt(colors.viewport.axisY),
+        .axisZ = occt(colors.viewport.axisZ),
+        .label = occt(colors.viewport.gridLabel),
+        .labelFont = fonts::families().occtRegular.toStdString(),
+    });
+    m_view->setHighlightColors(colors.viewport.hover, colors.chrome.accent);
+    m_view->setViewCubeStyle({
+        .face = colors.chrome.raised,
+        .edge = colors.viewport.cubeEdge,
+        .label = colors.viewport.cubeLabel,
+        .hover = colors.chrome.accentFill,
+        .axisX = colors.viewport.axisX,
+        .axisY = colors.viewport.axisY,
+        .axisZ = colors.viewport.axisZ,
+        .labelFont = fonts::families().occtMedium,
+    });
+}
+
 void MainWindow::applyPreferences()
 {
+    theme::setScheme(m_preferences.colorScheme);
     diagnostics::applyLevels(m_preferences.logLevels);
     m_view->setNavigation(m_preferences.navigation);
     const bool projectionChanged = m_view->isPerspective() != m_preferences.perspective;

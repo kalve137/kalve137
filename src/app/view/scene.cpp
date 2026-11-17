@@ -329,6 +329,12 @@ void Scene::setVisualStyle(VisualStyle style)
     rebuild();
 }
 
+void Scene::restyle()
+{
+    dropBodies();
+    rebuild();
+}
+
 void Scene::setHighlightedProfiles(std::set<std::pair<core::FeatureId, std::size_t>> profiles)
 {
     m_highlightedProfiles = std::move(profiles);

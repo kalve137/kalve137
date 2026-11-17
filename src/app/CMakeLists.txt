@@ -212,12 +212,18 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/point.svg
         ${asset_dir}/icons/polygon.svg
         ${asset_dir}/icons/press_pull.svg
-        ${asset_dir}/icons/qss/check.svg
-        ${asset_dir}/icons/qss/check_disabled.svg
-        ${asset_dir}/icons/qss/chevron_down.svg
-        ${asset_dir}/icons/qss/chevron_up.svg
-        ${asset_dir}/icons/qss/partial.svg
-        ${asset_dir}/icons/qss/partial_disabled.svg
+        ${asset_dir}/icons/qss/dark/check.svg
+        ${asset_dir}/icons/qss/dark/check_disabled.svg
+        ${asset_dir}/icons/qss/dark/chevron_down.svg
+        ${asset_dir}/icons/qss/dark/chevron_up.svg
+        ${asset_dir}/icons/qss/dark/partial.svg
+        ${asset_dir}/icons/qss/dark/partial_disabled.svg
+        ${asset_dir}/icons/qss/light/check.svg
+        ${asset_dir}/icons/qss/light/check_disabled.svg
+        ${asset_dir}/icons/qss/light/chevron_down.svg
+        ${asset_dir}/icons/qss/light/chevron_up.svg
+        ${asset_dir}/icons/qss/light/partial.svg
+        ${asset_dir}/icons/qss/light/partial_disabled.svg
         ${asset_dir}/icons/rectangle.svg
         ${asset_dir}/icons/redo.svg
         ${asset_dir}/icons/revolve.svg

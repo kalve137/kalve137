@@ -294,7 +294,9 @@ void installHarness()
 
 void resetSettings()
 {
-    QSettings().clear();
+    QSettings settings;
+    settings.clear();
+    settings.setValue("preferences/appearance/theme", "dark");
     for (const QStandardPaths::StandardLocation location :
          {QStandardPaths::AppLocalDataLocation, QStandardPaths::AppDataLocation}) {
         if (const QString folder = QStandardPaths::writableLocation(location); !folder.isEmpty()) {

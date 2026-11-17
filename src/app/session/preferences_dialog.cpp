@@ -55,6 +55,12 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_stack = new QStackedWidget(this);
 
     QFormLayout* general = addPage(tr("General"));
+    m_theme = addCombo(general, tr("Theme"), tr("appearance light dark mode colors system"));
+    for (const theme::Scheme scheme : {theme::Scheme::System, theme::Scheme::Light, theme::Scheme::Dark}) {
+        m_theme->addItem(displayName(scheme), static_cast<int>(scheme));
+    }
+    connect(m_theme, &QComboBox::currentIndexChanged, this,
+            [this] { theme::setScheme(selected<theme::Scheme>(m_theme)); });
     m_reopenLastProject = addCheck(general, tr("Reopen the last project on start"), tr("startup recent"));
 
     QFormLayout* navigation = addPage(tr("Navigation"));
@@ -141,6 +147,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
 Preferences PreferencesDialog::preferences() const
 {
     Preferences p = m_loaded;
+    p.colorScheme = selected<theme::Scheme>(m_theme);
     p.reopenLastProject = m_reopenLastProject->isChecked();
     p.navigation.preset = selected<NavigationPreset>(m_preset);
     p.navigation.reverseZoom = m_reverseZoom->isChecked();
@@ -167,6 +174,7 @@ Preferences PreferencesDialog::preferences() const
 void PreferencesDialog::load(const Preferences& p)
 {
     m_loaded = p;
+    select(m_theme, p.colorScheme);
     m_reopenLastProject->setChecked(p.reopenLastProject);
     select(m_preset, p.navigation.preset);
     m_reverseZoom->setChecked(p.navigation.reverseZoom);

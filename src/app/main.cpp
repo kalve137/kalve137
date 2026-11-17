@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "app/diagnostics/diagnostics.h"
+#include "app/session/preferences.h"
 #include "app/shell/batch_import.h"
 #include "app/shell/main_window.h"
 #include "app/shell/smoke.h"
@@ -110,7 +111,7 @@ int main(int argc, char** argv)
     kalve137::app::diagnostics::startLogging();
     kalve137::app::diagnostics::installCrashHandler();
     QApplication::setWindowIcon(appIcon());
-    kalve137::app::theme::apply(app);
+    kalve137::app::theme::apply(app, kalve137::app::Preferences::load().colorScheme);
 
     int result = 0;
     if (smoke) {

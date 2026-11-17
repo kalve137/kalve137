@@ -74,9 +74,9 @@ Rendered render(const QString& text, const QColor& color, bool selected, double 
 DimensionLabel makeDimensionLabel(const gp_Pnt& at, const QString& text, const QColor& color, bool selected,
                                   double textPixels, double devicePixelRatio)
 {
-    using Key = std::tuple<QString, QRgb, bool, double, double>;
+    using Key = std::tuple<QString, QRgb, bool, double, double, bool>;
     static std::map<Key, Rendered> cache;
-    const Key key{text, color.rgba(), selected, textPixels, devicePixelRatio};
+    const Key key{text, color.rgba(), selected, textPixels, devicePixelRatio, theme::isDark()};
     auto it = cache.find(key);
     if (it == cache.end()) {
         it = cache.emplace(key, render(text, color, selected, textPixels, devicePixelRatio)).first;

@@ -61,6 +61,11 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
             apply(value);
         }
     });
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this] {
+        if (isActive()) {
+            redraw();
+        }
+    });
     connect(m_valueEditor, &QLineEdit::textEdited, this, &SketchEditor::previewValue);
     connect(m_valueEditor, &QLineEdit::editingFinished, this, [this] {
         if (!m_valueEditor->hasFocus()) {
