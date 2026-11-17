@@ -21,6 +21,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -130,7 +131,11 @@ private:
     void showConstructionPlanes();
     void showConstructionAxes();
     void showConstructionPoints();
+    using PickedPoints = std::unordered_map<const SelectMgr_EntityOwner*, gp_Pnt>;
+
     std::optional<Pick> pickOf(const Handle(SelectMgr_EntityOwner)& owner) const;
+    std::optional<Pick> pickWithPoint(const Handle(SelectMgr_EntityOwner)& owner, const PickedPoints& points) const;
+    PickedPoints pickedPoints() const;
     void display(const Handle(AIS_InteractiveObject)& object, int selectionMode, std::optional<Pick> pick,
                  int displayMode = AIS_Shaded);
 

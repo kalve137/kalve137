@@ -20,10 +20,12 @@
 #include <AIS_Point.hxx>
 #include <AIS_Shape.hxx>
 #include <Geom_CartesianPoint.hxx>
+#include <OSD_Parallel.hxx>
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Prs3d_PointAspect.hxx>
 #include <Prs3d_ShadingAspect.hxx>
+#include <Standard_Failure.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <StdSelect_ViewerSelector3d.hxx>
 #include <TopAbs_ShapeEnum.hxx>
@@ -33,6 +35,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <initializer_list>
 #include <utility>
 #include <variant>
@@ -256,16 +259,27 @@ void Scene::updateBoxSelection()
             }
         }
         const geometry::ViewBlockers blockers(shown);
-        std::vector<bool> keep;
-        keep.reserve(owners.size());
-        for (const Handle(SelectMgr_EntityOwner)& owner : owners) {
-            const std::optional<Pick> pick = pickOf(owner);
-            keep.push_back(pick && !pick->shape.IsNull() &&
-                           (pick->kind == Pick::Kind::Face || pick->kind == Pick::Kind::Edge ||
-                            pick->kind == Pick::Kind::Vertex) &&
-                           isVisible(pick->shape, blockers));
+        std::vector<TopoDS_Shape> shapes(owners.size());
+        for (std::size_t i = 0; i < owners.size(); ++i) {
+            const std::optional<Pick> pick = pickOf(owners[i]);
+            if (pick && (pick->kind == Pick::Kind::Face || pick->kind == Pick::Kind::Edge ||
+                         pick->kind == Pick::Kind::Vertex)) {
+                shapes[i] = pick->shape;
+            }
         }
-        return keep;
+        std::vector<char> visible(shapes.size(), 0);
+        OSD_Parallel::For(0, static_cast<int>(shapes.size()), [&](int i) {
+            const TopoDS_Shape& shape = shapes[static_cast<std::size_t>(i)];
+            if (shape.IsNull()) {
+                return;
+            }
+            try {
+                visible[static_cast<std::size_t>(i)] = isVisible(shape, blockers) ? 1 : 0;
+            } catch (const Standard_Failure&) {
+                visible[static_cast<std::size_t>(i)] = 1;
+            }
+        });
+        return std::vector<bool>(visible.begin(), visible.end());
     });
 }
 
@@ -382,16 +396,28 @@ std::optional<Pick> Scene::pickOf(const Handle(SelectMgr_EntityOwner)& owner) co
             pick.kind = Pick::Kind::Vertex;
         }
     }
-    if (!pick.point) {
-        const Handle(StdSelect_ViewerSelector3d)& selector = m_view->aisContext()->MainSelector();
-        for (int i = 1; i <= selector->NbPicked(); ++i) {
-            if (selector->Picked(i) == owner) {
-                pick.point = selector->PickedPoint(i);
-                break;
-            }
+    return pick;
+}
+
+std::optional<Pick> Scene::pickWithPoint(const Handle(SelectMgr_EntityOwner)& owner, const PickedPoints& points) const
+{
+    std::optional<Pick> pick = pickOf(owner);
+    if (pick && !pick->point) {
+        if (auto it = points.find(owner.get()); it != points.end()) {
+            pick->point = it->second;
         }
     }
     return pick;
+}
+
+Scene::PickedPoints Scene::pickedPoints() const
+{
+    PickedPoints points;
+    const Handle(StdSelect_ViewerSelector3d)& selector = m_view->aisContext()->MainSelector();
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        points.try_emplace(selector->Picked(i).get(), selector->PickedPoint(i));
+    }
+    return points;
 }
 
 std::vector<Pick> Scene::takePicks()
@@ -407,8 +433,9 @@ std::vector<Pick> Scene::selected() const
 {
     std::vector<Pick> picks;
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
+    const PickedPoints points = pickedPoints();
     for (context->InitSelected(); context->MoreSelected(); context->NextSelected()) {
-        if (std::optional<Pick> pick = pickOf(context->SelectedOwner())) {
+        if (std::optional<Pick> pick = pickWithPoint(context->SelectedOwner(), points)) {
             picks.push_back(std::move(*pick));
         }
     }
@@ -438,7 +465,7 @@ std::optional<Pick> Scene::hovered() const
     if (!context->HasDetected()) {
         return std::nullopt;
     }
-    return pickOf(context->DetectedOwner());
+    return pickWithPoint(context->DetectedOwner(), pickedPoints());
 }
 
 void Scene::display(const Handle(AIS_InteractiveObject)& object, int selectionMode, std::optional<Pick> pick,

@@ -22,6 +22,7 @@
 #include <AIS_AnimationCamera.hxx>
 #include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <Bnd_Box.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <Graphic3d_TransformPers.hxx>
@@ -107,6 +108,7 @@ OcctViewWidget::OcctViewWidget(QWidget* parent) : QOpenGLWidget(parent)
     m_viewer->AddLight(keyLight);
     m_viewer->SetLightOn();
 
+    BRepMesh_IncrementalMesh::SetParallelDefault(true);
     m_context = new AIS_InteractiveContext(m_viewer);
     m_grid = new GridObject(GridObject::Part::Lines);
     m_gridWash = new GridObject(GridObject::Part::Wash);

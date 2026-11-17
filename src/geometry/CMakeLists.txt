@@ -25,6 +25,7 @@ target_link_libraries(kalve137_geometry
         TKernel
     PRIVATE
         kalve137_log
+        kalve137_pick
         TKBO
         TKDESTEP
         TKDESTL

@@ -53,7 +53,6 @@ Zip carries its own Qt, OpenCascade and Visual C++ runtime. To check an unpacked
 - Release binaries are not code signed yet. On Windows 11 with Smart App Control on, Windows can refuse to load them and show a Bad Image dialog with status `0xc0e90002`, so Kalve 137 does not start. It depends on Microsoft's cloud verdict on each file, which is most likely to block a release in its first days.
 - Extrude To Object reaches planar faces and planes parallel to the sketch.
 - An edge listed in two fillet sets takes the first set's radius.
-- Window and crossing selection over a large import can take several seconds.
 - Shell cannot open a face that runs smoothly into a round. That is an OpenCascade limit and the error message names a workaround.
 - `.k137` format may still change before 1.0. Older files keep loading.
 
