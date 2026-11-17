@@ -65,6 +65,7 @@ try {
         'bin\notices\OpenCASCADE.txt'
         'bin\notices\PlaneGCS.txt'
         'bin\notices\occt-qt-tools.txt'
+        'bin\notices\tinybvh.txt'
         'bin\notices\Roboto.txt'
         'bin\notices\Boost.txt'
         'bin\notices\Eigen.txt'
