@@ -188,24 +188,23 @@ TEST_F(WorkflowTest, FinishingASketchReturnsToThePreviousView)
     expectSameView(before, viewMarks(*ui));
 }
 
-TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
+void zoomOnGridLine(UiDriver& ui)
 {
-    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
-    ASSERT_EQ(ui->state()["sketch"], 0);
-    ui->settle();
+    ui.settle();
     for (int i = 0; i < kZoomSteps; ++i) {
-        ui->wheel(ui->at(gp_Pnt(45, 20, 0)), 2);
+        ui.wheel(ui.at(gp_Pnt(45, 20, 0)), 2);
     }
-    ui->settle();
-    ui->save("zoomed on a grid line");
+    ui.settle();
+}
 
-    const QImage frame = ui->view().grabFramebuffer();
-    const qreal ratio = ui->view().devicePixelRatioF();
-    const QColor line = app::theme::palette().viewport.sketchFree;
+void expectSolidAlongGridLine(UiDriver& ui, const QColor& line)
+{
+    const QImage frame = ui.view().grabFramebuffer();
+    const qreal ratio = ui.view().devicePixelRatioF();
     int sampled = 0;
     int solid = 0;
     for (int i = 0; i <= kLineSamples; ++i) {
-        const QPointF at = ui->at(gp_Pnt(30.0 + 30.0 * i / kLineSamples, 20, 0)) * ratio;
+        const QPointF at = ui.at(gp_Pnt(30.0 + 30.0 * i / kLineSamples, 20, 0)) * ratio;
         const QPoint pixel = at.toPoint();
         if (!frame.rect().contains(pixel)) {
             continue;
@@ -220,7 +219,32 @@ TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
         solid += best <= kLineTolerance ? 1 : 0;
     }
     ASSERT_GT(sampled, kLineSamples / 2);
-    EXPECT_GE(solid, sampled * 9 / 10) << solid << " of " << sampled << " samples show sketch line";
+    EXPECT_GE(solid, sampled * 9 / 10) << solid << " of " << sampled << " samples show the line";
+}
+
+TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
+{
+    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
+    ASSERT_EQ(ui->state()["sketch"], 0);
+    zoomOnGridLine(*ui);
+    ui->save("zoomed on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().viewport.sketchFree);
+}
+
+TEST_F(WorkflowTest, BodyEdgesAndTheirHighlightStaySolidOnTheGrid)
+{
+    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
+    extrude(*ui, "10");
+    zoomOnGridLine(*ui);
+    ui->save("body edge on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().viewport.bodyEdge);
+
+    ui->click(gp_Pnt(45, 20, 0));
+    ASSERT_TRUE(ui->selectionText().startsWith("1 Edge")) << ui->selectionText().toStdString();
+    ui->move(QPointF(20, 20));
+    ui->settle();
+    ui->save("selected edge on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().chrome.accent);
 }
 
 TEST_F(WorkflowTest, WithoutLookAtTheViewStaysPutThroughASketch)

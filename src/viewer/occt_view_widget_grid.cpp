@@ -4,6 +4,9 @@
 #include "viewer/occt_view_widget.h"
 
 #include <Graphic3d_Camera.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 #include <cmath>
 
@@ -13,6 +16,7 @@ namespace {
 
 constexpr double kMinGridCellPixels = 12.0;
 constexpr double kGridRadiusFactor = 2.5;
+constexpr double kGridDepthPixels = 1.0;
 
 } // namespace
 
@@ -93,6 +97,13 @@ void OcctViewWidget::updateGrid(bool force)
         return;
     }
     const double worldPerLogicalPixel = worldPerPixel();
+    const gp_Dir normal = m_grid->plane().Direction();
+    const double away = normal.Dot(m_view->Camera()->Direction()) < 0.0 ? -1.0 : 1.0;
+    gp_Trsf behind;
+    behind.SetTranslation(gp_Vec(normal) * (away * kGridDepthPixels * worldPerLogicalPixel));
+    if (!behind.TranslationPart().IsEqual(m_grid->LocalTransformation().TranslationPart(), 0.0)) {
+        m_context->SetLocation(m_grid, behind);
+    }
     const double step = viewer::gridStep(m_gridAdaptive, m_gridSpacing, worldPerLogicalPixel * kMinGridCellPixels);
     const double viewRadius = 0.5 * std::hypot(width(), height()) * worldPerLogicalPixel * kGridRadiusFactor;
     const GridLayout wanted = layoutGrid(m_grid->plane(), step, m_view->Camera()->Center(), viewRadius, m_gridExtent);
