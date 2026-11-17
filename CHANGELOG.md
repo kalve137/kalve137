@@ -23,6 +23,8 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Repeat runs last command available in current mode
 - Window and crossing selection over large imports takes about a second instead of up to several minutes
 - Large STEP imports show up sooner since faces are meshed in parallel
+- View cube is a shaded rhombicuboctahedron with larger edge and corner targets
+- View cube hover reads clearly in both themes, labels included
 
 ### Fixed
 

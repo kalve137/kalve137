@@ -64,8 +64,8 @@ TEST_F(DimensionTest, LandsWhereTheClickPutsItAndPreviewsTheTypedValue)
 TEST_F(DimensionTest, TwoPointsMeasureAlongTheAxisTheCursorLeavesBy)
 {
     openRectangle(*ui);
-    ui->click(gp_Pnt(-20, -10, 0));
-    ui->click(gp_Pnt(20, 10, 0));
+    ui->click(gp_Pnt(-20, 10, 0));
+    ui->click(gp_Pnt(20, -10, 0));
     ui->move(ui->at(gp_Pnt(0, 13, 0)));
     ui->save("horizontal from above");
     ui->click(gp_Pnt(0, 13, 0));

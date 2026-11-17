@@ -6,6 +6,7 @@
 
 #include "viewer/camera_guard.h"
 #include "viewer/style.h"
+#include "viewer/view_cube.h"
 #include "viewer/view_turn.h"
 
 #include "log/log.h"
@@ -20,11 +21,11 @@
 #include <Standard_WarningsRestore.hxx>
 
 #include <AIS_AnimationCamera.hxx>
-#include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <Bnd_Box.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Graphic3d_MaterialAspect.hxx>
 #include <Graphic3d_TransformPers.hxx>
 #include <Graphic3d_ZLayerSettings.hxx>
 #include <Message.hxx>
@@ -39,6 +40,7 @@
 #include <V3d_DirectionalLight.hxx>
 #include <gp_Dir.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <format>
@@ -61,20 +63,19 @@ constexpr double kPickTolerancePixels = 4.0;
 constexpr double kRecoveryHalfSize = 100.0;
 constexpr int kMaxFailedFrames = 3;
 
-constexpr double kViewCubeSize = 64.0;
+constexpr double kViewCubeSize = 47.0;
 constexpr int kViewCubeOffsetX = 100;
 constexpr int kViewCubeOffsetY = 150;
-constexpr double kViewCubeRoundness = 0.12;
-constexpr double kViewCubeFacetFraction = 0.12;
+constexpr double kViewCubeFacetFraction = 0.55;
 constexpr double kViewCubeAxesPadding = 6.0;
 constexpr double kViewCubeAxisRadius = 1.4;
 constexpr double kViewCubeAxisConeRadius = 3.2;
-constexpr double kViewCubeFontHeight = 13.0;
+constexpr double kViewCubeFontHeight = 10.0;
 constexpr double kViewCubeAxisFontHeight = 15.0;
 constexpr double kViewTransitionSeconds = 0.5;
 constexpr double kInstantTransitionSeconds = 0.001;
 constexpr float kHoverTransparency = static_cast<float>(style::kTintStrong);
-constexpr double kViewCubeHoverTransparency = style::kTintFaint;
+constexpr double kViewCubeHoverTransparency = style::kTintSolid;
 
 template <typename Drawable = Aspect_Drawable>
 Drawable toDrawable(WId id)
@@ -138,11 +139,10 @@ OcctViewWidget::OcctViewWidget(QWidget* parent) : QOpenGLWidget(parent)
         m_grid->SetZLayer(Graphic3d_ZLayerId_BotOSD);
     }
 
-    m_viewCube = new AIS_ViewCube();
+    m_viewCube = new ViewCube();
     m_viewCube->SetViewAnimation(myViewAnimation);
     m_viewCube->SetFixedAnimationLoop(false);
     m_viewCube->SetAutoStartAnimation(true);
-    m_viewCube->SetRoundRadius(kViewCubeRoundness);
     scaleViewCube();
 
     setNavigation(Navigation{});
@@ -298,16 +298,29 @@ void OcctViewWidget::setHighlightColors(const QColor& hover, const QColor& selec
 void OcctViewWidget::setViewCubeStyle(const ViewCubeStyle& style)
 {
     const auto occt = [](const QColor& color) { return OcctQtTools::qtColorToOcct(color); };
-    m_viewCube->SetBoxColor(occt(style.face));
-    m_viewCube->SetInnerColor(occt(style.edge));
-    m_viewCube->BoxEdgeStyle()->SetColor(occt(style.edge));
-    m_viewCube->BoxCornerStyle()->SetColor(occt(style.edge));
-    m_viewCube->SetTextColor(occt(style.label));
-    m_viewCube->SetFont(style.labelFont.toUtf8().constData());
+    const Quantity_Color face = occt(style.face);
+    const auto scaled = [&face](double factor) {
+        return Quantity_Color(std::min(1.0, face.Red() * factor), std::min(1.0, face.Green() * factor),
+                              std::min(1.0, face.Blue() * factor), Quantity_TOC_RGB);
+    };
+    Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
+    material.SetMaterialType(Graphic3d_MATERIAL_PHYSIC);
+    material.SetAmbientColor(Quantity_Color(Quantity_NOC_BLACK));
+    material.SetSpecularColor(Quantity_Color(Quantity_NOC_BLACK));
+    material.SetEmissiveColor(scaled(style.shading.glow));
+    material.SetDiffuseColor(scaled(style.shading.diffuse));
+    m_viewCube->SetBoxColor(face);
+    m_viewCube->BoxEdgeStyle()->SetColor(face);
+    m_viewCube->BoxCornerStyle()->SetColor(face);
     for (const Handle(Prs3d_ShadingAspect)& aspect :
          {m_viewCube->Attributes()->ShadingAspect(), m_viewCube->BoxEdgeStyle(), m_viewCube->BoxCornerStyle()}) {
-        aspect->Aspect()->SetShadingModel(Graphic3d_TypeOfShadingModel_Unlit);
+        aspect->Aspect()->SetShadingModel(Graphic3d_TypeOfShadingModel_Phong);
+        aspect->Aspect()->SetFrontMaterial(material);
+        aspect->Aspect()->SetBackMaterial(material);
     }
+    m_viewCube->SetTextColor(occt(style.label));
+    m_viewCube->setHoverLabelColor(occt(style.hoverLabel));
+    m_viewCube->SetFont(style.labelFont.toUtf8().constData());
     const Handle(Prs3d_Drawer)& hover = m_viewCube->DynamicHilightAttributes();
     hover->SetColor(occt(style.hover));
     if (hover->HasOwnShadingAspect()) {

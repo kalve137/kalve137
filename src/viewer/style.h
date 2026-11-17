@@ -11,6 +11,7 @@ inline constexpr double kStrokeRegular = 2.0;
 inline constexpr double kStrokeBold = 3.0;
 inline constexpr double kStrokeHalo = 5.0;
 
+inline constexpr double kTintSolid = 0.2;
 inline constexpr double kTintStrong = 0.4;
 inline constexpr double kTintHalf = 0.55;
 inline constexpr double kTintFaint = 0.75;
@@ -18,5 +19,13 @@ inline constexpr double kTintFaint = 0.75;
 inline constexpr double kMarkerSmall = 2.0;
 inline constexpr double kMarkerMedium = 2.5;
 inline constexpr double kMarkerLarge = 4.0;
+
+struct Shading {
+    double glow;
+    double diffuse;
+};
+
+inline constexpr Shading kCubeShadingDark{.glow = 0.5, .diffuse = 0.9};
+inline constexpr Shading kCubeShadingLight{.glow = 0.45, .diffuse = 0.5};
 
 } // namespace kalve137::viewer::style
