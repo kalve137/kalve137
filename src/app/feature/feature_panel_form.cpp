@@ -99,7 +99,7 @@ void FeaturePanel::buildForm()
     const auto addTangentChain = [&] {
         auto* chain = new QCheckBox(tr("Tangent chain"), m_form);
         chain->setChecked(m_tangentChain);
-        chain->setToolTip(tr("Clicking an edge also picks the edges that run smoothly on from it"));
+        chain->setToolTip(tr("Clicking an edge also picks edges that run smoothly on from it"));
         fields->addRow(QString(), chain);
         connect(chain, &QCheckBox::toggled, this, [this](bool on) { m_tangentChain = on; });
     };
@@ -121,7 +121,7 @@ void FeaturePanel::buildForm()
                 end->addItems({tr("Distance"), tr("To object"), tr("All")});
                 end->setCurrentIndex(static_cast<int>(f.end));
                 m_target = new QPushButton(extrudeTargetName(f), m_form);
-                m_target->setToolTip(tr("Click, then pick the flat face or construction plane to stop at"));
+                m_target->setToolTip(tr("Click, then pick flat face or construction plane to stop at"));
                 auto* taper = feature_panel_detail::makeAngleBox(f.taperDegrees, -kMaxTaper, kMaxTaper, m_form);
                 taper->setStep(1.0);
                 m_distance = distance;

@@ -206,7 +206,7 @@ void MainWindow::createActions()
     });
 
     m_createSketch = new QAction(icons::tinted("create_sketch"), tr("Create Sketch"), this);
-    m_createSketch->setToolTip(tr("Create Sketch: pick an origin plane or a flat face"));
+    m_createSketch->setToolTip(tr("Create Sketch: pick origin plane or flat face"));
     connect(m_createSketch, &QAction::triggered, this, &MainWindow::startCreateSketch);
 
     const auto featureAction = [this](const QString& icon, const QString& text, const QKeySequence& key,
@@ -233,7 +233,7 @@ void MainWindow::createActions()
     m_chamfer = featureAction("chamfer", tr("Chamfer"), QKeySequence(), &FeaturePanel::startChamfer);
     m_shell = featureAction("shell", tr("Shell"), QKeySequence(), &FeaturePanel::startShell);
     m_pressPull = featureAction("press_pull", tr("Press Pull"), QKeySequence(Qt::Key_Q), &FeaturePanel::startPressPull);
-    m_pressPull->setToolTip(tr("Press Pull (Q): extrudes a profile, offsets a flat face or fillets an edge"));
+    m_pressPull->setToolTip(tr("Press Pull (Q): extrudes profile, offsets flat face or fillets edge"));
     m_hole = featureAction("hole", tr("Hole"), QKeySequence(), &FeaturePanel::startHole);
     m_hole->setToolTip(tr("Hole: simple, counterbore or countersink holes on faces or sketch points"));
     m_move = featureAction("move", tr("Move"), QKeySequence(Qt::Key_M), &FeaturePanel::startMove);
@@ -242,22 +242,22 @@ void MainWindow::createActions()
         featureAction("appearance", tr("Appearance"), QKeySequence(Qt::Key_A), &FeaturePanel::startAppearance);
     m_appearance->setToolTip(tr("Appearance (A): colors whole bodies or single faces"));
     m_pattern = featureAction("pattern", tr("Pattern"), QKeySequence(), &FeaturePanel::startPattern);
-    m_pattern->setToolTip(tr("Pattern: copies a body along an axis or around it"));
+    m_pattern->setToolTip(tr("Pattern: copies body along axis or around it"));
     m_offsetPlane = featureAction("offset_plane", tr("Offset Plane"), QKeySequence(), &FeaturePanel::startOffsetPlane);
-    m_offsetPlane->setToolTip(tr("Offset Plane: a plane parallel to an origin plane or a flat face"));
+    m_offsetPlane->setToolTip(tr("Offset Plane: plane parallel to origin plane or flat face"));
     m_planeAtAngle =
         featureAction("plane_angle", tr("Plane at Angle"), QKeySequence(), &FeaturePanel::startPlaneAtAngle);
-    m_planeAtAngle->setToolTip(tr("Plane at Angle: a plane turned about a line, edge or axis"));
+    m_planeAtAngle->setToolTip(tr("Plane at Angle: plane turned about line, edge or axis"));
     m_midplane = featureAction("midplane", tr("Midplane"), QKeySequence(), &FeaturePanel::startMidplane);
-    m_midplane->setToolTip(tr("Midplane: a plane halfway between two planes or flat faces"));
+    m_midplane->setToolTip(tr("Midplane: plane halfway between two planes or flat faces"));
     m_axis = featureAction("axis", tr("Axis"), QKeySequence(), &FeaturePanel::startAxis);
-    m_axis->setToolTip(tr("Axis: along an edge, through a cylinder, normal to a face or through two points"));
+    m_axis->setToolTip(tr("Axis: along edge, through cylinder, normal to face or through two points"));
     m_point = featureAction("construct_point", tr("Point"), QKeySequence(), &FeaturePanel::startPoint);
-    m_point->setToolTip(tr("Point: at a vertex, an edge midpoint, a circle center or a face center"));
+    m_point->setToolTip(tr("Point: at vertex, edge midpoint, circle center or face center"));
 
     m_measure = new QAction(icons::tinted("measure"), tr("Measure"), this);
     m_measure->setShortcut(QKeySequence(Qt::Key_I));
-    m_measure->setToolTip(tr("Measure (I): sizes of a face, edge or vertex, or the distance between two"));
+    m_measure->setToolTip(tr("Measure (I): sizes of face, edge or vertex, or distance between two"));
     connect(m_measure, &QAction::triggered, this, [this] {
         stopPickingPlane();
         m_featurePanel->cancel();
@@ -270,7 +270,7 @@ void MainWindow::createActions()
 
     m_construction = new QAction(icons::tinted("construction"), tr("Construction"), this);
     m_construction->setShortcut(QKeySequence(Qt::Key_X));
-    m_construction->setToolTip(tr("Toggle construction on the selected curves (X)"));
+    m_construction->setToolTip(tr("Toggle construction on selected curves (X)"));
     connect(m_construction, &QAction::triggered, m_sketchEditor, &SketchEditor::toggleConstruction);
 
     m_delete = new QAction(tr("Delete"), this);
@@ -870,7 +870,7 @@ void MainWindow::showAbout()
 
     auto* buttons = new QDialogButtonBox(&dialog);
     QPushButton* copy = buttons->addButton(tr("Copy Details"), QDialogButtonBox::ActionRole);
-    copy->setToolTip(tr("Copies version, system and graphics details for a bug report"));
+    copy->setToolTip(tr("Copies version, system and graphics details for bug reports"));
     QPushButton* notices = buttons->addButton(tr("Third-Party Notices"), QDialogButtonBox::ActionRole);
     auto* close = new QPushButton(tr("Close"), buttons);
     close->setObjectName("primaryButton");

@@ -61,7 +61,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     }
     connect(m_theme, &QComboBox::currentIndexChanged, this,
             [this] { theme::setScheme(selected<theme::Scheme>(m_theme)); });
-    m_reopenLastProject = addCheck(general, tr("Reopen the last project on start"), tr("startup recent"));
+    m_reopenLastProject = addCheck(general, tr("Reopen last project on start"), tr("startup recent"));
 
     QFormLayout* navigation = addPage(tr("Navigation"));
     m_preset = addCombo(navigation, tr("Mouse scheme"), tr("preset orbit pan zoom middle right button"));
@@ -77,9 +77,8 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     addRow(navigation, tr("Mouse scheme preset orbit pan zoom middle right button"));
     connect(m_preset, &QComboBox::currentIndexChanged, this, &PreferencesDialog::updatePresetHint);
     m_reverseZoom = addCheck(navigation, tr("Reverse wheel zoom direction"), tr("scroll invert"));
-    m_zoomToCursor = addCheck(navigation, tr("Zoom toward the cursor"), tr("wheel scroll point"));
-    m_orbitAroundCursor =
-        addCheck(navigation, tr("Orbit around the point under the cursor"), tr("rotate pivot center"));
+    m_zoomToCursor = addCheck(navigation, tr("Zoom toward cursor"), tr("wheel scroll point"));
+    m_orbitAroundCursor = addCheck(navigation, tr("Orbit around point under cursor"), tr("rotate pivot center"));
     m_constrainedOrbit = addCheck(navigation, tr("Constrained orbit, keep Z up"), tr("rotate turntable"));
     m_animateTransitions = addCheck(navigation, tr("Animate view transitions"), tr("camera smooth motion"));
 
@@ -92,7 +91,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_camera = addCombo(display, tr("Camera"), tr("projection orthographic perspective"));
     m_camera->addItem(tr("Orthographic"), 0);
     m_camera->addItem(tr("Perspective"), 1);
-    m_showGrid = addCheck(display, tr("Show the grid"), tr("ground plane"));
+    m_showGrid = addCheck(display, tr("Show grid"), tr("ground plane"));
 
     QFormLayout* sketch = addPage(tr("Sketch"));
     m_lookAtSketch = addCheck(sketch, tr("Look at sketch plane while sketching"), tr("camera turn return view"));
@@ -102,8 +101,8 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_sketchDimensions = addCheck(sketch, tr("Show dimensions"), tr("palette sizes values"));
     m_constraintGlyphs = addCheck(sketch, tr("Show constraint glyphs"), tr("palette badges icons horizontal vertical"));
     m_sketchConstruction = addCheck(sketch, tr("Show construction geometry"), tr("palette dashed reference"));
-    m_sketchGridLabels = addCheck(sketch, tr("Label the grid while sketching"), tr("numbers rulers"));
-    m_sketchGridSnap = addCheck(sketch, tr("Snap points to the grid"), tr("snapping intersections"));
+    m_sketchGridLabels = addCheck(sketch, tr("Label grid while sketching"), tr("numbers rulers"));
+    m_sketchGridSnap = addCheck(sketch, tr("Snap points to grid"), tr("snapping intersections"));
 
     QFormLayout* grid = addPage(tr("Grid"));
     m_grid = new GridSettingsWidget(this);
@@ -113,7 +112,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     QFormLayout* diagnostics = addPage(tr("Diagnostics"));
     m_logLevels = new QLineEdit(this);
     m_logLevels->setPlaceholderText(QStringLiteral("info,viewer=debug"));
-    m_logLevels->setToolTip(tr("A level for all channels, then channel=level pairs. Channels: app, core, geometry, "
+    m_logLevels->setToolTip(tr("Level for all channels, then channel=level pairs. Channels: app, core, geometry, "
                                "sketch, viewer, input, io. Levels: trace, debug, info, warn, error, off."));
     diagnostics->addRow(tr("Log levels"), m_logLevels);
     addRow(diagnostics, tr("Log levels logging debug trace channels"));

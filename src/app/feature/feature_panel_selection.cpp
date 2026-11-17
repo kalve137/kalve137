@@ -502,7 +502,7 @@ void FeaturePanel::refreshItems(const std::vector<QString>& items)
         auto* remove = new QToolButton(row);
         remove->setObjectName("removeItem");
         remove->setText(QStringLiteral("×"));
-        remove->setToolTip(tr("Remove from the selection"));
+        remove->setToolTip(tr("Remove from selection"));
         remove->setAutoRaise(true);
         layout->addWidget(label, 1);
         layout->addWidget(remove);
