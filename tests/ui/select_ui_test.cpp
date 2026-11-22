@@ -38,7 +38,7 @@ constexpr int kMinHighlightPixels = 200;
 
 int goldPixels(UiDriver& ui)
 {
-    const QImage view = ui.view().grabFramebuffer();
+    const QImage view = ui.canvasImage();
     const auto close = [](int a, int b) { return std::abs(a - b) <= kColorTolerance; };
     const QColor& gold = app::theme::palette().chrome.accent;
     int count = 0;
@@ -185,10 +185,10 @@ TEST_F(SelectTest, WindowOverThousandsOfFacesStaysFast)
     });
     homeView(*ui);
 
-    const QRect area = ui->view().rect().adjusted(kInset, kInset, -kInset, -kInset);
+    const QRect area = ui->canvas()->rect().adjusted(kInset, kInset, -kInset, -kInset);
     QElapsedTimer timer;
     timer.start();
-    ui->drag(ui->inView(&ui->view(), area.topLeft()), ui->inView(&ui->view(), area.bottomRight()));
+    ui->drag(ui->inView(ui->canvas(), area.topLeft()), ui->inView(ui->canvas(), area.bottomRight()));
     ui->frame();
     const qint64 window = timer.elapsed();
     ui->save("window over boxes");

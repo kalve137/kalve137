@@ -4,18 +4,33 @@
 #include "app/view/new_view_picker.h"
 
 #include "app/session/design_session.h"
+#include "app/view/band_overlay.h"
 #include "app/view/scene.h"
 #include "camera/camera.h"
 #include "core/recompute.h"
+#include "geometry/topology.h"
+#include "log/log.h"
+#include "pick/scene_rays.h"
+#include "render/box_select.h"
 #include "render/rhi/rhi_view.h"
 #include "snapshot/body.h"
+#include "viewer/box_band.h"
 
+#include <QColor>
 #include <QMetaObject>
+#include <QRect>
+#include <QRectF>
 
+#include <OSD_Parallel.hxx>
+#include <Precision.hxx>
+#include <Standard_Failure.hxx>
 #include <TopExp.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Pnt.hxx>
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <utility>
 
 namespace kalve137::app {
@@ -31,13 +46,12 @@ bool contains(const std::vector<TopAbs_ShapeEnum>& types, TopAbs_ShapeEnum type)
 
 } // namespace
 
-NewViewPicker::NewViewPicker(render::RhiView& view, const DesignSession& session, Scene& scene, QObject* parent)
-    : PickSource(parent), m_view(&view), m_session(&session), m_scene(&scene)
+NewViewPicker::NewViewPicker(render::RhiView& view, const DesignSession& session, Scene& scene, pick::SceneRays& rays,
+                             QObject* parent)
+    : PickSource(parent), m_view(&view), m_session(&session), m_scene(&scene), m_rays(&rays),
+      m_band(new BandOverlay(&view))
 {
-    connect(m_view, &render::RhiView::mousePressed, this,
-            [this](QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers) {
-                press(position, button, buttons);
-            });
+    connect(m_view, &render::RhiView::mousePressed, this, &NewViewPicker::press);
     connect(m_view, &render::RhiView::mouseReleased, this,
             [this](QPointF position, Qt::MouseButton button, Qt::MouseButtons, Qt::KeyboardModifiers modifiers) {
                 release(position, button, modifiers);
@@ -49,8 +63,120 @@ NewViewPicker::NewViewPicker(render::RhiView& view, const DesignSession& session
     connect(m_scene, &Scene::pickModeChanged, this, [this] {
         m_selected.clear();
         m_hovered.reset();
+        m_pressed.reset();
+        m_boxing = false;
+        m_band->hideBand();
         showHighlight();
     });
+}
+
+bool NewViewPicker::canBox() const
+{
+    const PickMode mode = m_scene->pickMode();
+    return mode == PickMode::None || mode == PickMode::Edges || mode == PickMode::Faces;
+}
+
+std::shared_ptr<const snapshot::Mesh> NewViewPicker::meshOf(const render::PickedItem& item) const
+{
+    for (const auto& body : m_view->scene().bodies) {
+        if (body->feature == item.feature && body->part == item.part) {
+            return body->mesh;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<render::PickedItem> NewViewPicker::boxItems(QPointF from, QPointF to) const
+{
+    const camera::ScreenPoint start{from.x(), from.y()};
+    const camera::ScreenPoint end{to.x(), to.y()};
+    const snapshot::Scene& scene = m_view->scene();
+    const camera::Viewport viewport = m_view->viewport();
+    std::vector<render::PickedItem> candidates =
+        render::boxCandidates(scene.bodies, m_view->camera(), viewport, render::ScreenRect::spanning(start, end),
+                              render::isCrossingBox(start, end), kinds());
+    if (candidates.empty()) {
+        return candidates;
+    }
+    std::vector<TopoDS_Shape> shapes(candidates.size());
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+        if (const std::optional<Pick> pick = pickOf({.item = candidates[i], .mesh = nullptr, .point = std::nullopt})) {
+            shapes[i] = pick->shape;
+        }
+    }
+    const pick::VisibleRays rays = m_rays->rays(scene);
+    std::vector<const snapshot::Mesh*> meshes;
+    meshes.reserve(rays.meshes.size());
+    for (const auto& mesh : rays.meshes) {
+        meshes.push_back(mesh.get());
+    }
+    const geometry::ViewBlockers blockers(rays.scene, meshes, rays.shown);
+    camera::Camera shown = m_view->camera();
+    shown.setAspect(viewport.aspect());
+    const auto towardViewer = [&](const gp_Pnt& point) {
+        const camera::Vec3 back = shown.direction() * -1.0;
+        if (shown.isOrthographic()) {
+            return gp_Dir(back.x, back.y, back.z);
+        }
+        const camera::Vec3 toEye = shown.eye() - camera::Vec3{point.X(), point.Y(), point.Z()};
+        const double length = camera::length(toEye);
+        return length > Precision::Confusion() ? gp_Dir(toEye.x / length, toEye.y / length, toEye.z / length)
+                                               : gp_Dir(back.x, back.y, back.z);
+    };
+    std::vector<char> visible(shapes.size(), 0);
+    OSD_Parallel::For(0, static_cast<int>(shapes.size()), [&](int i) {
+        const TopoDS_Shape& shape = shapes[static_cast<std::size_t>(i)];
+        if (shape.IsNull()) {
+            return;
+        }
+        try {
+            visible[static_cast<std::size_t>(i)] =
+                std::ranges::any_of(geometry::samplePoints(shape),
+                                    [&](const gp_Pnt& point) { return !blockers.blocks(point, towardViewer(point)); })
+                    ? 1
+                    : 0;
+        } catch (const Standard_Failure&) {
+            visible[static_cast<std::size_t>(i)] = 1;
+        }
+    });
+    std::vector<render::PickedItem> items;
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+        if (visible[i] != 0) {
+            items.push_back(candidates[i]);
+        }
+    }
+    std::ranges::sort(items);
+    return items;
+}
+
+std::optional<std::vector<render::PickedItem>> NewViewPicker::boxIdItems(QPointF from, QPointF to) const
+{
+    const double ratio = m_view->devicePixelRatioF();
+    const QRectF band = QRectF(from * ratio, to * ratio).normalized();
+    const QRect pixels(QPoint(static_cast<int>(std::ceil(band.left())), static_cast<int>(std::ceil(band.top()))),
+                       QPoint(static_cast<int>(std::floor(band.right())), static_cast<int>(std::floor(band.bottom()))));
+    const render::PickKinds wanted = kinds();
+    return m_view->itemsIn(pixels, !render::isCrossingBox({from.x(), from.y()}, {to.x(), to.y()}), wanted,
+                           {.points = wanted.points});
+}
+
+void NewViewPicker::boxSelect(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers)
+{
+    const bool additive = (modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) != 0;
+    if (!additive) {
+        m_selected.clear();
+    }
+    for (const render::PickedItem& item : boxItems(from, to)) {
+        if (std::ranges::none_of(m_selected, [&](const Found& found) { return found.item == item; })) {
+            m_selected.push_back({.item = item, .mesh = meshOf(item), .point = std::nullopt});
+        }
+    }
+    K137_DEBUG(Input, "{} box selected {}",
+               render::isCrossingBox({from.x(), from.y()}, {to.x(), to.y()}) ? "Crossing" : "Window",
+               m_selected.size());
+    m_selectedByBox = true;
+    showHighlight();
+    announce(&PickSource::selectionChanged);
 }
 
 render::PickKinds NewViewPicker::kinds() const
@@ -88,7 +214,7 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
 const core::Body* NewViewPicker::bodyOf(const render::PickedItem& item) const
 {
     const core::BodyKey key{static_cast<core::FeatureId>(item.feature), item.part};
-    const core::Body* body = m_scene->model().body(key);
+    const core::Body* body = m_shown.body(key);
     return body != nullptr ? body : m_session->model().body(key);
 }
 
@@ -203,12 +329,23 @@ void NewViewPicker::clickAt(QPointF position, Qt::KeyboardModifiers modifiers)
     announce(&PickSource::selectionChanged);
 }
 
-void NewViewPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons)
+void NewViewPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
+                          Qt::KeyboardModifiers modifiers)
 {
-    if (button == Qt::LeftButton && buttons == Qt::LeftButton) {
-        m_pressed = position;
-    } else {
+    m_boxing = false;
+    m_band->hideBand();
+    if (button == Qt::LeftButton) {
+        m_selectedByBox = false;
+    }
+    if (button != Qt::LeftButton || buttons != Qt::LeftButton) {
         m_pressed.reset();
+        return;
+    }
+    m_pressed = position;
+    m_pressModifiers = modifiers;
+    m_boxFromPress = canBox() && !pickAt(position);
+    if (m_boxFromPress) {
+        m_rays->prepare(m_view->scene());
     }
 }
 
@@ -216,6 +353,11 @@ void NewViewPicker::release(QPointF position, Qt::MouseButton button, Qt::Keyboa
 {
     const std::optional<QPointF> pressed = std::exchange(m_pressed, std::nullopt);
     if (button != Qt::LeftButton || !pressed) {
+        return;
+    }
+    if (std::exchange(m_boxing, false)) {
+        m_band->hideBand();
+        boxSelect(*pressed, position, m_pressModifiers);
         return;
     }
     const QPointF moved = position - *pressed;
@@ -226,10 +368,23 @@ void NewViewPicker::release(QPointF position, Qt::MouseButton button, Qt::Keyboa
 
 void NewViewPicker::move(QPointF position, Qt::MouseButtons buttons)
 {
-    if (buttons != Qt::NoButton) {
+    if (buttons == Qt::NoButton) {
+        hoverAt(position);
         return;
     }
-    hoverAt(position);
+    if (!m_pressed || !m_boxFromPress || buttons != Qt::LeftButton) {
+        return;
+    }
+    if (!m_boxing && !viewer::isBoxDrag(*m_pressed, position)) {
+        return;
+    }
+    if (!m_boxing) {
+        m_boxing = true;
+        setHovered(std::nullopt);
+    }
+    const snapshot::Color& color = m_view->viewportStyle().selected;
+    m_band->setColor(QColor::fromRgbF(color.red, color.green, color.blue));
+    m_band->showBand(*m_pressed, position);
 }
 
 void NewViewPicker::setHovered(std::optional<Found> found)
@@ -264,6 +419,23 @@ void NewViewPicker::dropStale()
     }
 }
 
+void NewViewPicker::showModel(core::Model model)
+{
+    m_shown = std::move(model);
+    if (!m_highlightedBodies.empty()) {
+        showHighlight();
+    }
+}
+
+void NewViewPicker::setHighlightedBodies(std::vector<core::BodyKey> keys)
+{
+    if (keys == m_highlightedBodies) {
+        return;
+    }
+    m_highlightedBodies = std::move(keys);
+    showHighlight();
+}
+
 void NewViewPicker::showHighlight()
 {
     render::Highlight highlight;
@@ -272,6 +444,20 @@ void NewViewPicker::showHighlight()
     }
     for (const Found& found : m_selected) {
         highlight.selected.insert(found.item);
+    }
+    for (const core::BodyKey& key : m_highlightedBodies) {
+        const core::Body* body = m_shown.body(key);
+        if (body == nullptr || body->shape.IsNull()) {
+            continue;
+        }
+        ShapeMap faces;
+        TopExp::MapShapes(body->shape, TopAbs_FACE, faces);
+        for (int face = 0; face < faces.Extent(); ++face) {
+            highlight.selected.insert({.feature = static_cast<int>(key.feature),
+                                       .part = key.part,
+                                       .kind = render::PickKind::Face,
+                                       .index = static_cast<std::uint32_t>(face)});
+        }
     }
     m_view->setHighlight(std::move(highlight));
 }

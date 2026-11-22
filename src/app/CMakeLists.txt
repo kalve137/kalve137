@@ -95,6 +95,8 @@ add_library(kalve137_app STATIC
     theme/theme.h
     theme/theme_tokens.cpp
     theme/theme_tokens.h
+    view/band_overlay.cpp
+    view/band_overlay.h
     view/camera_commands.cpp
     view/camera_commands.h
     view/grid_settings.cpp

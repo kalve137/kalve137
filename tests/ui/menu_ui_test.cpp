@@ -144,7 +144,7 @@ TEST_F(MenuTest, TimelineHoverHighlightsTheBody)
     const auto shift = [](const QColor& a, const QColor& b) {
         return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
     };
-    const QPoint top = ui->view().mapTo(&ui->window(), ui->at(kTopFace).toPoint());
+    const QPoint top = ui->canvas()->mapTo(&ui->window(), ui->at(kTopFace).toPoint());
     const QColor plain = ui->shot().pixelColor(top);
     ui->move(ui->timelineChip(kExtrude));
     const QColor lit = ui->shot().pixelColor(top);

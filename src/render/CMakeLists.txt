@@ -4,6 +4,8 @@
 find_package(Threads REQUIRED)
 
 add_library(kalve137_render STATIC
+    box_select.cpp
+    box_select.h
     chunk_set.cpp
     chunk_set.h
     cpu_backend.cpp
