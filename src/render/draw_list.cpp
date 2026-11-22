@@ -46,6 +46,41 @@ std::uint8_t toByte(float value)
 
 } // namespace
 
+std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene)
+{
+    std::vector<camera::Box> boxes;
+    boxes.reserve(scene.bodies.size());
+    for (const auto& body : scene.bodies) {
+        const snapshot::Mesh& mesh = *body->mesh;
+        if (!mesh.vertices.empty()) {
+            boxes.push_back({{mesh.low[0], mesh.low[1], mesh.low[2]}, {mesh.high[0], mesh.high[1], mesh.high[2]}});
+        }
+    }
+    return boxes;
+}
+
+std::optional<camera::Box> sceneBounds(const snapshot::Scene& scene)
+{
+    const std::vector<camera::Box> boxes = bodyBounds(scene);
+    if (boxes.empty()) {
+        return std::nullopt;
+    }
+    camera::Box bounds = boxes.front();
+    for (const camera::Box& box : boxes) {
+        bounds.min = {std::min(bounds.min.x, box.min.x), std::min(bounds.min.y, box.min.y),
+                      std::min(bounds.min.z, box.min.z)};
+        bounds.max = {std::max(bounds.max.x, box.max.x), std::max(bounds.max.y, box.max.y),
+                      std::max(bounds.max.z, box.max.z)};
+    }
+    return bounds;
+}
+
+camera::Camera fitToScene(camera::Camera camera, const snapshot::Scene& scene)
+{
+    camera.fitDepth(sceneBounds(scene));
+    return camera;
+}
+
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,
                 const snapshot::Color& background, const Look& look)
 {

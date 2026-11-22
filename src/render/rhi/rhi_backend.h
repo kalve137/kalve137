@@ -122,6 +122,7 @@ private:
     std::vector<std::uint64_t> m_idChunks;
     bool m_biased = false;
     bool m_cornersUploaded = false;
+    bool m_toldPickLimit = false;
     std::uint64_t m_meshUploads = 0;
     std::uint64_t m_paletteUploads = 0;
 };

@@ -75,17 +75,6 @@ bool samePlace(const TopoDS_Shape& a, const TopoDS_Shape& b)
     return true;
 }
 
-int faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face)
-{
-    int index = 0;
-    for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next(), ++index) {
-        if (it.Current().IsEqual(face)) {
-            return index;
-        }
-    }
-    return 0;
-}
-
 TopoDS_Face faceAt(const TopoDS_Shape& shape, int index)
 {
     TopExp_Explorer it(shape, TopAbs_FACE);
@@ -152,6 +141,17 @@ std::optional<gp_Pln> planeOf(const TopoDS_Face& face)
 }
 
 } // namespace
+
+std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face)
+{
+    int index = 0;
+    for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next(), ++index) {
+        if (it.Current().IsEqual(face)) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
 
 std::string namePrefix(FeatureId id)
 {
@@ -263,8 +263,15 @@ std::optional<FaceHit> FaceLookup::atPoint(const std::vector<Body>& bodies, cons
             continue;
         }
         if (auto face = geometry::findFace(shape, point, kRefTolerance)) {
+            const std::optional<int> index = faceIndexOf(shape, *face);
+            if (!index) {
+                if (last != nullptr) {
+                    m_found.erase(kept);
+                }
+                return FaceHit{i, *face};
+            }
             found.hit = FaceHit{i, *face};
-            found.faceIndex = faceIndexOf(shape, *face);
+            found.faceIndex = *index;
         }
     }
     if (last != nullptr) {

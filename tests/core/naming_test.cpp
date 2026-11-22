@@ -497,6 +497,18 @@ TEST(FaceLookup, LooksAgainWhenABodyUpToTheHitChanges)
     expectSameHit(lookup.atPoint(earlierMoved, onSecond), first);
 }
 
+TEST(FaceLookup, FaceIndexIsNothingForAFaceTheShapeDoesntHold)
+{
+    const Model model = threeBodies();
+    const TopoDS_Shape& first = model.bodies[0].shape;
+    int index = 0;
+    for (TopExp_Explorer it(first, TopAbs_FACE); it.More(); it.Next(), ++index) {
+        EXPECT_EQ(faceIndexOf(first, TopoDS::Face(it.Current())), index);
+    }
+    const TopExp_Explorer other(model.bodies[1].shape, TopAbs_FACE);
+    EXPECT_FALSE(faceIndexOf(first, TopoDS::Face(other.Current())).has_value());
+}
+
 TEST(FaceLookup, GivesTheCurrentFaceWhenAMoveRepeatsTheSamePlace)
 {
     const Model model = threeBodies();

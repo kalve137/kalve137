@@ -64,6 +64,7 @@ private:
     NCollection_DataMap<TopoDS_Shape, Bnd_Box, TopTools_ShapeMapHasher> m_boxes;
 };
 
+std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face);
 std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup = nullptr);
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref);
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref);

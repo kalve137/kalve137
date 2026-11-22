@@ -870,6 +870,76 @@ TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
 
+TEST_F(NewViewTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point low{-10.0, -10.0, -10.0};
+    const snapshot::Point high{10.0, 10.0, 10.0};
+    const snapshot::Point offset{60.0, -40.0, 50.0};
+    const auto shifted = [&](const snapshot::Point& point) {
+        return snapshot::Point{point[0] + offset[0], point[1] + offset[1], point[2] + offset[2]};
+    };
+    const auto base = render::test::shared(render::test::bodyOf(render::test::edgedBox(low, high)));
+    const auto moved = render::test::shared(render::test::bodyOf(render::test::edgedBox(shifted(low), shifted(high))));
+    const auto grown = render::test::shared(render::test::bodyOf(render::test::edgedBox(low, shifted(high))));
+    const auto copy =
+        render::test::shared(render::test::bodyOf(render::test::edgedBox(shifted(low), shifted(high)), {}, 1));
+    struct Change {
+        const char* name;
+        snapshot::Scene scene;
+        snapshot::Point low;
+        snapshot::Point high;
+        int part;
+    };
+    const std::vector<Change> changes{
+        {"moved", {.bodies = {moved}, .origin = {}, .hidden = {}}, shifted(low), shifted(high), 0},
+        {"grown", {.bodies = {grown}, .origin = {}, .hidden = {}}, low, shifted(high), 0},
+        {"patterned", {.bodies = {base, copy}, .origin = {}, .hidden = {}}, shifted(low), shifted(high), 1},
+    };
+    const render::PickKinds solids{.faces = true, .edges = true, .points = false};
+    for (const camera::Projection projection : {camera::Projection::Orthographic, camera::Projection::Perspective}) {
+        for (const Change& change : changes) {
+            SCOPED_TRACE(std::string(change.name) +
+                         (projection == camera::Projection::Orthographic ? " orthographic" : " perspective"));
+            canvas->setScene({.bodies = {base}, .origin = {}, .hidden = {}});
+            camera::Camera camera = obliqueAt({}, 160.0);
+            camera.setProjectionType(projection);
+            canvas->setCamera(camera);
+            ASSERT_FALSE(grabbed(*canvas).isNull());
+            canvas->setScene(change.scene);
+            const QImage image = grabbed(*canvas);
+            ASSERT_FALSE(image.isNull());
+
+            const camera::Box box{{change.low[0], change.low[1], change.low[2]},
+                                  {change.high[0], change.high[1], change.high[2]}};
+            camera::Vec3 nearest = box.min;
+            for (const camera::Vec3& corner : box.corners()) {
+                if (camera::dot(corner - nearest, canvas->camera().direction()) < 0.0) {
+                    nearest = corner;
+                }
+            }
+            const camera::Vec3 center = box.center();
+            const auto inward = [](double from, double to) { return from + std::copysign(1.5, to - from); };
+            const QPointF inside = devicePixelOf(
+                *canvas, {inward(nearest.x, center.x), inward(nearest.y, center.y), inward(nearest.z, center.z)});
+            const QPoint pixel(static_cast<int>(std::floor(inside.x())), static_cast<int>(std::floor(inside.y())));
+            ASSERT_TRUE(image.rect().contains(pixel));
+            EXPECT_FALSE(sameColor(image.pixelColor(pixel), QColor::fromRgbF(canvas->viewportStyle().background.red,
+                                                                             canvas->viewportStyle().background.green,
+                                                                             canvas->viewportStyle().background.blue)))
+                << "the nearest corner draws";
+            const std::optional<std::vector<render::PickedItem>> items =
+                canvas->itemsIn(QRect(pixel, QSize(1, 1)), false, solids);
+            ASSERT_TRUE(items);
+            ASSERT_EQ(items->size(), 1U);
+            EXPECT_EQ(items->front().part, change.part) << "the nearest corner picks";
+        }
+    }
+}
+
 void click(render::RhiView& canvas, QPointF position, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     QMouseEvent press(QEvent::MouseButtonPress, position, canvas.mapToGlobal(position), Qt::LeftButton, Qt::LeftButton,

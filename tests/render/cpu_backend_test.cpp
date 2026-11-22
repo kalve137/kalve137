@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <memory>
 #include <numbers>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -500,6 +501,69 @@ TEST(CpuBackend, EdgesStayWholeOnFaceBordersOneKilometerOut)
     }
     EXPECT_EQ(missing, 0U) << "every sample on a front edge shows the edge";
     EXPECT_EQ(bare, 0U) << "four pixels off the line a face shows on either side";
+}
+
+TEST(CpuBackend, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
+{
+    const snapshot::Point low{0.0, 0.0, 0.0};
+    const snapshot::Point high{10.0, 10.0, 10.0};
+    const snapshot::Point toward{20.0, -20.0, 15.0};
+    const auto shifted = [&](const snapshot::Point& point) {
+        return snapshot::Point{point[0] + toward[0], point[1] + toward[1], point[2] + toward[2]};
+    };
+    const auto base = test::shared(test::bodyOf(test::box(low, high)));
+    const auto moved = test::shared(test::bodyOf(test::box(shifted(low), shifted(high))));
+    const auto grown = test::shared(test::bodyOf(test::box(low, shifted(high))));
+    const auto copy = test::shared(test::bodyOf(test::box(shifted(low), shifted(high)), {}, 1));
+    struct Change {
+        const char* name;
+        snapshot::Scene scene;
+        snapshot::Point low;
+        snapshot::Point high;
+    };
+    const snapshot::Scene before{.bodies = {base}, .origin = {}, .hidden = {}};
+    const std::vector<Change> changes{
+        {"moved", {.bodies = {moved}, .origin = {}, .hidden = {}}, shifted(low), shifted(high)},
+        {"grown", {.bodies = {grown}, .origin = {}, .hidden = {}}, low, shifted(high)},
+        {"patterned", {.bodies = {base, copy}, .origin = {}, .hidden = {}}, shifted(low), shifted(high)},
+    };
+    const camera::Viewport viewport{240, 200, 1.0};
+    CpuBackend backend(2);
+    for (const camera::Projection projection : {camera::Projection::Orthographic, camera::Projection::Perspective}) {
+        camera::Camera camera = orbitingAt({5.0, 5.0, 5.0}, -33.0);
+        camera.setProjectionType(projection);
+        const camera::Camera stale = fitToScene(camera, before);
+        const std::uint32_t background = backgroundOf(backend, makeFrame(stale, viewport, {}, kCanvas));
+        for (const Change& change : changes) {
+            SCOPED_TRACE(std::string(change.name) + (stale.isOrthographic() ? " orthographic" : " perspective"));
+            const camera::Box box{{change.low[0], change.low[1], change.low[2]},
+                                  {change.high[0], change.high[1], change.high[2]}};
+            camera::Vec3 nearest = box.min;
+            for (const camera::Vec3& corner : box.corners()) {
+                if (camera::dot(corner - nearest, stale.direction()) < 0.0) {
+                    nearest = corner;
+                }
+            }
+            const camera::Vec3 center = box.center();
+            const auto inward = [](double from, double to) { return from + std::copysign(0.5, to - from); };
+            const camera::ScreenPoint corner = stale.project(
+                {inward(nearest.x, center.x), inward(nearest.y, center.y), inward(nearest.z, center.z)}, viewport);
+            const int x = static_cast<int>(std::floor(corner.x));
+            const int y = static_cast<int>(std::floor(corner.y));
+            ASSERT_TRUE(x >= 0 && y >= 0 && x < viewport.width && y < viewport.height);
+
+            const Image cut = drawnWith(backend, change.scene, makeFrame(stale, viewport, {}, kCanvas));
+            EXPECT_EQ(cut.at(x, y), background) << "the depth range of the old scene cuts the nearest corner";
+
+            const Frame frame = makeFrame(fitToScene(stale, change.scene), viewport, {}, kCanvas);
+            EXPECT_NE(drawnWith(backend, change.scene, frame).at(x, y), background);
+            ChunkSet chunks;
+            chunks.update(change.scene, kShaded);
+            IdImage ids;
+            backend.drawIds(chunks.pickList(frame), {}, ids);
+            EXPECT_EQ(decodePickId(ids.idAt(x, y)).kind, PickKind::Face);
+        }
+    }
 }
 
 } // namespace

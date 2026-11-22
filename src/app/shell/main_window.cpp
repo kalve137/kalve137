@@ -204,7 +204,6 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         updateStatus();
     });
     connect(m_sketchEditor, &SketchEditor::stateChanged, this, &MainWindow::updateStatus);
-    connect(m_sketchEditor, &SketchEditor::stateChanged, m_cameraCommands, &CameraCommands::sceneChanged);
     connect(m_sketchEditor, &SketchEditor::message, this,
             [this](const QString& text) { statusBar()->showMessage(text, kMessageTimeoutMs); });
     connect(m_sketchEditor, &SketchEditor::finished, this, &MainWindow::finishSketch);
@@ -798,7 +797,6 @@ void MainWindow::updateStatus()
 
 void MainWindow::refreshScene()
 {
-    m_cameraCommands->sceneChanged();
     if (m_featurePanel->isActive()) {
         m_featurePanel->refreshPreview();
         return;
@@ -851,7 +849,6 @@ void MainWindow::refreshVisibility(const std::vector<core::BodyKey>& keys, bool 
         refreshScene();
         return;
     }
-    m_cameraCommands->sceneChanged();
     if (!m_scene->setBodiesVisible(keys, visible)) {
         m_scene->show(m_session->document(), m_session->model(), *m_session);
     }

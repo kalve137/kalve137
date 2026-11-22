@@ -63,6 +63,7 @@ public:
     const ViewportStyle& viewportStyle() const { return m_style; }
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
+    const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
     void setHighlight(Highlight highlight);
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
@@ -120,6 +121,7 @@ private:
     GraphicsApi m_api;
     ViewportStyle m_style;
     snapshot::Scene m_scene;
+    std::optional<camera::Box> m_bounds;
     camera::Camera m_camera;
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
