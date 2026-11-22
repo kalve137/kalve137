@@ -24,15 +24,11 @@ struct Image {
     }
 };
 
-struct Report {
-    std::vector<ItemKind> skipped;
-};
-
 class CpuBackend {
 public:
     explicit CpuBackend(int threads = 0);
 
-    Report draw(const DrawList& list, int supersample, Image& image);
+    void draw(const DrawList& list, int supersample, Image& image);
     int threads() const { return m_pool.size(); }
 
 private:
@@ -50,7 +46,7 @@ private:
         std::uint32_t c = 0;
         VertexColor color{};
         Linear linear{};
-        bool lit = true;
+        bool cull = false;
     };
     struct TileBuffers {
         std::vector<std::uint32_t> color;
@@ -69,6 +65,7 @@ private:
 
     ThreadPool m_pool;
     Frame m_frame;
+    bool m_lit = true;
     int m_supersample = 1;
     int m_width = 0;
     int m_height = 0;

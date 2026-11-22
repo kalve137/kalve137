@@ -17,6 +17,10 @@
 #include <QWheelEvent>
 #include <QtGui/qtguiglobal.h>
 #include <rhi/qrhi.h>
+#if QT_CONFIG(opengl)
+#include <QOpenGLContext>
+#include <QSurfaceFormat>
+#endif
 #if QT_CONFIG(vulkan) && __has_include(<vulkan/vulkan.h>)
 #define KALVE137_RHI_VULKAN
 #include <QVulkanInstance>
@@ -58,35 +62,59 @@ QString apiName(GraphicsApi api)
     return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size()));
 }
 
-bool probe(GraphicsApi api)
+DeviceProbe probeWith(QRhi::Implementation implementation, QRhiInitParams* params)
+{
+    const std::unique_ptr<QRhi> rhi(QRhi::create(implementation, params));
+    DeviceProbe result;
+    if (rhi == nullptr) {
+        return result;
+    }
+    result.created = true;
+    result.texelFetch = rhi->isFeatureSupported(QRhi::TexelFetch);
+#if QT_CONFIG(opengl)
+    if (implementation == QRhi::OpenGLES2) {
+        const auto* handles = static_cast<const QRhiGles2NativeHandles*>(rhi->nativeHandles());
+        if (handles != nullptr && handles->context != nullptr) {
+            const QSurfaceFormat format = handles->context->format();
+            result.openGl = true;
+            result.openGlEs = handles->context->isOpenGLES();
+            result.major = format.majorVersion();
+            result.minor = format.minorVersion();
+        }
+    }
+#endif
+    return result;
+}
+
+DeviceProbe probe(GraphicsApi api)
 {
     switch (api) {
     case GraphicsApi::Direct3D11:
 #if defined(Q_OS_WIN)
     {
         QRhiD3D11InitParams params;
-        return QRhi::probe(QRhi::D3D11, &params);
+        return probeWith(QRhi::D3D11, &params);
     }
 #else
-        return false;
+        return {};
 #endif
     case GraphicsApi::Direct3D12:
 #if defined(Q_OS_WIN)
     {
         QRhiD3D12InitParams params;
-        return QRhi::probe(QRhi::D3D12, &params);
+        return probeWith(QRhi::D3D12, &params);
     }
 #else
-        return false;
+        return {};
 #endif
     case GraphicsApi::Metal:
 #if QT_CONFIG(metal)
     {
         QRhiMetalInitParams params;
-        return QRhi::probe(QRhi::Metal, &params);
+        return probeWith(QRhi::Metal, &params);
     }
 #else
-        return false;
+        return {};
 #endif
     case GraphicsApi::OpenGL:
 #if QT_CONFIG(opengl)
@@ -94,55 +122,93 @@ bool probe(GraphicsApi api)
         const std::unique_ptr<QOffscreenSurface> surface(QRhiGles2InitParams::newFallbackSurface());
         QRhiGles2InitParams params;
         params.fallbackSurface = surface.get();
-        return QRhi::probe(QRhi::OpenGLES2, &params);
+        return probeWith(QRhi::OpenGLES2, &params);
     }
 #else
-        return false;
+        return {};
 #endif
     case GraphicsApi::Vulkan:
 #if defined(KALVE137_RHI_VULKAN)
     {
         QVulkanInstance instance;
         if (!instance.create()) {
-            return false;
+            return {};
         }
         QRhiVulkanInitParams params;
         params.inst = &instance;
-        return QRhi::probe(QRhi::Vulkan, &params);
+        return probeWith(QRhi::Vulkan, &params);
     }
 #else
-        return false;
+        return {};
 #endif
     }
-    return false;
+    return {};
 }
 
-void styleNotice(QLabel& notice, GraphicsApi api)
+void styleNotice(QLabel& notice, GraphicsApi api, StartProblem problem)
 {
     notice.setObjectName(QStringLiteral("viewFailure"));
     notice.setAlignment(Qt::AlignCenter);
     notice.setWordWrap(true);
     notice.setAutoFillBackground(true);
-    notice.setText(QLabel::tr("The graphics device couldn't start with %1.\nStart Kalve without --view new to use the "
-                              "old view.")
-                       .arg(apiName(api)));
+    const QString oldView = QLabel::tr("Start Kalve without --view new to use the old view.");
+    if (problem == StartProblem::TooOld && api == GraphicsApi::OpenGL) {
+        notice.setText(QLabel::tr("The new view needs OpenGL 3.2 or OpenGL ES 3.0.\n%1").arg(oldView));
+    } else if (problem == StartProblem::TooOld) {
+        notice.setText(
+            QLabel::tr("The graphics device is too old for the new view with %1.\n%2").arg(apiName(api), oldView));
+    } else {
+        notice.setText(QLabel::tr("The graphics device couldn't start with %1.\n%2").arg(apiName(api), oldView));
+    }
 }
 
 } // namespace
 
-bool canStart(GraphicsApi api)
+StartProblem startProblem(const DeviceProbe& probe)
 {
-    if (probe(api)) {
-        return true;
+    if (!probe.created) {
+        return StartProblem::NoDevice;
     }
-    K137_ERROR(Viewer, "The new view could not start its graphics device with {}", graphicsApiName(api));
-    return false;
+    if (!probe.texelFetch) {
+        return StartProblem::TooOld;
+    }
+    if (probe.openGl) {
+        const bool recent =
+            probe.openGlEs ? probe.major >= 3 : probe.major > 3 || (probe.major == 3 && probe.minor >= 2);
+        if (!recent) {
+            return StartProblem::TooOld;
+        }
+    }
+    return StartProblem::None;
 }
 
-QLabel* makeFailureNotice(GraphicsApi api, QWidget* parent)
+StartProblem checkStart(GraphicsApi api)
+{
+    const DeviceProbe found = probe(api);
+    const StartProblem problem = startProblem(found);
+    switch (problem) {
+    case StartProblem::None:
+        break;
+    case StartProblem::NoDevice:
+        K137_ERROR(Viewer, "The new view could not start its graphics device with {}", graphicsApiName(api));
+        break;
+    case StartProblem::TooOld:
+        K137_ERROR(Viewer, "The new view needs OpenGL 3.2 or OpenGL ES 3.0 and {} offers {}.{}{}", graphicsApiName(api),
+                   found.major, found.minor, found.openGlEs ? " ES" : "");
+        break;
+    }
+    return problem;
+}
+
+bool canStart(GraphicsApi api)
+{
+    return checkStart(api) == StartProblem::None;
+}
+
+QLabel* makeFailureNotice(GraphicsApi api, StartProblem problem, QWidget* parent)
 {
     auto* notice = new QLabel(parent);
-    styleNotice(*notice, api);
+    styleNotice(*notice, api, problem);
     return notice;
 }
 
@@ -151,7 +217,7 @@ RhiView::RhiView(GraphicsApi api, QWidget* parent) : QRhiWidget(parent), m_api(a
     setApi(widgetApi(api));
     setSampleCount(kSamples);
     m_message = new QLabel(this);
-    styleNotice(*m_message, api);
+    styleNotice(*m_message, api, StartProblem::NoDevice);
     m_message->hide();
     connect(this, &QRhiWidget::renderFailed, this, &RhiView::fail);
 }
@@ -164,12 +230,14 @@ void RhiView::setViewportStyle(const ViewportStyle& style)
         return;
     }
     m_style = style;
+    m_chunks.update(m_scene, m_style);
     update();
 }
 
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
+    m_chunks.update(m_scene, m_style);
     update();
 }
 
@@ -278,8 +346,7 @@ void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
     QRhiResourceUpdateBatch* updates = nullptr;
     if (!m_failed && m_bodies != nullptr) {
         updates = rhi()->nextResourceUpdateBatch();
-        const DrawList list =
-            m_cache.draw(m_scene, makeFrame(m_camera, viewport(), m_scene.origin, background), m_style);
+        const DrawList list = m_chunks.draw(makeFrame(m_camera, viewport(), m_scene.origin, background));
         if (!m_bodies->prepare(list, updates)) {
             fail();
         }

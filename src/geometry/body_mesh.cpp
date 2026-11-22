@@ -10,6 +10,7 @@
 #include <Poly_PolygonOnTriangulation.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopExp.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
@@ -31,9 +32,10 @@ snapshot::Point point(const gp_XYZ& xyz)
     return {xyz.X(), xyz.Y(), xyz.Z()};
 }
 
-void addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
+bool addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
               std::unordered_map<int, std::uint32_t>& baseOf)
 {
+    bool complete = true;
     for (int index = 1; index <= faces.Extent(); ++index) {
         const TopoDS_Face& face = TopoDS::Face(faces(index));
         TopLoc_Location location;
@@ -41,6 +43,7 @@ void addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
         const auto id = mesh.faceCount++;
         if (triangulation.IsNull()) {
             mesh.faceDeflections.push_back(0.0);
+            complete = false;
             continue;
         }
         mesh.faceDeflections.push_back(triangulation->Deflection());
@@ -59,12 +62,13 @@ void addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
             }
             mesh.normals.push_back(point(normal.XYZ()));
         }
+        const bool flipped = reversed != placement.IsNegative();
         for (int i = 1; i <= triangulation->NbTriangles(); ++i) {
             int a = 0;
             int b = 0;
             int c = 0;
             triangulation->Triangle(i).Get(a, b, c);
-            if (reversed) {
+            if (flipped) {
                 std::swap(b, c);
             }
             mesh.triangles.push_back({base + static_cast<std::uint32_t>(a - 1),
@@ -73,6 +77,7 @@ void addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
             mesh.faces.push_back(id);
         }
     }
+    return complete;
 }
 
 void addEdges(const TopoDS_Shape& shape, const TopTools_IndexedMapOfShape& faces,
@@ -125,6 +130,21 @@ void addPoints(const TopoDS_Shape& shape, snapshot::Mesh& mesh)
     }
 }
 
+bool isClosed(const TopoDS_Shape& shape)
+{
+    if (TopExp_Explorer loose(shape, TopAbs_FACE, TopAbs_SOLID); loose.More()) {
+        return false;
+    }
+    bool shells = false;
+    for (TopExp_Explorer shell(shape, TopAbs_SHELL); shell.More(); shell.Next()) {
+        if (!BRep_Tool::IsClosed(shell.Current())) {
+            return false;
+        }
+        shells = true;
+    }
+    return shells;
+}
+
 } // namespace
 
 snapshot::Mesh meshBody(const TopoDS_Shape& shape)
@@ -137,10 +157,11 @@ snapshot::Mesh meshBody(const TopoDS_Shape& shape)
     TopTools_IndexedMapOfShape faces;
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
     std::unordered_map<int, std::uint32_t> baseOf;
-    addFaces(faces, mesh, baseOf);
+    const bool complete = addFaces(faces, mesh, baseOf);
     addEdges(shape, faces, baseOf, mesh);
     addPoints(shape, mesh);
     snapshot::setBounds(mesh);
+    mesh.closed = complete && isClosed(shape);
     return mesh;
 }
 

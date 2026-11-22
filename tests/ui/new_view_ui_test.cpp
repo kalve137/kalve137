@@ -10,11 +10,11 @@
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_navigation.h"
 #include "camera/camera.h"
+#include "render/chunk_set.h"
 #include "render/cpu_backend.h"
 #include "render/draw_list.h"
 #include "render/graphics_api.h"
 #include "render/rhi/rhi_view.h"
-#include "render/scene_cache.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 #include "viewer/occt_view_widget.h"
@@ -31,6 +31,7 @@
 #include <gp_Pnt.hxx>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -38,6 +39,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace kalve137::uitest {
 namespace {
@@ -94,14 +96,77 @@ void sendMouse(render::RhiView& canvas, QEvent::Type type, QPointF pos, Qt::Mous
 
 #if defined(_WIN32)
 constexpr render::GraphicsApi kUnavailableApi = render::GraphicsApi::Metal;
+constexpr std::array kOtherApis{render::GraphicsApi::Direct3D12, render::GraphicsApi::OpenGL};
 #else
 constexpr render::GraphicsApi kUnavailableApi = render::GraphicsApi::Direct3D11;
+constexpr std::array<render::GraphicsApi, 0> kOtherApis{};
 #endif
 
 bool sameColor(const QColor& a, const QColor& b)
 {
     return std::abs(a.red() - b.red()) <= kColorTolerance && std::abs(a.green() - b.green()) <= kColorTolerance &&
            std::abs(a.blue() - b.blue()) <= kColorTolerance;
+}
+
+struct Comparison {
+    bool sameSize = false;
+    std::size_t body = 0;
+    std::size_t different = 0;
+};
+
+render::Image cpuOf(const render::RhiView& canvas)
+{
+    render::ChunkSet chunks;
+    chunks.update(canvas.scene(), canvas.viewportStyle());
+    const render::DrawList list = chunks.draw(render::makeFrame(
+        canvas.camera(), canvas.viewport(), canvas.scene().origin, canvas.viewportStyle().background));
+    render::CpuBackend backend;
+    render::Image cpu;
+    backend.draw(list, 2, cpu);
+    return cpu;
+}
+
+Comparison compare(const QImage& gpu, const render::Image& cpu)
+{
+    Comparison result;
+    result.sameSize = gpu.width() == cpu.width && gpu.height() == cpu.height;
+    if (!result.sameSize) {
+        return result;
+    }
+    const QRgb background = cpu.at(0, 0);
+    for (int y = 0; y < cpu.height; ++y) {
+        const auto* line = reinterpret_cast<const QRgb*>(gpu.constScanLine(y));
+        for (int x = 0; x < cpu.width; ++x) {
+            const QRgb ours = cpu.at(x, y);
+            const QRgb theirs = line[x];
+            result.body += ours != background ? 1 : 0;
+            const int gap = std::max({std::abs(qRed(ours) - qRed(theirs)), std::abs(qGreen(ours) - qGreen(theirs)),
+                                      std::abs(qBlue(ours) - qBlue(theirs))});
+            result.different += gap > kBackendTolerance ? 1 : 0;
+        }
+    }
+    return result;
+}
+
+QImage grabbed(render::RhiView& canvas)
+{
+    return canvas.grabFramebuffer().convertToFormat(QImage::Format_ARGB32);
+}
+
+void expectShown(render::RhiView& canvas, const QImage& before, const std::string& step)
+{
+    const QImage gpu = grabbed(canvas);
+    ASSERT_FALSE(gpu.isNull()) << step;
+    const render::Image cpu = cpuOf(canvas);
+    const Comparison comparison = compare(gpu, cpu);
+    ASSERT_TRUE(comparison.sameSize) << step << ": " << gpu.width() << "x" << gpu.height() << " against " << cpu.width
+                                     << "x" << cpu.height;
+    const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+    EXPECT_GT(comparison.body, pixels / 50) << step;
+    EXPECT_LT(comparison.different, pixels / 100) << step << ": " << comparison.different << " pixels differ";
+    if (!before.isNull() && before.size() == gpu.size()) {
+        EXPECT_NE(before, gpu) << step << " changed nothing on screen";
+    }
 }
 
 TEST_F(NewViewTest, ClearsToTheViewportColor)
@@ -215,35 +280,13 @@ TEST_F(NewViewTest, DrawsTheTorusLikeTheCpuBackend)
     ASSERT_FALSE(gpu.isNull());
     EXPECT_TRUE(canvas->benchFrame()) << "the bench times multisampled frames";
 
-    const render::ViewportStyle style = canvas->viewportStyle();
-    const camera::Viewport viewport = canvas->viewport();
-    render::SceneCache cache;
-    const render::DrawList list =
-        cache.draw(scene, render::makeFrame(camera, viewport, scene.origin, style.background), style);
-    render::CpuBackend backend;
-    render::Image cpu;
-    backend.draw(list, 2, cpu);
-    ASSERT_EQ(gpu.width(), cpu.width);
-    ASSERT_EQ(gpu.height(), cpu.height);
-
-    const QRgb background = cpu.at(0, 0);
-    std::size_t body = 0;
-    std::size_t different = 0;
-    for (int y = 0; y < cpu.height; ++y) {
-        const auto* line = reinterpret_cast<const QRgb*>(gpu.constScanLine(y));
-        for (int x = 0; x < cpu.width; ++x) {
-            const QRgb ours = cpu.at(x, y);
-            const QRgb theirs = line[x];
-            body += ours != background ? 1 : 0;
-            const int gap = std::max({std::abs(qRed(ours) - qRed(theirs)), std::abs(qGreen(ours) - qGreen(theirs)),
-                                      std::abs(qBlue(ours) - qBlue(theirs))});
-            different += gap > kBackendTolerance ? 1 : 0;
-        }
-    }
+    const render::Image cpu = cpuOf(*canvas);
+    const Comparison comparison = compare(gpu, cpu);
+    ASSERT_TRUE(comparison.sameSize);
     const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-    EXPECT_GT(body, pixels / 20) << "the torus fills part of the view";
-    EXPECT_LT(different, pixels / 100) << different << " of " << pixels << " pixels differ by more than "
-                                       << kBackendTolerance;
+    EXPECT_GT(comparison.body, pixels / 20) << "the torus fills part of the view";
+    EXPECT_LT(comparison.different, pixels / 100)
+        << comparison.different << " of " << pixels << " pixels differ by more than " << kBackendTolerance;
     const std::filesystem::path shot = ui->save("gpu");
     QImage cpuShot(cpu.width, cpu.height, QImage::Format_ARGB32);
     for (int y = 0; y < cpu.height; ++y) {
@@ -253,6 +296,154 @@ TEST_F(NewViewTest, DrawsTheTorusLikeTheCpuBackend)
         }
     }
     cpuShot.save(QString::fromStdU16String((shot.parent_path() / "cpu.png").u16string()));
+}
+
+std::size_t differing(const QImage& a, const QImage& b)
+{
+    if (a.size() != b.size()) {
+        return static_cast<std::size_t>(std::max(a.width() * a.height(), b.width() * b.height()));
+    }
+    std::size_t count = 0;
+    for (int y = 0; y < a.height(); ++y) {
+        const auto* first = reinterpret_cast<const QRgb*>(a.constScanLine(y));
+        const auto* second = reinterpret_cast<const QRgb*>(b.constScanLine(y));
+        for (int x = 0; x < a.width(); ++x) {
+            const int gap =
+                std::max({std::abs(qRed(first[x]) - qRed(second[x])), std::abs(qGreen(first[x]) - qGreen(second[x])),
+                          std::abs(qBlue(first[x]) - qBlue(second[x]))});
+            count += gap > kColorTolerance ? 1 : 0;
+        }
+    }
+    return count;
+}
+
+camera::Camera obliqueAt(const snapshot::Point& center, double scale)
+{
+    camera::Camera camera;
+    EXPECT_TRUE(camera.setEyeAndCenter({center[0] + 300.0, center[1] - 200.0, center[2] + 250.0},
+                                       {center[0], center[1], center[2]}));
+    EXPECT_TRUE(camera.setUp({0.0, 0.0, 1.0}));
+    EXPECT_TRUE(camera.setScale(scale));
+    return camera;
+}
+
+TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point center{500.0, 200.0, 50.0};
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::box({center[0] - 10.0, center[1] - 10.0, center[2] - 10.0},
+                                               {center[0] + 10.0, center[1] + 10.0, center[2] + 10.0})));
+    const auto torus = render::test::shared(
+        render::test::bodyOf(render::test::torus({center[0] + 40.0, center[1], center[2]}, 64, 32), {}, 1));
+    const snapshot::Point origin{400.0, 200.0, 0.0};
+    canvas->setCamera(obliqueAt({center[0] + 20.0, center[1], center[2]}, 80.0));
+    canvas->setScene({.bodies = {box}, .origin = origin, .hidden = {}});
+    expectShown(*canvas, {}, "the first scene");
+    QImage previous = grabbed(*canvas);
+
+    const auto step = [&](const std::string& what) {
+        expectShown(*canvas, previous, what);
+        previous = grabbed(*canvas);
+    };
+    canvas->setScene({.bodies = {box, torus}, .origin = origin, .hidden = {}});
+    step("a body added");
+    const auto red = render::test::shared(
+        render::test::bodyOf(box->mesh, {.color = snapshot::Color{0.9F, 0.1F, 0.1F}, .faces = {}}));
+    canvas->setScene({.bodies = {red, torus}, .origin = origin, .hidden = {}});
+    step("a recolor");
+    canvas->setScene({.bodies = {torus}, .origin = origin, .hidden = {red}});
+    step("a hide");
+    canvas->setScene({.bodies = {red, torus}, .origin = origin, .hidden = {}});
+    step("a show");
+    const render::ViewportStyle themed = canvas->viewportStyle();
+    render::ViewportStyle light = themed;
+    light.body = {0.85F, 0.8F, 0.3F};
+    light.background = {0.9F, 0.92F, 0.95F};
+    canvas->setViewportStyle(light);
+    step("a theme change");
+
+    const snapshot::Point distant{20400.0, 200.0, 0.0};
+    canvas->setScene({.bodies = {red, torus}, .origin = distant, .hidden = {}});
+    expectShown(*canvas, {}, "an origin change");
+    const QImage moved = grabbed(*canvas);
+    EXPECT_LT(differing(moved, previous), static_cast<std::size_t>(moved.width() * moved.height()) / 200)
+        << "a new origin draws the same picture";
+    previous = moved;
+
+    render::ViewportStyle denser = canvas->viewportStyle();
+    denser.pixelRatio = 2.0;
+    canvas->setViewportStyle(denser);
+    expectShown(*canvas, {}, "a pixel ratio change");
+    EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, 2.0) << "the next frame draws at the new ratio";
+    canvas->setViewportStyle(themed);
+    expectShown(*canvas, {}, "the theme and the pixel ratio back");
+    EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, themed.pixelRatio);
+    ui->save("staleness");
+}
+
+std::size_t backFaceLeakAllowed(const render::RhiView& view, const QImage& image)
+{
+    const bool leaks = view.sampleCount() > 1;
+    return leaks ? static_cast<std::size_t>(image.width() * image.height()) / 2000 : 0;
+}
+
+std::optional<std::pair<std::size_t, std::size_t>> cullingGap(render::GraphicsApi api, QSize size,
+                                                              const render::ViewportStyle& style,
+                                                              const snapshot::Scene& scene,
+                                                              const camera::Camera& camera)
+{
+    if (!render::canStart(api)) {
+        return std::nullopt;
+    }
+    render::RhiView view(api);
+    view.setAttribute(Qt::WA_DontShowOnScreen);
+    view.resize(size);
+    view.show();
+    view.setViewportStyle(style);
+    view.setCamera(camera);
+    view.setScene(scene);
+    const QImage culled = grabbed(view);
+    render::ViewportStyle unculled = style;
+    unculled.cullClosed = false;
+    view.setViewportStyle(unculled);
+    return std::pair{differing(culled, grabbed(view)), backFaceLeakAllowed(view, culled)};
+}
+
+TEST_F(NewViewTest, CullingClosedBodiesChangesNoPixel)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const auto box =
+        render::test::shared(render::test::bodyOf(render::test::box({-10.0, -10.0, -10.0}, {10.0, 10.0, 10.0})));
+    const auto torus = render::test::shared(render::test::bodyOf(render::test::torus({45.0, 0.0, 0.0}, 64, 32), {}, 1));
+    const snapshot::Scene scene{.bodies = {box, torus}, .origin = {}, .hidden = {}};
+    const camera::Camera camera = obliqueAt({20.0, 0.0, 0.0}, 90.0);
+    canvas->setCamera(camera);
+    canvas->setScene(scene);
+    const render::ViewportStyle style = canvas->viewportStyle();
+    ASSERT_TRUE(style.cullClosed);
+    expectShown(*canvas, {}, "closed bodies culled");
+
+    const QImage culled = grabbed(*canvas);
+    render::ViewportStyle unculled = style;
+    unculled.cullClosed = false;
+    canvas->setViewportStyle(unculled);
+    const QImage all = grabbed(*canvas);
+    canvas->setViewportStyle(style);
+    EXPECT_LE(differing(culled, all), backFaceLeakAllowed(*canvas, culled))
+        << "the GPU winds front faces counterclockwise like the CPU backend";
+
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (const auto gap = cullingGap(api, canvas->size(), style, scene, camera)) {
+            EXPECT_LE(gap->first, gap->second) << render::graphicsApiName(api);
+        }
+    }
 }
 
 TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
@@ -272,6 +463,25 @@ TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
     const QString api = QString::fromUtf8(render::graphicsApiName(kUnavailableApi).data());
     EXPECT_TRUE(messages.front()->text().contains(api)) << messages.front()->text().toStdString();
     EXPECT_FALSE(window.menuBar()->grab().isNull());
+}
+
+TEST_F(NewViewTest, AnOpenGlBelowThreePointTwoShowsTheRequirementOnce)
+{
+    const render::DeviceProbe old{
+        .created = true, .texelFetch = true, .openGl = true, .openGlEs = false, .major = 3, .minor = 1};
+    const render::StartProblem problem = render::startProblem(old);
+    ASSERT_EQ(problem, render::StartProblem::TooOld);
+    QWidget host;
+    host.setAttribute(Qt::WA_DontShowOnScreen);
+    host.resize(kWindowSize);
+    QLabel* notice = render::makeFailureNotice(render::GraphicsApi::OpenGL, problem, &host);
+    host.show();
+    QTest::qWait(kSettleMs);
+    const QList<QLabel*> messages = host.findChildren<QLabel*>(QStringLiteral("viewFailure"));
+    ASSERT_EQ(messages.size(), 1);
+    EXPECT_EQ(messages.front(), notice);
+    EXPECT_TRUE(notice->text().contains(QStringLiteral("OpenGL 3.2 or OpenGL ES 3.0"))) << notice->text().toStdString();
+    EXPECT_TRUE(notice->text().contains(QStringLiteral("--view new")));
 }
 
 } // namespace

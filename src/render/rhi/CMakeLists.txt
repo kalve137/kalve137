@@ -20,7 +20,8 @@ target_link_libraries(kalve137_render_rhi
 qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
     PREFIX "/kalve137/shaders"
     BASE shaders
-    GLSL "100 es,120,150"
+    # The palette lookup needs texelFetch, which GLSL ES 100 and GLSL 120 lack.
+    GLSL "300 es,150"
     HLSL 50
     MSL 12
     FILES

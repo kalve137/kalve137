@@ -5,12 +5,15 @@
 
 #include "log/log.h"
 
+#include <QByteArray>
 #include <QFile>
 #include <QMatrix4x4>
 #include <QString>
 #include <rhi/qrhi.h>
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -19,10 +22,10 @@ namespace kalve137::render {
 
 namespace {
 
-constexpr int kSlots = 4;
-constexpr quint32 kPositionStride = sizeof(Position);
-constexpr quint32 kNormalStride = sizeof(Normal);
-constexpr quint32 kColorStride = sizeof(VertexColor);
+constexpr quint32 kVertexStride = sizeof(Vertex);
+constexpr quint32 kPositionOffset = offsetof(Vertex, position);
+constexpr quint32 kPackedOffset = offsetof(Vertex, packed);
+constexpr int kEntryBytes = sizeof(Entry);
 
 struct Uniforms {
     std::array<float, 16> viewProjection{};
@@ -43,10 +46,9 @@ QShader loadShader(const QString& name)
     return QShader::fromSerialized(file.readAll());
 }
 
-template <typename T>
-std::size_t bytesOf(const Stream<T>& stream)
+int paletteRows(std::size_t entries)
 {
-    return stream.data.size_bytes();
+    return static_cast<int>(std::max<std::size_t>(1, (entries + kPaletteWidth - 1) / kPaletteWidth));
 }
 
 } // namespace
@@ -62,93 +64,141 @@ RhiBackend::RhiBackend(QRhi* rhi) : m_rhi(rhi) {}
 
 RhiBackend::~RhiBackend() = default;
 
-bool RhiBackend::createUniforms()
+RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::bindingsFor(QRhiTexture* palette) const
 {
-    if (m_litBindings != nullptr) {
-        return true;
-    }
-    m_litUniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
-    m_unlitUniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
-    if (!m_litUniforms->create() || !m_unlitUniforms->create()) {
-        return false;
-    }
-    const auto bindings = [this](QRhiBuffer* uniforms) {
-        Owned<QRhiShaderResourceBindings> result(m_rhi->newShaderResourceBindings());
-        result->setBindings({QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, uniforms)});
-        return result->create() ? std::move(result) : nullptr;
-    };
-    m_litBindings = bindings(m_litUniforms.get());
-    m_unlitBindings = bindings(m_unlitUniforms.get());
-    return m_litBindings != nullptr && m_unlitBindings != nullptr;
+    Owned<QRhiShaderResourceBindings> bindings(m_rhi->newShaderResourceBindings());
+    bindings->setBindings(
+        {QRhiShaderResourceBinding::uniformBuffer(
+             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_uniforms.get()),
+         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, palette,
+                                                   m_sampler.get())});
+    return bindings->create() ? std::move(bindings) : nullptr;
 }
 
-bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
+bool RhiBackend::createShared()
 {
-    m_pipeline.reset();
-    if (!createUniforms()) {
-        K137_ERROR(Viewer, "The new view could not create its uniform buffers");
+    if (m_layout != nullptr) {
+        return true;
+    }
+    m_uniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
+    m_sampler.reset(m_rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
+                                      QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+    m_layoutTexture.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+    if (!m_uniforms->create() || !m_sampler->create() || !m_layoutTexture->create()) {
         return false;
     }
+    m_layout = bindingsFor(m_layoutTexture.get());
+    return m_layout != nullptr;
+}
+
+RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipeline(QRhiRenderPassDescriptor* pass, int samples,
+                                                             bool cull) const
+{
     const QShader vertex = loadShader(QStringLiteral("body.vert"));
     const QShader fragment = loadShader(QStringLiteral("body.frag"));
     if (!vertex.isValid() || !fragment.isValid()) {
         K137_ERROR(Viewer, "The new view could not load its body shaders");
-        return false;
+        return nullptr;
     }
-    Owned<QRhiGraphicsPipeline> pipeline(m_rhi->newGraphicsPipeline());
-    pipeline->setShaderStages({{QRhiShaderStage::Vertex, vertex}, {QRhiShaderStage::Fragment, fragment}});
+    Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
+    result->setShaderStages({{QRhiShaderStage::Vertex, vertex}, {QRhiShaderStage::Fragment, fragment}});
     QRhiVertexInputLayout layout;
-    layout.setBindings({QRhiVertexInputBinding(kPositionStride), QRhiVertexInputBinding(kNormalStride),
-                        QRhiVertexInputBinding(kColorStride)});
-    layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, 0},
-                          {1, 1, QRhiVertexInputAttribute::Float3, 0},
-                          {2, 2, QRhiVertexInputAttribute::UNormByte4, 0}});
-    pipeline->setVertexInputLayout(layout);
-    pipeline->setTopology(QRhiGraphicsPipeline::Triangles);
-    pipeline->setCullMode(QRhiGraphicsPipeline::None);
-    pipeline->setDepthTest(true);
-    pipeline->setDepthWrite(true);
-    pipeline->setDepthOp(QRhiGraphicsPipeline::Less);
-    pipeline->setSampleCount(samples);
-    pipeline->setShaderResourceBindings(m_litBindings.get());
-    pipeline->setRenderPassDescriptor(pass);
-    if (!pipeline->create()) {
+    layout.setBindings({QRhiVertexInputBinding(kVertexStride)});
+    layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, kPositionOffset},
+                          {0, 1, QRhiVertexInputAttribute::UNormByte4, kPackedOffset}});
+    result->setVertexInputLayout(layout);
+    result->setTopology(QRhiGraphicsPipeline::Triangles);
+    result->setFrontFace(QRhiGraphicsPipeline::CCW);
+    result->setCullMode(cull ? QRhiGraphicsPipeline::Back : QRhiGraphicsPipeline::None);
+    result->setDepthTest(true);
+    result->setDepthWrite(true);
+    result->setDepthOp(QRhiGraphicsPipeline::Less);
+    result->setSampleCount(samples);
+    result->setShaderResourceBindings(m_layout.get());
+    result->setRenderPassDescriptor(pass);
+    if (!result->create()) {
         K137_ERROR(Viewer, "The new view could not create its body pipeline at {}x samples", samples);
+        return nullptr;
+    }
+    return result;
+}
+
+bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
+{
+    m_culled.reset();
+    m_unculled.reset();
+    if (!createShared()) {
+        K137_ERROR(Viewer, "The new view could not create its shared GPU resources");
         return false;
     }
-    m_pipeline = std::move(pipeline);
+    m_culled = pipeline(pass, samples, true);
+    m_unculled = pipeline(pass, samples, false);
+    return m_culled != nullptr && m_unculled != nullptr;
+}
+
+bool RhiBackend::refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
+{
+    const std::size_t vertexBytes = chunk.vertices.size_bytes();
+    const std::size_t indexBytes = chunk.indices.size_bytes();
+    if (vertexBytes == 0 || vertexBytes > std::numeric_limits<quint32>::max() ||
+        indexBytes > std::numeric_limits<quint32>::max()) {
+        return false;
+    }
+    gpu.meshRevision = 0;
+    gpu.vertices.reset(
+        m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, static_cast<quint32>(vertexBytes)));
+    gpu.indices.reset(
+        m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, static_cast<quint32>(indexBytes)));
+    if (!gpu.vertices->create() || !gpu.indices->create()) {
+        return false;
+    }
+    updates->uploadStaticBuffer(gpu.vertices.get(), chunk.vertices.data());
+    updates->uploadStaticBuffer(gpu.indices.get(), chunk.indices.data());
+    gpu.indexCount = static_cast<std::uint32_t>(chunk.indices.size());
+    gpu.meshRevision = chunk.meshRevision;
+    ++m_meshUploads;
     return true;
 }
 
-QRhiBuffer* RhiBackend::upload(std::uint64_t id, Slot slot, const void* data, std::size_t bytes,
-                               QRhiResourceUpdateBatch* updates)
+bool RhiBackend::refreshPalette(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
 {
-    const std::uint64_t key = (id * kSlots) + static_cast<std::uint64_t>(slot);
-    auto [it, added] = m_buffers.try_emplace(key);
-    Gpu& gpu = it->second;
-    gpu.used = true;
-    if (!added) {
-        return gpu.buffer.get();
+    const int rows = paletteRows(chunk.palette.size());
+    if (gpu.palette == nullptr || gpu.palette->pixelSize().height() != rows) {
+        gpu.paletteRevision = 0;
+        gpu.bindings.reset();
+        gpu.palette.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(static_cast<int>(kPaletteWidth), rows)));
+        if (!gpu.palette->create()) {
+            return false;
+        }
+        gpu.bindings = bindingsFor(gpu.palette.get());
+        if (gpu.bindings == nullptr) {
+            return false;
+        }
     }
-    if (bytes == 0 || bytes > std::numeric_limits<quint32>::max()) {
-        m_buffers.erase(it);
-        return nullptr;
+    QByteArray texels(static_cast<qsizetype>(kPaletteWidth) * rows * kEntryBytes, '\0');
+    std::memcpy(texels.data(), chunk.palette.data(), chunk.palette.size_bytes());
+    updates->uploadTexture(gpu.palette.get(),
+                           QRhiTextureUploadEntry(0, 0, QRhiTextureSubresourceUploadDescription(texels)));
+    gpu.paletteRevision = chunk.paletteRevision;
+    ++m_paletteUploads;
+    return true;
+}
+
+bool RhiBackend::refresh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
+{
+    if (chunk.palette.size() > kPaletteEntries) {
+        return false;
     }
-    const QRhiBuffer::UsageFlags usage = slot == Slot::Indices ? QRhiBuffer::IndexBuffer : QRhiBuffer::VertexBuffer;
-    gpu.buffer.reset(m_rhi->newBuffer(QRhiBuffer::Immutable, usage, static_cast<quint32>(bytes)));
-    if (!gpu.buffer->create()) {
-        m_buffers.erase(it);
-        return nullptr;
+    if (gpu.meshRevision != chunk.meshRevision && !refreshMesh(chunk, gpu, updates)) {
+        return false;
     }
-    updates->uploadStaticBuffer(gpu.buffer.get(), data);
-    return gpu.buffer.get();
+    return gpu.paletteRevision == chunk.paletteRevision || refreshPalette(chunk, gpu, updates);
 }
 
 bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
 {
     m_calls.clear();
-    if (m_pipeline == nullptr) {
+    if (m_culled == nullptr || m_unculled == nullptr) {
         return false;
     }
     const Frame& frame = list.frame;
@@ -164,68 +214,48 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     uniforms.light = {frame.light[0], frame.light[1], frame.light[2], 0.0F};
     uniforms.look = {look.ambient, look.diffuse, look.shininess, 0.0F};
     uniforms.specular = {look.specular[0], look.specular[1], look.specular[2], 0.0F};
-    uniforms.options = {1.0F, 0.0F, 0.0F, 0.0F};
-    updates->updateDynamicBuffer(m_litUniforms.get(), 0, sizeof(Uniforms), &uniforms);
-    uniforms.options[0] = 0.0F;
-    updates->updateDynamicBuffer(m_unlitUniforms.get(), 0, sizeof(Uniforms), &uniforms);
+    uniforms.options = {list.lit ? 1.0F : 0.0F, 0.0F, 0.0F, 0.0F};
+    updates->updateDynamicBuffer(m_uniforms.get(), 0, sizeof(Uniforms), &uniforms);
 
-    for (auto& [key, gpu] : m_buffers) {
+    for (auto& [id, gpu] : m_chunks) {
         gpu.used = false;
     }
     bool complete = true;
-    for (const Batch& batch : list.batches) {
-        if (batch.kind != ItemKind::Faces || batch.triangles.data.empty()) {
+    for (const Chunk& chunk : list.chunks) {
+        if (chunk.indices.empty()) {
             continue;
         }
-        const std::size_t indexCount = batch.triangles.data.size() * 3;
-        if (indexCount > std::numeric_limits<std::uint32_t>::max()) {
+        Gpu& gpu = m_chunks[chunk.id];
+        if (!refresh(chunk, gpu, updates)) {
             complete = false;
             continue;
         }
-        Call call{
-            .positions = upload(batch.positions.id, Slot::Positions, batch.positions.data.data(),
-                                bytesOf(batch.positions), updates),
-            .normals =
-                upload(batch.normals.id, Slot::Normals, batch.normals.data.data(), bytesOf(batch.normals), updates),
-            .colors = upload(batch.colors.id, Slot::Colors, batch.colors.data.data(), bytesOf(batch.colors), updates),
-            .indices = upload(batch.triangles.id, Slot::Indices, batch.triangles.data.data(), bytesOf(batch.triangles),
-                              updates),
-            .indexCount = static_cast<std::uint32_t>(indexCount),
-            .lit = batch.lit,
-        };
-        if (call.positions == nullptr || call.normals == nullptr || call.colors == nullptr || call.indices == nullptr) {
-            complete = false;
-            continue;
-        }
-        m_calls.push_back(call);
+        gpu.used = true;
+        m_calls.push_back({.gpu = &gpu, .cull = list.cullClosed && chunk.closed});
     }
-    std::erase_if(m_buffers, [](const auto& item) { return !item.second.used; });
+    std::erase_if(m_chunks, [](const auto& item) { return !item.second.used; });
+    std::ranges::stable_partition(m_calls, [](const Call& call) { return call.cull; });
     if (!complete) {
-        K137_ERROR(Viewer, "The new view could not create the GPU buffers for every body");
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for every chunk");
     }
     return complete;
 }
 
 void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
 {
-    if (m_pipeline == nullptr || m_calls.empty()) {
-        return;
-    }
-    buffer->setGraphicsPipeline(m_pipeline.get());
-    buffer->setViewport(QRhiViewport(0, 0, static_cast<float>(size.width()), static_cast<float>(size.height())));
-    QRhiShaderResourceBindings* bound = nullptr;
+    const QRhiViewport viewport(0, 0, static_cast<float>(size.width()), static_cast<float>(size.height()));
+    const QRhiGraphicsPipeline* bound = nullptr;
     for (const Call& call : m_calls) {
-        QRhiShaderResourceBindings* bindings = call.lit ? m_litBindings.get() : m_unlitBindings.get();
-        if (bindings != bound) {
-            buffer->setShaderResources(bindings);
-            bound = bindings;
+        QRhiGraphicsPipeline* pipeline = call.cull ? m_culled.get() : m_unculled.get();
+        if (pipeline != bound) {
+            buffer->setGraphicsPipeline(pipeline);
+            buffer->setViewport(viewport);
+            bound = pipeline;
         }
-        const std::array<QRhiCommandBuffer::VertexInput, 3> inputs{QRhiCommandBuffer::VertexInput(call.positions, 0),
-                                                                   QRhiCommandBuffer::VertexInput(call.normals, 0),
-                                                                   QRhiCommandBuffer::VertexInput(call.colors, 0)};
-        buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data(), call.indices, 0,
-                               QRhiCommandBuffer::IndexUInt32);
-        buffer->drawIndexed(call.indexCount);
+        buffer->setShaderResources(call.gpu->bindings.get());
+        const QRhiCommandBuffer::VertexInput input(call.gpu->vertices.get(), 0);
+        buffer->setVertexInput(0, 1, &input, call.gpu->indices.get(), 0, QRhiCommandBuffer::IndexUInt32);
+        buffer->drawIndexed(call.gpu->indexCount);
     }
 }
 

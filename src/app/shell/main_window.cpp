@@ -90,11 +90,11 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         m_hiddenView = std::make_unique<viewer::OcctViewWidget>();
         m_view = m_hiddenView.get();
         const render::GraphicsApi api = options.graphicsApi.value_or(render::platformGraphicsApi());
-        if (render::canStart(api)) {
+        if (const render::StartProblem problem = render::checkStart(api); problem == render::StartProblem::None) {
             m_rhiView = new render::RhiView(api, this);
             setCentralWidget(m_rhiView);
         } else {
-            setCentralWidget(render::makeFailureNotice(api, this));
+            setCentralWidget(render::makeFailureNotice(api, problem, this));
         }
     } else {
         m_view = new viewer::OcctViewWidget(this);

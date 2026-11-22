@@ -42,6 +42,7 @@ struct Mesh {
     std::uint32_t pointCount = 0;
     Point low{};
     Point high{};
+    bool closed = false;
 };
 
 inline void setBounds(Mesh& mesh)

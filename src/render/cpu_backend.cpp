@@ -89,23 +89,18 @@ Normal unit(const Normal& vector)
 
 CpuBackend::CpuBackend(int threads) : m_pool(defaultThreads(threads)) {}
 
-Report CpuBackend::draw(const DrawList& list, int supersample, Image& image)
+void CpuBackend::draw(const DrawList& list, int supersample, Image& image)
 {
-    Report report;
-    for (const Batch& batch : list.batches) {
-        if (batch.kind != ItemKind::Faces && std::ranges::find(report.skipped, batch.kind) == report.skipped.end()) {
-            report.skipped.push_back(batch.kind);
-        }
-    }
     const Frame& frame = list.frame;
     m_frame = frame;
+    m_lit = list.lit;
     m_width = std::max(0, frame.width);
     m_height = std::max(0, frame.height);
     image.width = m_width;
     image.height = m_height;
     image.pixels.resize(static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height));
     if (m_width == 0 || m_height == 0) {
-        return report;
+        return;
     }
     m_supersample = std::max(1, supersample);
     m_tileSamples = kTilePixels * m_supersample;
@@ -122,7 +117,6 @@ Report CpuBackend::draw(const DrawList& list, int supersample, Image& image)
     project(list);
     bin();
     m_pool.run(m_tilesX * m_tilesY, [&](int tile, int worker) { shadeTile(tile, worker, image); });
-    return report;
 }
 
 void CpuBackend::project(const DrawList& list)
@@ -134,18 +128,14 @@ void CpuBackend::project(const DrawList& list)
     const int chunks = m_pool.size() * kChunksPerThread;
     m_vertices.clear();
     m_triangles.clear();
-    for (const Batch& batch : list.batches) {
-        if (batch.kind != ItemKind::Faces) {
-            continue;
-        }
-        const std::span<const Position> positions = batch.positions.data;
-        const std::span<const Normal> normals = batch.normals.data;
+    for (const Chunk& item : list.chunks) {
+        const std::span<const Vertex> vertices = item.vertices;
         const auto offset = static_cast<std::uint32_t>(m_vertices.size());
-        m_vertices.resize(m_vertices.size() + positions.size());
+        m_vertices.resize(m_vertices.size() + vertices.size());
         m_pool.run(chunks, [&](int chunk, int) {
-            const std::size_t last = chunkStart(positions.size(), chunk + 1, chunks);
-            for (std::size_t i = chunkStart(positions.size(), chunk, chunks); i < last; ++i) {
-                const Position& p = positions[i];
+            const std::size_t last = chunkStart(vertices.size(), chunk + 1, chunks);
+            for (std::size_t i = chunkStart(vertices.size(), chunk, chunks); i < last; ++i) {
+                const Position& p = vertices[i].position;
                 const auto row = [&](int r) {
                     const auto index = static_cast<std::size_t>(r);
                     return (static_cast<double>(m[index]) * p[0]) + (static_cast<double>(m[index + 4]) * p[1]) +
@@ -160,19 +150,29 @@ void CpuBackend::project(const DrawList& list)
                 out.x = fixed((row(0) / w + 1.0) * 0.5 * width);
                 out.y = fixed((1.0 - row(1) / w) * 0.5 * height);
                 out.z = static_cast<float>(row(2) / w);
-                out.normal = i < normals.size() ? normals[i] : Normal{0.0F, 0.0F, 1.0F};
+                out.normal = decodeNormal(vertices[i].packed[0], vertices[i].packed[1]);
                 out.position = p;
             }
         });
-        const std::span<const VertexColor> colors = batch.colors.data;
-        for (const snapshot::Triangle& triangle : batch.triangles.data) {
-            const VertexColor color = triangle[0] < colors.size() ? colors[triangle[0]] : VertexColor{};
-            m_triangles.push_back({.a = offset + triangle[0],
-                                   .b = offset + triangle[1],
-                                   .c = offset + triangle[2],
+        const bool cull = list.cullClosed && item.closed;
+        const std::span<const std::uint32_t> indices = item.indices;
+        for (std::size_t i = 0; i + 2 < indices.size(); i += 3) {
+            if (indices[i] >= vertices.size() || indices[i + 1] >= vertices.size() ||
+                indices[i + 2] >= vertices.size()) {
+                continue;
+            }
+            const std::uint32_t entry = entryOf(vertices[indices[i]]);
+            if (entry >= item.palette.size() || (item.palette[entry][3] & kEntryVisible) == 0) {
+                continue;
+            }
+            const Entry& value = item.palette[entry];
+            const VertexColor color{value[0], value[1], value[2], 255};
+            m_triangles.push_back({.a = offset + indices[i],
+                                   .b = offset + indices[i + 1],
+                                   .c = offset + indices[i + 2],
                                    .color = color,
                                    .linear = linearOf(color),
-                                   .lit = batch.lit});
+                                   .cull = cull});
         }
     }
 }
@@ -203,7 +203,7 @@ void CpuBackend::bin()
             }
             const std::int64_t area = (static_cast<std::int64_t>(b.x - a.x) * (c.y - a.y)) -
                                       (static_cast<std::int64_t>(b.y - a.y) * (c.x - a.x));
-            if (area == 0) {
+            if (area == 0 || (m_triangles[i].cull && area > 0)) {
                 continue;
             }
             const int minX = std::min({a.x, b.x, c.x}) >> kSubpixelBits;
@@ -319,7 +319,7 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
                     const float z = a.z + (dz1 * f1) + (dz2 * f2);
                     if (z < depth[index] && z >= -1.0F && z <= 1.0F) {
                         depth[index] = z;
-                        if (!triangle.lit) {
+                        if (!m_lit) {
                             color[index] = flat;
                         } else {
                             const Normal normal = unit(interpolated(a.normal, dn1, dn2, f1, f2));
