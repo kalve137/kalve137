@@ -50,8 +50,10 @@
 #include <exception>
 #include <functional>
 #include <future>
+#include <memory>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace kalve137::app {
 
@@ -372,12 +374,43 @@ void MainWindow::openDesign()
     }
 }
 
+void MainWindow::openDesignWhenShown(const std::filesystem::path& path)
+{
+    statusBar()->showMessage(tr("Opening %1...").arg(toQString(path.filename())));
+    auto connections = std::make_shared<std::vector<QMetaObject::Connection>>();
+    const auto open = [this, path, connections](bool drawn) {
+        if (drawn && !centralWidget()->isVisible()) {
+            return;
+        }
+        for (const QMetaObject::Connection& connection : *connections) {
+            disconnect(connection);
+        }
+        connections->clear();
+        QTimer::singleShot(0, this, [this, path] { openDesignAt(path); });
+    };
+    if (m_rhiView != nullptr) {
+        connections->push_back(connect(m_rhiView, &QRhiWidget::frameSubmitted, this, [open] { open(true); }));
+        connections->push_back(connect(m_rhiView, &render::RhiView::ready, this, [open] { open(false); }));
+        connections->push_back(connect(m_rhiView, &QRhiWidget::renderFailed, this, [open] { open(false); }));
+    } else if (centralWidget() == m_view) {
+        connections->push_back(connect(m_view, &viewer::OcctViewWidget::rendered, this, [open] { open(true); }));
+    } else {
+        open(false);
+    }
+}
+
 void MainWindow::openDesignAt(const std::filesystem::path& path)
 {
+    const QString fileName = toQString(path.filename());
+    statusBar()->showMessage(tr("Opening %1...").arg(fileName));
+    statusBar()->repaint();
+    std::optional<BusyCursor> busy(std::in_place);
     core::Document document;
     try {
         document = core::loadDesign(path, shapesOf(path));
     } catch (const std::exception& error) {
+        busy.reset();
+        statusBar()->clearMessage();
         reportFailure(this, tr("Open Failed"), error);
         return;
     }
@@ -394,6 +427,7 @@ void MainWindow::openDesignAt(const std::filesystem::path& path)
     }
     m_session->reset(std::move(document), path);
     m_cameraCommands->home(CameraCommands::Move::Jump);
+    statusBar()->showMessage(tr("Opened %1").arg(fileName), kMessageTimeoutMs);
 }
 
 void MainWindow::openSample()

@@ -60,6 +60,7 @@ public:
     ~MainWindow() override;
 
     void openDesignAt(const std::filesystem::path& path);
+    void openDesignWhenShown(const std::filesystem::path& path);
     viewer::OcctViewWidget* oldView() const { return m_view; }
     render::RhiView* newView() const { return m_rhiView; }
     CameraCommands* cameraCommands() const { return m_cameraCommands; }

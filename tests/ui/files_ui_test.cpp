@@ -4,21 +4,33 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/session/design_session.h"
+#include "app/shell/main_window.h"
+#include "app/shell/startup_options.h"
+#include "render/rhi/rhi_view.h"
+#include "viewer/occt_view_widget.h"
+
 #include <QAbstractButton>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSize>
 #include <QStandardPaths>
+#include <QStatusBar>
+#include <QTest>
 
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <optional>
 #include <system_error>
 
 namespace kalve137::uitest {
 namespace {
 
 constexpr double kTolerance = 1e-3;
+constexpr QSize kStartupWindowSize{1000, 700};
+constexpr int kStartupOpenMs = 20000;
 
 using FilesTest = UiTest;
 
@@ -191,6 +203,36 @@ TEST_F(FilesTest, OpenSampleOpensAnUntitledCopyOfTheDodecahedron)
     ui->trigger("Save");
     EXPECT_TRUE(std::filesystem::exists(copy));
     EXPECT_EQ(pendingAnswers(), 0U);
+}
+
+TEST_F(FilesTest, ADesignFromTheCommandLineOpensAfterTheWindowHasDrawn)
+{
+    app::MainWindow window(app::startupFromEnvironment());
+    window.setAttribute(Qt::WA_DontShowOnScreen);
+    window.resize(kStartupWindowSize);
+    const auto* session = window.findChild<app::DesignSession*>();
+    ASSERT_NE(session, nullptr);
+    std::optional<QSize> lastEmptyFrame;
+    const auto recordFrame = [&](const QWidget& view) {
+        if (session->document().features().empty()) {
+            lastEmptyFrame = view.size();
+        }
+    };
+    if (render::RhiView* canvas = window.newView()) {
+        QObject::connect(canvas, &render::RhiView::ready, &window, [&, canvas] { recordFrame(*canvas); });
+    } else {
+        viewer::OcctViewWidget* view = window.oldView();
+        QObject::connect(view, &viewer::OcctViewWidget::rendered, &window, [&, view] { recordFrame(*view); });
+    }
+
+    window.openDesignWhenShown(std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples" / "dodecahedron.k137");
+    EXPECT_EQ(window.statusBar()->currentMessage(), QStringLiteral("Opening dodecahedron.k137..."));
+    window.show();
+    ASSERT_TRUE(QTest::qWaitFor([&] { return !session->document().features().empty(); }, kStartupOpenMs));
+
+    ASSERT_TRUE(lastEmptyFrame.has_value()) << "The design loaded before the window drew";
+    EXPECT_EQ(*lastEmptyFrame, window.centralWidget()->size());
+    EXPECT_EQ(window.statusBar()->currentMessage(), QStringLiteral("Opened dodecahedron.k137"));
 }
 
 } // namespace
