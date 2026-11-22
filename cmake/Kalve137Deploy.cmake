@@ -57,6 +57,7 @@ function(kalve137_install_app target)
         NO_COMPILER_RUNTIME
         NO_UNSUPPORTED_PLATFORM_ERROR
         DEPLOY_TOOL_OPTIONS --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler
+            --exclude-plugins qtuiotouchplugin
     )
     install(SCRIPT ${deploy_script})
 
