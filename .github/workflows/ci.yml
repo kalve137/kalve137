@@ -44,7 +44,8 @@ jobs:
       VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
       VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
       VCPKG_TRIPLET: x64-windows-release
-      QT_VERSION: 6.10.2
+      QT_VERSION: 6.12.0
+      AQT_SOURCE: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
       LLVM_VERSION: 22.1.8
       SOFTWARE_GL_DIR: C:\software-gl
     steps:
@@ -68,6 +69,7 @@ jobs:
           arch: win64_msvc2022_64
           dir: C:\
           cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
 
       - name: Add the Qt license text
         run: |
