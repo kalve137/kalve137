@@ -49,6 +49,9 @@ private:
         std::uint32_t c = 0;
         VertexColor color{};
         Linear linear{};
+        VertexColor highlight{};
+        Linear highlightLinear{};
+        float weight = 0.0F;
         bool cull = false;
         bool flat = false;
         bool biased = false;
@@ -87,6 +90,9 @@ private:
     int m_tileSamples = 0;
     std::uint32_t m_background = 0;
     VertexColor m_edgeColor{};
+    VertexColor m_hover{};
+    VertexColor m_selected{};
+    bool m_highlightedEdgesOnly = false;
     bool m_ids = false;
     std::vector<Projected> m_vertices;
     std::vector<Triangle> m_triangles;

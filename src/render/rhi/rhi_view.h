@@ -63,6 +63,7 @@ public:
     const ViewportStyle& viewportStyle() const { return m_style; }
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
+    void setHighlight(Highlight highlight);
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
     camera::Viewport viewport() const;
@@ -82,6 +83,8 @@ public:
 signals:
     void ready();
     void resized();
+    void sceneChanged();
+    void mouseLeft();
     void mousePressed(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
                       Qt::KeyboardModifiers modifiers);
     void mouseReleased(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
@@ -98,6 +101,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     struct IdTargets;

@@ -101,6 +101,10 @@ add_library(kalve137_app STATIC
     view/grid_settings.h
     view/new_view_navigation.cpp
     view/new_view_navigation.h
+    view/new_view_picker.cpp
+    view/new_view_picker.h
+    view/pick.h
+    view/pick_source.h
     view/scene.cpp
     view/scene.h
     view/scene_construction.cpp

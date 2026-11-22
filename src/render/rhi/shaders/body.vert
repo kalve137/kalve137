@@ -9,6 +9,7 @@ layout(location = 1) in vec4 normalAndEntry;
 layout(location = 0) out vec3 linearColor;
 layout(location = 1) out vec3 surfaceNormal;
 layout(location = 2) out vec3 surfacePosition;
+layout(location = 3) flat out vec4 highlight;
 
 layout(std140, binding = 0) uniform Frame {
     mat4 viewProjection;
@@ -20,9 +21,15 @@ layout(std140, binding = 0) uniform Frame {
     vec4 options;
     vec4 edge;
     vec4 target;
+    vec4 hover;
+    vec4 selected;
 };
 
 layout(binding = 1) uniform sampler2D palette;
+
+const int visibleFlag = 1;
+const int hoveredFlag = 2;
+const int selectedFlag = 4;
 
 vec3 toLinear(vec3 encoded)
 {
@@ -45,10 +52,14 @@ void main()
 {
     int entry = int(round(normalAndEntry.z * 255.0)) + int(round(normalAndEntry.w * 255.0)) * 256;
     vec4 value = texelFetch(palette, ivec2(entry % 256, entry / 256), 0);
+    int flags = int(round(value.a * 255.0));
     linearColor = toLinear(value.rgb);
     surfaceNormal = decodeNormal(normalAndEntry.xy);
     surfacePosition = position;
-    if ((int(round(value.a * 255.0)) & 1) == 0) {
+    highlight = (flags & selectedFlag) != 0 ? vec4(toLinear(selected.rgb), 1.0)
+                : (flags & hoveredFlag) != 0 ? vec4(toLinear(hover.rgb), hover.a)
+                                             : vec4(0.0);
+    if ((flags & visibleFlag) == 0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         return;
     }

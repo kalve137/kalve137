@@ -170,6 +170,9 @@ void CpuBackend::project(const DrawList& list)
     m_vertices.clear();
     m_triangles.clear();
     m_edgeColor = vertexColor(list.edgeColor);
+    m_hover = vertexColor(list.hover);
+    m_selected = vertexColor(list.selected);
+    m_highlightedEdgesOnly = list.highlightedEdgesOnly;
     for (const Chunk& item : list.chunks) {
         if (list.edges) {
             projectSegments(list, item.segments, item.edgePalette, list.edgeWidth * list.pixelRatio, 0);
@@ -223,11 +226,20 @@ void CpuBackend::projectFaces(const DrawList& list, const Chunk& item, std::uint
         }
         const Entry& value = item.palette[entry];
         const VertexColor color{value[0], value[1], value[2], 255};
+        const bool selected = (value[3] & kEntrySelected) != 0;
+        const bool hovered = !selected && (value[3] & kEntryHovered) != 0;
+        const VertexColor highlight = selected ? m_selected : m_hover;
         m_triangles.push_back({.a = offset + indices[i],
                                .b = offset + indices[i + 1],
                                .c = offset + indices[i + 2],
                                .color = color,
                                .linear = linearOf(color),
+                               .highlight = highlight,
+                               .highlightLinear = linearOf(highlight),
+                               .weight = m_ids      ? 0.0F
+                                         : selected ? 1.0F
+                                         : hovered  ? kHoverWeight
+                                                    : 0.0F,
                                .cull = cull,
                                .flat = !list.lit,
                                .biased = list.edges,
@@ -242,7 +254,6 @@ void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> 
     const double width = static_cast<double>(m_width) * m_supersample;
     const double height = static_cast<double>(m_height) * m_supersample;
     const double edgeWidth = widthPixels * m_supersample;
-    const VertexColor color = m_edgeColor;
     const auto clipOf = [&m](const Position& p) {
         Clip clip{};
         for (std::size_t r = 0; r < clip.size(); ++r) {
@@ -256,6 +267,15 @@ void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> 
         if (entry >= palette.size() || (palette[entry][3] & kEntryVisible) == 0) {
             continue;
         }
+        const auto state = static_cast<EdgeState>(palette[entry][0]);
+        const bool highlighted = state == EdgeState::Hovered || state == EdgeState::Selected;
+        if (!m_ids && m_highlightedEdgesOnly && !highlighted) {
+            continue;
+        }
+        const VertexColor color = m_ids                          ? m_edgeColor
+                                  : state == EdgeState::Selected ? m_selected
+                                  : state == EdgeState::Hovered  ? m_hover
+                                                                 : m_edgeColor;
         const Clip start = clipOf(segment.start);
         const Clip end = clipOf(segment.end);
         const auto first = static_cast<std::uint32_t>(m_vertices.size());
@@ -429,7 +449,13 @@ void CpuBackend::shadeTile(int tile, int worker)
         const Normal dn2 = difference(c.normal, a.normal, inverse);
         const Position dp1 = difference(b.position, a.position, inverse);
         const Position dp2 = difference(c.position, a.position, inverse);
-        const std::uint32_t flat = pack(triangle.color[0], triangle.color[1], triangle.color[2]);
+        const float weight = triangle.weight;
+        const auto blend = [weight](std::uint8_t base, std::uint8_t tint) {
+            return (static_cast<float>(base) * (1.0F - weight)) + (static_cast<float>(tint) * weight);
+        };
+        const std::uint32_t flat =
+            pack(blend(triangle.color[0], triangle.highlight[0]), blend(triangle.color[1], triangle.highlight[1]),
+                 blend(triangle.color[2], triangle.highlight[2]));
         float bias = 0.0F;
         if (triangle.biased) {
             const float slopeX = std::abs((dz1 * static_cast<float>(stepX1)) + (dz2 * static_cast<float>(stepX2)));
@@ -462,8 +488,17 @@ void CpuBackend::shadeTile(int tile, int worker)
                                                     ? viewAt(interpolated(a.position, dp1, dp2, f1, f2), m_frame)
                                                     : m_frame.eye;
                             const Linear shaded = lit(normal, view, triangle.linear, m_frame);
-                            color[index] =
-                                kOpaque | (encoded(shaded[0]) << 16) | (encoded(shaded[1]) << 8) | encoded(shaded[2]);
+                            if (weight > 0.0F) {
+                                const Linear tint = lit(normal, view, triangle.highlightLinear, m_frame);
+                                const auto mixed = [&](std::size_t c) {
+                                    return (static_cast<float>(encoded(shaded[c])) * (1.0F - weight)) +
+                                           (static_cast<float>(encoded(tint[c])) * weight);
+                                };
+                                color[index] = pack(mixed(0), mixed(1), mixed(2));
+                            } else {
+                                color[index] = kOpaque | (encoded(shaded[0]) << 16) | (encoded(shaded[1]) << 8) |
+                                               encoded(shaded[2]);
+                            }
                         }
                     }
                 }

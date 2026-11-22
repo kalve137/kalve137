@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -31,7 +32,14 @@ struct PickedItem {
     PickKind kind = PickKind::None;
     std::uint32_t index = 0;
 
-    bool operator==(const PickedItem&) const = default;
+    auto operator<=>(const PickedItem&) const = default;
+};
+
+struct Highlight {
+    std::set<PickedItem> hovered;
+    std::set<PickedItem> selected;
+
+    bool operator==(const Highlight&) const = default;
 };
 
 class ChunkSet {
@@ -41,6 +49,8 @@ public:
     explicit ChunkSet(std::size_t vertexBudget = kDefaultVertexBudget) : m_vertexBudget(vertexBudget) {}
 
     void update(const snapshot::Scene& scene, const ViewportStyle& style);
+    void setHighlight(Highlight highlight);
+    const Highlight& highlight() const { return m_highlight; }
     DrawList draw(const Frame& frame) const;
     DrawList pickList(const Frame& frame) const;
     void clear();
@@ -52,6 +62,7 @@ public:
     std::size_t segmentCount() const;
     std::uint64_t meshBuilds() const { return m_meshBuilds; }
     std::uint64_t paletteBuilds() const { return m_paletteBuilds; }
+    std::uint64_t highlightWrites() const { return m_highlightWrites; }
 
 private:
     using Key = std::tuple<int, int, std::uint32_t>;
@@ -104,6 +115,9 @@ private:
     Chunk chunkOf(const Data& chunk) const;
     void buildPalette(Data& chunk);
     Entry colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const;
+    Entry* entryFor(const PickedItem& item, Data** chunk);
+    void writeState(const PickedItem& item, Entry& entry) const;
+    bool edgesHighlighted() const;
 
     std::size_t m_vertexBudget;
     std::vector<std::unique_ptr<Data>> m_chunks;
@@ -118,9 +132,13 @@ private:
     snapshot::Color m_edgeColor;
     snapshot::Color m_fallback;
     snapshot::Color m_fill;
+    snapshot::Color m_hover;
+    snapshot::Color m_selected;
+    Highlight m_highlight;
     std::uint64_t m_nextId = 1;
     std::uint64_t m_meshBuilds = 0;
     std::uint64_t m_paletteBuilds = 0;
+    std::uint64_t m_highlightWrites = 0;
 };
 
 } // namespace kalve137::render

@@ -240,6 +240,7 @@ RhiView::RhiView(GraphicsApi api, QWidget* parent) : QRhiWidget(parent), m_api(a
 {
     setApi(widgetApi(api));
     setSampleCount(kSamples);
+    setMouseTracking(true);
     m_message = new QLabel(this);
     styleNotice(*m_message, api, StartProblem::NoDevice);
     m_message->hide();
@@ -261,6 +262,16 @@ void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
     updateChunks();
+    emit sceneChanged();
+}
+
+void RhiView::setHighlight(Highlight highlight)
+{
+    if (highlight == m_chunks.highlight()) {
+        return;
+    }
+    m_chunks.setHighlight(std::move(highlight));
+    update();
 }
 
 void RhiView::updateChunks()
@@ -529,6 +540,12 @@ void RhiView::wheelEvent(QWheelEvent* event)
 {
     event->accept();
     emit wheelTurned(event->position(), event->angleDelta().y() / kWheelNotch);
+}
+
+void RhiView::leaveEvent(QEvent* event)
+{
+    QRhiWidget::leaveEvent(event);
+    emit mouseLeft();
 }
 
 void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)

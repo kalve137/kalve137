@@ -23,7 +23,7 @@ class MeasurePanel : public QWidget {
     Q_OBJECT
 
 public:
-    MeasurePanel(Scene& scene, viewer::OcctViewWidget* view, QWidget* parent = nullptr);
+    MeasurePanel(Scene& scene, PickSource& picks, viewer::OcctViewWidget* view, QWidget* parent = nullptr);
 
     void start();
     void stop();
@@ -39,6 +39,7 @@ private:
     void showOverlay(const Handle(AIS_InteractiveObject)& object);
 
     Scene& m_scene;
+    PickSource& m_source;
     viewer::OcctViewWidget* m_view;
     bool m_active = false;
     std::vector<Pick> m_picks;

@@ -8,6 +8,8 @@ layout(location = 1) in vec3 start;
 layout(location = 2) in vec3 end;
 layout(location = 3) in vec4 entryBytes;
 
+layout(location = 0) flat out vec3 edgeColor;
+
 layout(std140, binding = 0) uniform Frame {
     mat4 viewProjection;
     vec4 eye;
@@ -18,9 +20,14 @@ layout(std140, binding = 0) uniform Frame {
     vec4 options;
     vec4 edge;
     vec4 target;
+    vec4 hover;
+    vec4 selected;
 };
 
 layout(binding = 1) uniform sampler2D palette;
+
+const int hoveredState = 1;
+const int selectedState = 2;
 
 const float nearW = 1e-6;
 const float shortest = 1e-9;
@@ -52,7 +59,10 @@ void main()
 {
     int entry = int(round(entryBytes.x * 255.0)) + int(round(entryBytes.y * 255.0)) * 256;
     vec4 value = texelFetch(palette, ivec2(entry % 256, entry / 256), 0);
-    if ((int(round(value.a * 255.0)) & 1) == 0) {
+    int state = int(round(value.r * 255.0));
+    edgeColor = state == selectedState ? selected.rgb : state == hoveredState ? hover.rgb : edge.rgb;
+    bool hiddenByStyle = options.y > 0.5 && state != hoveredState && state != selectedState;
+    if ((int(round(value.a * 255.0)) & 1) == 0 || hiddenByStyle) {
         gl_Position = outside;
         return;
     }

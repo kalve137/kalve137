@@ -9,6 +9,8 @@
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_navigation.h"
+#include "app/view/new_view_picker.h"
+#include "app/view/pick.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
@@ -32,11 +34,13 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QMouseEvent>
+#include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_InteractiveObject.hxx>
+#include <TopAbs_ShapeEnum.hxx>
 #include <TopLoc_Location.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Trsf.hxx>
@@ -134,6 +138,7 @@ render::Image cpuOf(const render::RhiView& canvas)
 {
     render::ChunkSet chunks;
     chunks.update(canvas.scene(), canvas.viewportStyle());
+    chunks.setHighlight(canvas.chunks().highlight());
     const render::DrawList list = chunks.draw(render::makeFrame(
         canvas.camera(), canvas.viewport(), canvas.scene().origin, canvas.viewportStyle().background));
     render::CpuBackend backend;
@@ -373,6 +378,51 @@ TEST_F(NewViewTest, DrawsEdgesLikeTheCpuBackend)
             << " drawn pixels differ by more than " << kBackendTolerance;
         ui->save("edges " + std::to_string(static_cast<int>(visual)));
     }
+    canvas->setViewportStyle(original);
+}
+
+TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
+    canvas->setScene({.bodies = {box}, .origin = origin, .hidden = {}});
+    canvas->setCamera(obliqueAt({1000.0, -1000.0, 0.0}, 50.0));
+    const auto item = [](render::PickKind kind, std::uint32_t index) {
+        return render::PickedItem{.feature = 1, .part = 0, .kind = kind, .index = index};
+    };
+    const render::Highlight highlight{
+        .hovered = {item(render::PickKind::Face, 5)},
+        .selected = {item(render::PickKind::Face, 2)},
+    };
+    const render::ViewportStyle original = canvas->viewportStyle();
+    for (const render::VisualStyle visual : {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Shaded}) {
+        render::ViewportStyle style = original;
+        style.visualStyle = visual;
+        canvas->setViewportStyle(style);
+        canvas->setHighlight({});
+        const QImage plain = grabbed(*canvas);
+        render::Highlight withEdges = highlight;
+        for (std::uint32_t edge = 0; edge < box->mesh->edgeCount; ++edge) {
+            (edge % 2 == 0 ? withEdges.hovered : withEdges.selected).insert(item(render::PickKind::Edge, edge));
+        }
+        canvas->setHighlight(withEdges);
+        const QImage gpu = grabbed(*canvas);
+        const render::Image cpu = cpuOf(*canvas);
+        const Comparison comparison = compare(gpu, cpu);
+        ASSERT_TRUE(comparison.sameSize);
+        const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+        EXPECT_GT(differing(plain, gpu), comparison.body / 3) << static_cast<int>(visual) << ": the highlight shows";
+        EXPECT_LT(comparison.different, pixels / 200)
+            << static_cast<int>(visual) << ": " << comparison.different << " of " << comparison.body
+            << " drawn pixels differ by more than " << kBackendTolerance;
+        ui->save("highlight " + std::to_string(static_cast<int>(visual)));
+    }
+    canvas->setHighlight({});
     canvas->setViewportStyle(original);
 }
 
@@ -750,6 +800,117 @@ TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
         << "a hidden body picks nothing";
     EXPECT_EQ(canvas->idPasses(), passes + 4);
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
+}
+
+void click(render::RhiView& canvas, QPointF position, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+{
+    QMouseEvent press(QEvent::MouseButtonPress, position, canvas.mapToGlobal(position), Qt::LeftButton, Qt::LeftButton,
+                      modifiers);
+    QApplication::sendEvent(&canvas, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, position, canvas.mapToGlobal(position), Qt::LeftButton,
+                        Qt::NoButton, modifiers);
+    QApplication::sendEvent(&canvas, &release);
+    QApplication::processEvents();
+}
+
+TEST_F(NewViewTest, HoverAndClicksSelectThroughTheIdPass)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    auto* picker = ui->window().findChild<app::NewViewPicker*>();
+    ASSERT_NE(picker, nullptr);
+    ui->window().openDesignAt(std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples" / "dodecahedron.k137");
+    ui->settle();
+    waitForCamera(*ui->window().cameraCommands());
+    QSignalSpy hovers(picker, &app::PickSource::hoverChanged);
+    QSignalSpy selections(picker, &app::PickSource::selectionChanged);
+    EXPECT_EQ(picker->kinds(), (render::PickKinds{.faces = true, .edges = true, .points = false}));
+
+    const QPointF middle(canvas->width() / 2.0, canvas->height() / 2.0);
+    sendMouse(*canvas, QEvent::MouseMove, middle, Qt::NoButton, Qt::NoButton);
+    EXPECT_EQ(hovers.count(), 0) << "signals arrive queued, like the old view's";
+    QApplication::processEvents();
+    EXPECT_EQ(hovers.count(), 1);
+    const std::optional<app::Pick> hovered = picker->hovered();
+    ASSERT_TRUE(hovered);
+    EXPECT_EQ(hovered->kind, app::Pick::Kind::Face);
+    ASSERT_FALSE(hovered->shape.IsNull());
+    EXPECT_EQ(hovered->shape.ShapeType(), TopAbs_FACE);
+    ASSERT_TRUE(hovered->point);
+    const QPointF at = logicalPixelOf(*canvas, {hovered->point->X(), hovered->point->Y(), hovered->point->Z()});
+    EXPECT_LT(std::hypot(at.x() - middle.x(), at.y() - middle.y()), 1.5) << "the point lies under the cursor";
+    EXPECT_EQ(canvas->chunks().highlight().hovered.size(), 1U);
+    sendMouse(*canvas, QEvent::MouseMove, middle + QPointF(0.5, 0.0), Qt::NoButton, Qt::NoButton);
+    QApplication::processEvents();
+    EXPECT_EQ(hovers.count(), 1) << "a move over the same face announces nothing";
+
+    click(*canvas, middle);
+    EXPECT_EQ(selections.count(), 1);
+    ASSERT_EQ(picker->selected().size(), 1U);
+    EXPECT_TRUE(picker->selected()[0].shape.IsSame(hovered->shape));
+    EXPECT_EQ(canvas->chunks().highlight().selected.size(), 1U);
+
+    std::optional<QPointF> other;
+    for (int step = 0; step < canvas->width() / 8 && !other; ++step) {
+        const double x = middle.x() + (4.0 * step);
+        const std::optional<render::IdPick> found =
+            canvas->pickAt({x, middle.y()}, {.faces = true, .edges = false, .points = false});
+        if (found && found->item != *canvas->chunks().highlight().selected.begin()) {
+            other = QPointF(x + 8.0, middle.y());
+        }
+    }
+    ASSERT_TRUE(other);
+    click(*canvas, *other, Qt::ShiftModifier);
+    EXPECT_EQ(picker->selected().size(), 2U) << "Shift adds";
+    click(*canvas, middle, Qt::ShiftModifier);
+    ASSERT_EQ(picker->selected().size(), 1U) << "Shift toggles off";
+    EXPECT_FALSE(picker->selected()[0].shape.IsSame(hovered->shape));
+
+    const qsizetype before = selections.count();
+    sendMouse(*canvas, QEvent::MouseButtonPress, middle, Qt::LeftButton, Qt::LeftButton);
+    sendMouse(*canvas, QEvent::MouseMove, middle + QPointF(30.0, 0.0), Qt::NoButton, Qt::LeftButton);
+    sendMouse(*canvas, QEvent::MouseButtonRelease, middle + QPointF(30.0, 0.0), Qt::LeftButton, Qt::NoButton);
+    QApplication::processEvents();
+    EXPECT_EQ(selections.count(), before) << "a drag is no click";
+
+    click(*canvas, middle);
+    EXPECT_TRUE(picker->selectHovered());
+    const std::vector<app::Pick> taken = picker->takePicks();
+    QApplication::processEvents();
+    EXPECT_EQ(taken.size(), 1U);
+    EXPECT_TRUE(picker->selected().empty());
+    EXPECT_TRUE(canvas->chunks().highlight().selected.empty());
+    EXPECT_EQ(selections.count(), before + 1) << "taking the picks clears them without a signal";
+
+    click(*canvas, middle);
+    ASSERT_EQ(picker->selected().size(), 1U);
+    click(*canvas, QPointF(2.0, 2.0));
+    EXPECT_TRUE(picker->selected().empty()) << "a click on empty space clears";
+
+    click(*canvas, middle);
+    ui->trigger("Fillet");
+    QApplication::processEvents();
+    EXPECT_EQ(picker->kinds(), (render::PickKinds{.faces = false, .edges = true, .points = false}));
+    EXPECT_TRUE(picker->selected().empty()) << "a mode change clears the selection";
+    sendMouse(*canvas, QEvent::MouseMove, middle, Qt::NoButton, Qt::NoButton);
+    QApplication::processEvents();
+    EXPECT_FALSE(picker->hovered()) << "fillet picks edges only";
+    ui->key(Qt::Key_Escape);
+    QApplication::processEvents();
+    EXPECT_EQ(picker->kinds(), (render::PickKinds{.faces = true, .edges = true, .points = false}));
+
+    click(*canvas, middle);
+    ASSERT_EQ(picker->selected().size(), 1U);
+    auto* session = ui->window().findChild<app::DesignSession*>();
+    ASSERT_NE(session, nullptr);
+    session->setBodyVisible(session->model().bodies.at(0).key(), false);
+    ui->settle();
+    EXPECT_TRUE(picker->selected().empty()) << "hiding the body drops its picks";
+    EXPECT_FALSE(picker->hovered());
+    session->setBodyVisible(session->model().bodies.at(0).key(), true);
+    ui->settle();
 }
 
 TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)

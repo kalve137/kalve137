@@ -139,6 +139,8 @@ const char* toString(PickMode mode)
     return "none";
 }
 
+} // namespace
+
 std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
 {
     switch (mode) {
@@ -166,8 +168,6 @@ std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
     }
     return {};
 }
-
-} // namespace
 
 Quantity_Color scene_detail::occt(const geometry::Color& color)
 {
@@ -247,6 +247,8 @@ Scene::Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots, pick:
     drawer->SetDeviationCoefficient(geometry::kDisplayDeviationCoefficient);
     drawer->SetDeviationAngle(geometry::kDisplayDeviationAngle);
     updateBoxSelection();
+    connect(m_view, &viewer::OcctViewWidget::selectionChanged, this, &PickSource::selectionChanged);
+    connect(m_view, &viewer::OcctViewWidget::hoverChanged, this, &PickSource::hoverChanged);
 }
 
 Scene::~Scene()
@@ -333,12 +335,13 @@ void Scene::setPickMode(PickMode mode)
         return;
     }
     K137_DEBUG(Viewer, "Pick mode {} to {}", toString(m_mode), toString(mode));
-    m_preselection = m_mode == PickMode::None ? selected() : std::vector<Pick>{};
+    m_preselection = m_mode == PickMode::None ? m_source->selected() : std::vector<Pick>{};
     m_view->aisContext()->ClearSelected(false);
     m_mode = mode;
     updateBoxSelection();
     dropBodies();
     rebuild();
+    emit pickModeChanged();
 }
 
 void Scene::setEditingSketch(core::FeatureId sketch)
@@ -348,6 +351,7 @@ void Scene::setEditingSketch(core::FeatureId sketch)
     }
     m_editingSketch = sketch;
     rebuild();
+    emit pickModeChanged();
 }
 
 void Scene::setVisualStyle(VisualStyle style)

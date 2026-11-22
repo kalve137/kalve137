@@ -75,6 +75,11 @@ constexpr double kFirstPressStep = 20.0;
 constexpr int kChangeWarmup = 2;
 constexpr int kChangeRepeats = 20;
 constexpr double kBenchMoveStep = 10.0;
+constexpr int kHoverWarmup = 5;
+constexpr int kHoverMoves = 80;
+constexpr int kStaleMoves = 20;
+constexpr double kStaleTurn = 0.002;
+constexpr double kHoverSpan = 0.6;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 
@@ -567,6 +572,114 @@ int runBenchImport(const StartupOptions& options, const std::filesystem::path& s
     result.insert("seeded", seeded);
     result.insert("bodies", static_cast<int>(session->model().bodies.size()));
     result.insert("triangles", static_cast<qint64>(triangles));
+    return writeResult(result, out);
+}
+
+int runBenchHover(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                  const QString& size)
+{
+    const std::optional<QSize> requested = checkedRequest(design, size);
+    if (!requested) {
+        return 2;
+    }
+    if (options.view != ViewKind::New) {
+        K137_ERROR(App, "The hover bench runs on the new view only");
+        return 2;
+    }
+    MainWindow window(options);
+    if (!showForBench(window, true, *requested)) {
+        return 1;
+    }
+    window.openDesignAt(design);
+    QApplication::processEvents();
+    render::RhiView& view = *window.newView();
+    if (!view.benchFrame()) {
+        K137_ERROR(App, "The hover bench could not draw a frame");
+        return 1;
+    }
+
+    const auto positionOf = [&](int i) {
+        const double along = (static_cast<double>(i % kHoverMoves) + 0.5) / kHoverMoves;
+        const double across = i % 2 == 0 ? 0.45 : 0.55;
+        const double margin = (1.0 - kHoverSpan) / 2.0;
+        return QPointF(view.width() * (margin + (kHoverSpan * along)), view.height() * across);
+    };
+    struct Move {
+        double total = 0.0;
+        double pick = 0.0;
+        double frame = 0.0;
+        bool changed = false;
+    };
+    const auto timedMove = [&](QPointF position) -> std::optional<Move> {
+        QApplication::processEvents();
+        if (!view.benchFrame()) {
+            return std::nullopt;
+        }
+        const std::uint64_t writes = view.chunks().highlightWrites();
+        QElapsedTimer timer;
+        timer.start();
+        sendMouse(view, QEvent::MouseMove, position, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        const double picked = elapsedMs(timer);
+        const std::optional<double> frame = view.benchFrame();
+        if (!frame) {
+            return std::nullopt;
+        }
+        return Move{.total = elapsedMs(timer),
+                    .pick = picked,
+                    .frame = *frame,
+                    .changed = view.chunks().highlightWrites() != writes};
+    };
+
+    std::vector<double> changedMs;
+    std::vector<double> unchangedMs;
+    std::vector<double> pickMs;
+    std::vector<double> frameMs;
+    for (int i = 0; i < kHoverWarmup + kHoverMoves; ++i) {
+        const std::optional<Move> move = timedMove(positionOf(i));
+        if (!move) {
+            K137_ERROR(App, "The hover bench could not draw a frame after a move");
+            return 1;
+        }
+        if (i < kHoverWarmup) {
+            continue;
+        }
+        (move->changed ? changedMs : unchangedMs).push_back(move->total);
+        pickMs.push_back(move->pick);
+        frameMs.push_back(move->frame);
+    }
+
+    CameraCommands& commands = *window.cameraCommands();
+    const auto turn = [](camera::Camera& camera, const camera::Viewport&) {
+        camera.transform(camera::Motion::rotationAbout(camera.center(), camera.up(), kStaleTurn));
+        return true;
+    };
+    std::vector<double> staleMs;
+    for (int i = 0; i < kStaleMoves; ++i) {
+        commands.navigate(turn);
+        const std::optional<Move> move = timedMove(positionOf(i));
+        if (!move) {
+            K137_ERROR(App, "The hover bench could not draw a frame after a camera change");
+            return 1;
+        }
+        staleMs.push_back(move->total);
+    }
+    if (changedMs.empty()) {
+        K137_ERROR(App, "No move in the hover bench changed the highlight");
+        return 1;
+    }
+
+    QJsonObject result = benchHeader(window, true, design, size);
+    result.insert("moves", kHoverMoves);
+    result.insert("changed", static_cast<int>(changedMs.size()));
+    result.insert("changed_median_ms", percentile(changedMs, 0.5));
+    result.insert("changed_p95_ms", percentile(changedMs, kPercentile));
+    if (!unchangedMs.empty()) {
+        result.insert("unchanged_median_ms", percentile(unchangedMs, 0.5));
+    }
+    result.insert("pick_median_ms", percentile(pickMs, 0.5));
+    result.insert("frame_median_ms", percentile(frameMs, 0.5));
+    result.insert("stale_median_ms", percentile(staleMs, 0.5));
+    result.insert("stale_p95_ms", percentile(staleMs, kPercentile));
     return writeResult(result, out);
 }
 

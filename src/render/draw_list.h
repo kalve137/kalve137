@@ -56,6 +56,8 @@ static_assert(sizeof(Segment) == 28);
 
 using Entry = std::array<std::uint8_t, 4>;
 inline constexpr std::uint8_t kEntryVisible = 1;
+inline constexpr std::uint8_t kEntryHovered = 2;
+inline constexpr std::uint8_t kEntrySelected = 4;
 inline constexpr std::uint32_t kPaletteWidth = 256;
 inline constexpr std::uint32_t kPaletteEntries = 1U << 16;
 
@@ -83,8 +85,11 @@ struct DrawList {
     std::vector<Chunk> chunks;
     bool faces = true;
     bool edges = false;
+    bool highlightedEdgesOnly = false;
     snapshot::Color edgeColor{};
     double edgeWidth = 0.0;
+    snapshot::Color hover{};
+    snapshot::Color selected{};
 };
 
 Segment packSegment(const Position& start, const Position& end, std::uint32_t entry);

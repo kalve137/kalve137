@@ -141,13 +141,14 @@ double elapsedMs(std::chrono::steady_clock::time_point since)
 
 } // namespace
 
-FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, viewer::OcctViewWidget* view, QWidget* parent)
-    : QWidget(parent), m_session(session), m_scene(scene), m_view(view)
+FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, viewer::OcctViewWidget* view,
+                           QWidget* parent)
+    : QWidget(parent), m_session(session), m_scene(scene), m_source(picks), m_view(view)
 {
     m_layout = new QVBoxLayout(this);
     m_layout->setContentsMargins(theme::kPanelMargins);
     m_layout->addStretch();
-    connect(view, &viewer::OcctViewWidget::selectionChanged, this, &FeaturePanel::onSelectionChanged);
+    connect(&picks, &PickSource::selectionChanged, this, &FeaturePanel::onSelectionChanged);
 
     m_previewTimer = new QTimer(this);
     m_previewTimer->setSingleShot(true);

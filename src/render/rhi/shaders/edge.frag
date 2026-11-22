@@ -3,21 +3,11 @@
 
 #version 440
 
-layout(location = 0) out vec4 fragColor;
+layout(location = 0) flat in vec3 edgeColor;
 
-layout(std140, binding = 0) uniform Frame {
-    mat4 viewProjection;
-    vec4 eye;
-    vec4 eyePosition;
-    vec4 light;
-    vec4 look;
-    vec4 specular;
-    vec4 options;
-    vec4 edge;
-    vec4 target;
-};
+layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    fragColor = vec4(edge.rgb, 1.0);
+    fragColor = vec4(edgeColor, 1.0);
 }

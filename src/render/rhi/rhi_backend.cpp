@@ -49,6 +49,8 @@ struct Uniforms {
     std::array<float, 4> options{};
     std::array<float, 4> edge{};
     std::array<float, 4> target{};
+    std::array<float, 4> hover{};
+    std::array<float, 4> selected{};
 };
 
 struct PickUniforms {
@@ -399,10 +401,12 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
     uniforms.light = {frame.light[0], frame.light[1], frame.light[2], 0.0F};
     uniforms.look = {look.ambient, look.diffuse, look.shininess, 0.0F};
     uniforms.specular = {look.specular[0], look.specular[1], look.specular[2], 0.0F};
-    uniforms.options = {list.lit ? 1.0F : 0.0F, 0.0F, 0.0F, 0.0F};
+    uniforms.options = {list.lit ? 1.0F : 0.0F, list.highlightedEdgesOnly ? 1.0F : 0.0F, 0.0F, 0.0F};
     uniforms.edge = {list.edgeColor.red, list.edgeColor.green, list.edgeColor.blue, 1.0F};
     uniforms.target = {static_cast<float>(frame.width), static_cast<float>(frame.height),
                        static_cast<float>(list.edgeWidth * list.pixelRatio), 0.0F};
+    uniforms.hover = {list.hover.red, list.hover.green, list.hover.blue, kHoverWeight};
+    uniforms.selected = {list.selected.red, list.selected.green, list.selected.blue, 1.0F};
     updates->updateDynamicBuffer(m_uniforms.get(), 0, sizeof(Uniforms), &uniforms);
 }
 

@@ -109,9 +109,9 @@ void MainWindow::showMarkingMenu(QPoint center)
     const bool idle = !sketching && !m_featurePanel->isActive() && !m_measurePanel->isActive() && !m_pickingPlane;
     std::vector<Pick> picks;
     if (idle) {
-        picks = m_scene->selected();
-        if (picks.empty() && m_scene->selectHovered()) {
-            picks = m_scene->selected();
+        picks = m_picks->selected();
+        if (picks.empty() && m_picks->selectHovered()) {
+            picks = m_picks->selected();
             updateStatus();
         }
     }
@@ -140,7 +140,7 @@ void MainWindow::showMarkingMenu(QPoint center)
         const core::BodyKey key = body->key();
         const QString name = body->name.empty() ? tr("Body") : QString::fromStdString(body->name);
         menu->addListAction(temporary({}, tr("Hide %1").arg(name), {}, [this, key] {
-            m_scene->clearSelection();
+            m_picks->clearSelection();
             m_session->setBodyVisible(key, false);
             updateStatus();
         }));
