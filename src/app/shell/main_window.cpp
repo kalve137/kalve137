@@ -237,8 +237,17 @@ void MainWindow::createActions()
     m_pressPull->setToolTip(tr("Press Pull (Q): extrudes profile, offsets flat face or fillets edge"));
     m_hole = featureAction("hole", tr("Hole"), QKeySequence(), &FeaturePanel::startHole);
     m_hole->setToolTip(tr("Hole: simple, counterbore or countersink holes on faces or sketch points"));
-    m_move = featureAction("move", tr("Move"), QKeySequence(Qt::Key_M), &FeaturePanel::startMove);
-    m_move->setToolTip(tr("Move (M): moves, turns or copies bodies"));
+    m_move = new QAction(icons::tinted("move"), tr("Move"), this);
+    connect(m_move, &QAction::triggered, this, [this] {
+        if (m_sketchEditor->isActive()) {
+            m_sketchEditor->startTypedMove();
+            return;
+        }
+        stopPickingPlane();
+        m_measurePanel->stop();
+        m_featurePanel->cancel();
+        m_featurePanel->startMove();
+    });
     m_appearance =
         featureAction("appearance", tr("Appearance"), QKeySequence(Qt::Key_A), &FeaturePanel::startAppearance);
     m_appearance->setToolTip(tr("Appearance (A): colors whole bodies or single faces"));
@@ -673,10 +682,14 @@ void MainWindow::updateActions()
     m_revolve->setEnabled(!inFeature);
     m_fillet->setEnabled(!sketching && !inFeature);
     m_chamfer->setEnabled(!sketching && !inFeature);
-    for (QAction* action : {m_shell, m_pressPull, m_hole, m_move, m_appearance, m_pattern, m_offsetPlane,
-                            m_planeAtAngle, m_midplane, m_axis, m_point}) {
+    for (QAction* action : {m_shell, m_pressPull, m_hole, m_appearance, m_pattern, m_offsetPlane, m_planeAtAngle,
+                            m_midplane, m_axis, m_point}) {
         action->setEnabled(!sketching && !inFeature);
     }
+    m_move->setEnabled(!inFeature);
+    m_move->setShortcut(sketching ? QKeySequence() : QKeySequence(Qt::Key_M));
+    m_move->setToolTip(sketching ? tr("Move: moves selected sketch geometry by typed offsets")
+                                 : tr("Move (M): moves, turns or copies bodies"));
     m_measure->setEnabled(!sketching && !inFeature);
     m_sketchTools->setEnabled(sketching);
     m_construction->setEnabled(sketching);

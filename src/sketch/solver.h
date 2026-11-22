@@ -20,6 +20,11 @@ struct SolveResult {
     bool isFullyConstrained() const { return solved && dof == 0 && conflicting.empty(); }
 };
 
-SolveResult solve(Sketch& sketch);
+struct DragTarget {
+    Id point = 0;
+    Vec2 pos;
+};
+
+SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets = {});
 
 } // namespace kalve137::sketch

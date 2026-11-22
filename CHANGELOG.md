@@ -14,6 +14,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Light theme. Follows system setting by default, Preferences switches it live
 - Concentric sketch constraint joins the centers of two circles or arcs
 - Dimension and handle value boxes offer the last five typed values from a dropdown or Alt+Down
+- Lines and box selections drag as a whole in sketches and Move takes typed X and Y offsets for selected sketch geometry
 
 ### Changed
 
