@@ -189,7 +189,7 @@ protected:
             return false;
         }
         if (event->type() == QEvent::Polish) {
-            widget->setAttribute(Qt::WA_DontShowOnScreen);
+            widget->setAttribute(Qt::WA_DontShowOnScreen, !m_onScreen);
         } else if (auto* menu = qobject_cast<QMenu*>(widget); menu != nullptr && event->type() == QEvent::Show) {
             answerMenu(*menu);
         } else if (event->type() == QEvent::Show && widget->isModal() && !answers().empty()) {
@@ -212,6 +212,9 @@ protected:
         }
         return false;
     }
+
+private:
+    bool m_onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
 };
 
 std::filesystem::path shotFolder()

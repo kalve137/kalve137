@@ -4,7 +4,6 @@
 #pragma once
 
 #include "camera/navigator.h"
-#include "pick/scene_rays.h"
 
 #include <QObject>
 #include <QPoint>
@@ -22,22 +21,21 @@ class CameraCommands;
 
 class SnapshotNavigationScene : public camera::NavigationScene {
 public:
-    SnapshotNavigationScene(const render::RhiView& view, pick::SceneRays& rays);
+    explicit SnapshotNavigationScene(render::RhiView& view);
 
     std::optional<camera::Vec3> pick(const camera::Camera& camera, const camera::Viewport& viewport,
                                      const camera::Pixel& pixel, bool onRay) const override;
     camera::Vec3 gravityPoint(const camera::Camera& camera, const camera::Viewport& viewport) const override;
 
 private:
-    const render::RhiView* m_view;
-    pick::SceneRays* m_rays;
+    render::RhiView* m_view;
 };
 
 class NewViewNavigation : public QObject {
     Q_OBJECT
 
 public:
-    NewViewNavigation(render::RhiView& view, pick::SceneRays& rays, CameraCommands& commands);
+    NewViewNavigation(render::RhiView& view, CameraCommands& commands);
 
     void setNavigation(const camera::Navigation& navigation);
 
