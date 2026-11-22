@@ -16,6 +16,7 @@
 #include <gp_Vec.hxx>
 
 #include <cstddef>
+#include <memory>
 
 namespace kalve137::core {
 namespace {
@@ -138,6 +139,31 @@ TEST(SnapshotCache, TheOriginSitsOnAMeterGridNearTheBodies)
     movePin(pair);
     EXPECT_EQ(cache.scene(recompute(pair.document)).origin, before.origin);
     EXPECT_EQ(cache.scene(Model{}).origin, (snapshot::Point{}));
+}
+
+TEST(SnapshotCache, ASeedServesTheNextSceneOnlyForItsExactShape)
+{
+    Pair pair = importPair();
+    const Model model = recompute(pair.document);
+    const auto seeded = std::make_shared<const snapshot::Mesh>();
+    SnapshotCache cache;
+    cache.seed(model.bodies[1].shape, seeded);
+    cache.seed(model.bodies[0].shape.Reversed(), seeded);
+    const snapshot::Scene scene = cache.scene(model);
+    ASSERT_EQ(scene.bodies.size(), 2U);
+    EXPECT_NE(scene.bodies[0]->mesh, seeded);
+    EXPECT_EQ(scene.bodies[1]->mesh, seeded);
+}
+
+TEST(SnapshotCache, ASeedDoesNotOutliveTheNextScene)
+{
+    Pair pair = importPair();
+    const Model model = recompute(pair.document);
+    const auto seeded = std::make_shared<const snapshot::Mesh>();
+    SnapshotCache cache;
+    cache.seed(model.bodies[1].shape, seeded);
+    cache.scene(Model{});
+    EXPECT_NE(cache.scene(model).bodies[1]->mesh, seeded);
 }
 
 TEST(SnapshotCache, DropsBodiesThatLeftTheModel)

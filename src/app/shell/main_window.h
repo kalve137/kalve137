@@ -51,6 +51,7 @@ class Scene;
 class SketchPalette;
 class TimelineWidget;
 class ViewControls;
+struct ImportedStep;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -61,6 +62,7 @@ public:
 
     void openDesignAt(const std::filesystem::path& path);
     void openDesignWhenShown(const std::filesystem::path& path);
+    void addImport(const std::filesystem::path& path, ImportedStep imported);
     viewer::OcctViewWidget* oldView() const { return m_view; }
     render::RhiView* newView() const { return m_rhiView; }
     CameraCommands* cameraCommands() const { return m_cameraCommands; }

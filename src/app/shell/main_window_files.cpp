@@ -151,7 +151,7 @@ private:
     std::function<void()> m_onCancel;
 };
 
-std::vector<geometry::StepPart> readStepInBackground(QWidget* parent, const std::filesystem::path& path)
+ImportedStep readStepInBackground(QWidget* parent, const std::filesystem::path& path)
 {
     std::atomic<double> fraction = 0.0;
     std::atomic<bool> stop = false;
@@ -579,13 +579,12 @@ void MainWindow::importStep()
     }
     const std::filesystem::path path = toPath(file);
     rememberFolder(path.parent_path());
-    const QString name = toQString(path.stem());
     statusBar()->showMessage(tr("Importing %1...").arg(toQString(path.filename())));
-    std::vector<geometry::StepPart> parts;
+    ImportedStep imported;
     QElapsedTimer timer;
     timer.start();
     try {
-        parts = readStepInBackground(this, path);
+        imported = readStepInBackground(this, path);
     } catch (const geometry::ImportCanceled&) {
         statusBar()->showMessage(tr("Import canceled"), kMessageTimeoutMs);
         return;
@@ -594,18 +593,28 @@ void MainWindow::importStep()
         reportFailure(this, tr("Import Failed"), error);
         return;
     }
-    const qint64 workerMs = timer.restart();
+    K137_INFO(Io, "Read {}: {} ms on the worker", path.filename().string(), timer.elapsed());
+    addImport(path, std::move(imported));
+}
+
+void MainWindow::addImport(const std::filesystem::path& path, ImportedStep imported)
+{
+    QElapsedTimer timer;
+    timer.start();
     leaveModes();
     {
         const BusyCursor busy;
-        m_session->edit(tr("Import %1").arg(name),
-                        [&](core::Document& document) { document.add(importFeature(path, std::move(parts))); });
+        for (std::size_t i = 0; i < imported.meshes.size(); ++i) {
+            m_session->snapshots().seed(imported.parts[i].shape, imported.meshes[i]);
+        }
+        m_session->edit(tr("Import %1").arg(toQString(path.stem())), [&](core::Document& document) {
+            document.add(importFeature(path, std::move(imported.parts)));
+        });
         m_cameraCommands->fit(CameraCommands::Move::Jump);
     }
     statusBar()->showMessage(tr("Imported %1").arg(toQString(path.filename())), kMessageTimeoutMs);
-    const auto logFirstFrame = [workerMs, timer, file = path.filename().string()] {
-        K137_INFO(Io, "Imported {}: {} ms on the worker, {} ms on the UI thread until the first frame", file, workerMs,
-                  timer.elapsed());
+    const auto logFirstFrame = [timer, file = path.filename().string()] {
+        K137_INFO(Io, "Imported {}: {} ms on the UI thread until the first frame", file, timer.elapsed());
     };
     if (m_rhiView != nullptr) {
         connect(m_rhiView, &QRhiWidget::frameSubmitted, this, logFirstFrame, Qt::SingleShotConnection);

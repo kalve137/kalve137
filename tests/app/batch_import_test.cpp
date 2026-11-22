@@ -58,14 +58,18 @@ TEST(StepImport, MeshesPartsAtTheDisplayDeflection)
                                   folder / "pin.step");
 
     std::vector<double> reported;
-    const std::vector<StepPart> parts = kalve137::app::readStepForImport(folder / "pin.step", [&](double done) {
-        reported.push_back(done);
-        return true;
-    });
+    const kalve137::app::ImportedStep imported =
+        kalve137::app::readStepForImport(folder / "pin.step", [&](double done) {
+            reported.push_back(done);
+            return true;
+        });
 
-    ASSERT_EQ(parts.size(), 1U);
-    const TopoDS_Shape& shape = parts.front().shape;
+    ASSERT_EQ(imported.parts.size(), 1U);
+    const TopoDS_Shape& shape = imported.parts.front().shape;
     EXPECT_TRUE(BRepTools::Triangulation(shape, kalve137::geometry::displayDeflection(shape)));
+    ASSERT_EQ(imported.meshes.size(), 1U);
+    EXPECT_EQ(imported.meshes.front()->faceCount, 3U);
+    EXPECT_FALSE(imported.meshes.front()->triangles.empty());
     ASSERT_FALSE(reported.empty());
     EXPECT_TRUE(std::ranges::is_sorted(reported));
     std::filesystem::remove_all(folder);
