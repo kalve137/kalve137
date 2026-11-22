@@ -60,6 +60,8 @@ add_library(kalve137_app STATIC
     shell/smoke.h
     shell/shortcuts_dialog.cpp
     shell/shortcuts_dialog.h
+    shell/toolbar_fit.cpp
+    shell/toolbar_fit.h
     shell/version_dialog.cpp
     shell/version_dialog.h
     sketch/constraint_badge.cpp

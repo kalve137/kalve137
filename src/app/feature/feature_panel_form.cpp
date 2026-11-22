@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QMetaObject>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -86,12 +87,18 @@ void FeaturePanel::buildForm()
     m_selection->setWordWrap(true);
     layout->addWidget(m_selection);
 
-    m_items = new QWidget(m_form);
+    m_itemsArea = new QScrollArea(m_form);
+    m_itemsArea->setObjectName("selectionItems");
+    m_itemsArea->setFrameShape(QFrame::NoFrame);
+    m_itemsArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_itemsArea->setWidgetResizable(true);
+    m_items = new QWidget(m_itemsArea);
     m_itemsLayout = new QVBoxLayout(m_items);
     m_itemsLayout->setContentsMargins(0, 0, 0, 0);
     m_itemsLayout->setSpacing(0);
-    m_items->hide();
-    layout->addWidget(m_items);
+    m_itemsArea->setWidget(m_items);
+    m_itemsArea->hide();
+    layout->addWidget(m_itemsArea);
 
     auto* fields = new QFormLayout();
     layout->addLayout(fields);

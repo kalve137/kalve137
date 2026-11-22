@@ -64,6 +64,7 @@ add_executable(kalve137_uitests
     ui/scenario.cpp
     ui/select_ui_test.cpp
     ui/scenario.h
+    ui/screen_ui_test.cpp
     ui/ui_driver.cpp
     ui/ui_driver.h
     ui/ui_main.cpp
@@ -90,3 +91,13 @@ gtest_discover_tests(kalve137_uitests
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS ui RUN_SERIAL TRUE
 )
+foreach(scale 125 150 175)
+    math(EXPR whole "${scale} / 100")
+    math(EXPR part "${scale} % 100")
+    add_test(NAME ScreenTest.AtScale${scale} COMMAND kalve137_uitests --gtest_filter=ScreenTest.*)
+    set_tests_properties(ScreenTest.AtScale${scale} PROPERTIES
+        ENVIRONMENT "QT_SCALE_FACTOR=${whole}.${part};KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/scale-${scale}"
+        LABELS ui
+        RUN_SERIAL TRUE
+    )
+endforeach()

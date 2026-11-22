@@ -136,7 +136,7 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
     QObject::connect(openFolder, &QPushButton::clicked, &dialog,
                      [] { QDesktopServices::openUrl(QUrl::fromLocalFile(toQString(diagnostics::logFolder()))); });
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    dialog.resize(kDialogSize);
+    dialog.resize(theme::onScreen(dialog, kDialogSize));
     dialog.exec();
 }
 

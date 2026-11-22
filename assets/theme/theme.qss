@@ -166,6 +166,10 @@ QScrollArea#timelineArea {
     border: none;
     border-top: 1px solid @raised;
 }
+QScrollArea#selectionItems,
+QScrollArea#selectionItems > QWidget > QWidget {
+    background: transparent;
+}
 
 QLabel#panelTitle {
     color: @accent;

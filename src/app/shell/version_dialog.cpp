@@ -49,7 +49,7 @@ std::optional<std::filesystem::path> chooseVersion(QWidget* parent, const std::f
 
     QDialog dialog(parent);
     dialog.setWindowTitle(QDialog::tr("Version History"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
     auto* intro = new QLabel(&dialog);
     intro->setWordWrap(true);
