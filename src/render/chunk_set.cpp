@@ -60,7 +60,10 @@ std::uint32_t facesOf(const snapshot::Mesh& mesh)
 std::uint32_t piecesOf(const snapshot::Mesh& mesh)
 {
     const std::uint32_t edges = std::max<std::uint32_t>(mesh.edgeCount, 1);
-    return std::max((facesOf(mesh) - 1) / kPaletteEntries, (edges - 1) / kPaletteEntries) + 1;
+    const std::uint32_t points = std::max<std::uint32_t>(mesh.pointCount, 1);
+    return std::max(
+               {(facesOf(mesh) - 1) / kPaletteEntries, (edges - 1) / kPaletteEntries, (points - 1) / kPaletteEntries}) +
+           1;
 }
 
 std::uint32_t shareOf(std::uint32_t count, std::uint32_t piece)
@@ -77,6 +80,11 @@ std::uint32_t entriesOf(const snapshot::Mesh& mesh, std::uint32_t piece)
 std::uint32_t edgeEntriesOf(const snapshot::Mesh& mesh, std::uint32_t piece)
 {
     return shareOf(mesh.edgeCount, piece);
+}
+
+std::uint32_t pointEntriesOf(const snapshot::Mesh& mesh, std::uint32_t piece)
+{
+    return shareOf(mesh.pointCount, piece);
 }
 
 bool drawsAnything(const snapshot::Mesh& mesh)
@@ -148,16 +156,19 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
             const std::size_t vertices = chunk.vertexCount - slot.vertexCount + verticesOf(mesh);
             const std::size_t entries = chunk.entryCount - slot.entryCount + entriesOf(mesh, piece);
             const std::size_t edgeEntries = chunk.edgeEntryCount - slot.edgeEntryCount + edgeEntriesOf(mesh, piece);
+            const std::size_t pointEntries = chunk.pointEntryCount - slot.pointEntryCount + pointEntriesOf(mesh, piece);
             keep = (vertices <= m_vertexBudget || chunk.members.size() == 1) && entries <= kPaletteEntries &&
-                   edgeEntries <= kPaletteEntries;
+                   edgeEntries <= kPaletteEntries && pointEntries <= kPaletteEntries;
             if (keep) {
                 chunk.vertexCount = vertices;
                 chunk.entryCount = entries;
                 chunk.edgeEntryCount = edgeEntries;
+                chunk.pointEntryCount = pointEntries;
                 slot.mesh = found->second.body->mesh;
                 slot.vertexCount = verticesOf(mesh);
                 slot.entryCount = entriesOf(mesh, piece);
                 slot.edgeEntryCount = edgeEntriesOf(mesh, piece);
+                slot.pointEntryCount = pointEntriesOf(mesh, piece);
                 chunk.meshDirty = true;
             }
         }
@@ -165,6 +176,7 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
             chunk.vertexCount -= slot.vertexCount;
             chunk.entryCount -= slot.entryCount;
             chunk.edgeEntryCount -= slot.edgeEntryCount;
+            chunk.pointEntryCount -= slot.pointEntryCount;
             chunk.members.erase(it->first);
             chunk.meshDirty = true;
             it = m_owner.erase(it);
@@ -199,9 +211,12 @@ void ChunkSet::place(const Key& key, const Shown& shown)
     const std::size_t vertices = verticesOf(mesh);
     const std::uint32_t entries = entriesOf(mesh, piece);
     const std::uint32_t edgeEntries = edgeEntriesOf(mesh, piece);
+    const std::uint32_t pointEntries = pointEntriesOf(mesh, piece);
     const auto fits = [&](const auto& chunk) {
         return chunk->closed == mesh.closed && chunk->vertexCount + vertices <= m_vertexBudget &&
-               chunk->entryCount + entries <= kPaletteEntries && chunk->edgeEntryCount + edgeEntries <= kPaletteEntries;
+               chunk->entryCount + entries <= kPaletteEntries &&
+               chunk->edgeEntryCount + edgeEntries <= kPaletteEntries &&
+               chunk->pointEntryCount + pointEntries <= kPaletteEntries;
     };
     auto found = std::ranges::find_if(m_chunks, fits);
     if (found == m_chunks.end()) {
@@ -221,10 +236,14 @@ void ChunkSet::place(const Key& key, const Shown& shown)
                                     .firstEdge = piece * kPaletteEntries,
                                     .firstEdgeEntry = 0,
                                     .edgeEntryCount = edgeEntries,
+                                    .firstPoint = piece * kPaletteEntries,
+                                    .firstPointEntry = 0,
+                                    .pointEntryCount = pointEntries,
                                     .vertexCount = vertices});
     chunk.vertexCount += vertices;
     chunk.entryCount += entries;
     chunk.edgeEntryCount += edgeEntries;
+    chunk.pointEntryCount += pointEntries;
     chunk.meshDirty = true;
     m_owner[key] = &chunk;
 }
@@ -234,14 +253,19 @@ void ChunkSet::buildMesh(Data& chunk)
     chunk.vertices.clear();
     chunk.indices.clear();
     chunk.segments.clear();
+    chunk.points.clear();
     std::uint32_t entry = 0;
     std::uint32_t edgeEntry = 0;
+    std::uint32_t pointEntry = 0;
     for (auto& [key, slot] : chunk.members) {
         slot.firstEntry = entry;
         entry += slot.entryCount;
         slot.firstEdgeEntry = edgeEntry;
         edgeEntry += slot.edgeEntryCount;
+        slot.firstPointEntry = pointEntry;
+        pointEntry += slot.pointEntryCount;
         addSegments(chunk, slot);
+        addPoints(chunk, slot);
         const snapshot::Mesh& mesh = *slot.mesh;
         const std::vector<Normal> normals = normalsOf(mesh);
         const std::size_t first = chunk.vertices.size();
@@ -282,6 +306,7 @@ void ChunkSet::buildMesh(Data& chunk)
     chunk.vertexCount = chunk.vertices.size();
     chunk.entryCount = entry;
     chunk.edgeEntryCount = edgeEntry;
+    chunk.pointEntryCount = pointEntry;
     chunk.meshRevision = m_nextId++;
     chunk.meshDirty = false;
     ++m_meshBuilds;
@@ -302,10 +327,22 @@ void ChunkSet::addSegments(Data& chunk, const Slot& slot) const
     }
 }
 
+void ChunkSet::addPoints(Data& chunk, const Slot& slot) const
+{
+    for (const snapshot::Vertex& point : slot.mesh->points) {
+        if (point.id < slot.firstPoint || point.id - slot.firstPoint >= slot.pointEntryCount) {
+            continue;
+        }
+        const Position at = relativePosition(point.point, m_origin);
+        chunk.points.push_back(packSegment(at, at, slot.firstPointEntry + point.id - slot.firstPoint));
+    }
+}
+
 void ChunkSet::buildPalette(Data& chunk)
 {
     chunk.palette.assign(chunk.entryCount, Entry{});
     chunk.edgePalette.assign(chunk.edgeEntryCount, Entry{});
+    chunk.pointPalette.assign(chunk.pointEntryCount, Entry{});
     for (const auto& [key, slot] : chunk.members) {
         for (std::uint32_t face = 0; face < slot.entryCount; ++face) {
             chunk.palette[slot.firstEntry + face] = colorEntry(*slot.body, slot.visible, slot.firstFace + face);
@@ -313,6 +350,7 @@ void ChunkSet::buildPalette(Data& chunk)
         const Entry edge{static_cast<std::uint8_t>(EdgeState::Normal), 0, 0,
                          slot.visible ? kEntryVisible : std::uint8_t{0}};
         std::fill_n(chunk.edgePalette.begin() + slot.firstEdgeEntry, slot.edgeEntryCount, edge);
+        std::fill_n(chunk.pointPalette.begin() + slot.firstPointEntry, slot.pointEntryCount, edge);
     }
     chunk.paletteRevision = m_nextId++;
     chunk.paletteDirty = false;
@@ -364,17 +402,74 @@ DrawList ChunkSet::draw(const Frame& frame) const
         if (!shown) {
             continue;
         }
-        list.chunks.push_back({.id = chunk->id,
-                               .meshRevision = chunk->meshRevision,
-                               .paletteRevision = chunk->paletteRevision,
-                               .closed = chunk->closed,
-                               .vertices = chunk->vertices,
-                               .indices = chunk->indices,
-                               .palette = chunk->palette,
-                               .segments = chunk->segments,
-                               .edgePalette = chunk->edgePalette});
+        list.chunks.push_back(chunkOf(*chunk));
     }
     return list;
+}
+
+DrawList ChunkSet::pickList(const Frame& frame) const
+{
+    DrawList list = draw(frame);
+    list.edges = true;
+    list.chunks.clear();
+    for (const auto& chunk : m_chunks) {
+        if (std::ranges::any_of(chunk->members, [](const auto& item) { return item.second.visible; })) {
+            list.chunks.push_back(chunkOf(*chunk));
+        }
+    }
+    return list;
+}
+
+Chunk ChunkSet::chunkOf(const Data& chunk) const
+{
+    return {.id = chunk.id,
+            .meshRevision = chunk.meshRevision,
+            .paletteRevision = chunk.paletteRevision,
+            .closed = chunk.closed,
+            .vertices = chunk.vertices,
+            .indices = chunk.indices,
+            .palette = chunk.palette,
+            .segments = chunk.segments,
+            .edgePalette = chunk.edgePalette,
+            .points = chunk.points,
+            .pointPalette = chunk.pointPalette};
+}
+
+std::optional<PickedItem> ChunkSet::itemOf(std::uint64_t chunk, PickKind kind, std::uint32_t entry) const
+{
+    const auto found = std::ranges::find_if(m_chunks, [chunk](const auto& data) { return data->id == chunk; });
+    if (found == m_chunks.end()) {
+        return std::nullopt;
+    }
+    for (const auto& [key, slot] : (*found)->members) {
+        std::uint32_t first = 0;
+        std::uint32_t count = 0;
+        std::uint32_t base = 0;
+        switch (kind) {
+        case PickKind::None:
+            return std::nullopt;
+        case PickKind::Face:
+            first = slot.firstEntry;
+            count = slot.entryCount;
+            base = slot.firstFace;
+            break;
+        case PickKind::Edge:
+            first = slot.firstEdgeEntry;
+            count = slot.edgeEntryCount;
+            base = slot.firstEdge;
+            break;
+        case PickKind::Point:
+            first = slot.firstPointEntry;
+            count = slot.pointEntryCount;
+            base = slot.firstPoint;
+            break;
+        }
+        if (entry >= first && entry - first < count) {
+            return PickedItem{
+                .feature = std::get<0>(key), .part = std::get<1>(key), .kind = kind, .index = base + entry - first};
+        }
+    }
+    return std::nullopt;
 }
 
 void ChunkSet::clear()

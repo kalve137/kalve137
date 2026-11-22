@@ -100,6 +100,7 @@ inline std::shared_ptr<const snapshot::Mesh> edgedBox(const snapshot::Point& low
                 mesh.edges.push_back({.id = mesh.edgeCount++, .points = {corner(from), corner(from | axis)}});
             }
         }
+        mesh.points.push_back({.id = mesh.pointCount++, .point = corner(from)});
     }
     return std::make_shared<const snapshot::Mesh>(std::move(mesh));
 }

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "render/draw_list.h"
+#include "render/pick_id.h"
 
 #include <QSize>
 
@@ -40,6 +41,10 @@ public:
     bool setTarget(QRhiRenderPassDescriptor* pass, int samples);
     bool prepare(const DrawList& list, QRhiResourceUpdateBatch* updates);
     void draw(QRhiCommandBuffer* buffer, QSize size) const;
+    bool setIdTarget(QRhiRenderPassDescriptor* pass);
+    bool prepareIds(const DrawList& list, const IdStyle& style, QRhiResourceUpdateBatch* updates);
+    void drawIds(QRhiCommandBuffer* buffer, QSize size) const;
+    const std::vector<std::uint64_t>& idChunks() const { return m_idChunks; }
     std::size_t chunkCount() const { return m_chunks.size(); }
     std::uint64_t meshUploads() const { return m_meshUploads; }
     std::uint64_t paletteUploads() const { return m_paletteUploads; }
@@ -55,20 +60,34 @@ private:
         Owned<QRhiTexture> texture;
         Owned<QRhiShaderResourceBindings> bindings;
     };
+    struct IdDraw {
+        Owned<QRhiBuffer> pick;
+        Owned<QRhiShaderResourceBindings> bindings;
+        const QRhiTexture* palette = nullptr;
+    };
     struct Gpu {
         std::uint64_t meshRevision = 0;
         std::uint64_t paletteRevision = 0;
         Owned<QRhiBuffer> vertices;
         Owned<QRhiBuffer> indices;
         Owned<QRhiBuffer> segments;
+        Owned<QRhiBuffer> points;
         Palette faces;
         Palette edges;
+        Palette pointPalette;
+        std::array<IdDraw, 3> ids;
         std::uint32_t indexCount = 0;
         std::uint32_t segmentCount = 0;
+        std::uint32_t pointCount = 0;
         bool used = false;
     };
     struct Call {
         const Gpu* gpu = nullptr;
+        bool cull = false;
+    };
+    struct IdCall {
+        const Gpu* gpu = nullptr;
+        PickKind kind = PickKind::None;
         bool cull = false;
     };
 
@@ -76,6 +95,12 @@ private:
     Owned<QRhiShaderResourceBindings> bindingsFor(QRhiTexture* palette) const;
     Owned<QRhiGraphicsPipeline> facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull, bool biased) const;
     Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const;
+    Owned<QRhiGraphicsPipeline> idPipeline(QRhiRenderPassDescriptor* pass, PickKind kind, bool cull) const;
+    Owned<QRhiShaderResourceBindings> idBindingsFor(QRhiTexture* palette, QRhiBuffer* pick) const;
+    bool refreshIds(Gpu& gpu, std::uint32_t place, double edgeWidth, double pointWidth,
+                    QRhiResourceUpdateBatch* updates);
+    void writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* updates);
+    bool refreshChunks(const DrawList& list, QRhiResourceUpdateBatch* updates);
     bool refresh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
     bool refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
     bool refreshPalette(std::span<const Entry> entries, Palette& palette, QRhiResourceUpdateBatch* updates);
@@ -88,9 +113,13 @@ private:
     Owned<QRhiShaderResourceBindings> m_layout;
     std::array<Owned<QRhiGraphicsPipeline>, 4> m_faces;
     Owned<QRhiGraphicsPipeline> m_edges;
+    Owned<QRhiShaderResourceBindings> m_idLayout;
+    std::array<Owned<QRhiGraphicsPipeline>, 3> m_idPipelines;
     std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
     std::vector<const Gpu*> m_edgeCalls;
+    std::vector<IdCall> m_idCalls;
+    std::vector<std::uint64_t> m_idChunks;
     bool m_biased = false;
     bool m_cornersUploaded = false;
     std::uint64_t m_meshUploads = 0;

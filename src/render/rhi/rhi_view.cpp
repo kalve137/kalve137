@@ -27,8 +27,10 @@
 #endif
 
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 namespace kalve137::render {
 
@@ -212,6 +214,28 @@ QLabel* makeFailureNotice(GraphicsApi api, StartProblem problem, QWidget* parent
     return notice;
 }
 
+struct RhiView::IdTargets {
+    struct Release {
+        void operator()(QRhiResource* resource) const
+        {
+            if (resource != nullptr) {
+                resource->deleteLater();
+            }
+        }
+    };
+    template <typename T>
+    using Owned = std::unique_ptr<T, Release>;
+
+    QSize size;
+    Owned<QRhiTexture> ids;
+    Owned<QRhiTexture> depths;
+    Owned<QRhiRenderBuffer> depthStencil;
+    Owned<QRhiTextureRenderTarget> target;
+    Owned<QRhiRenderPassDescriptor> pass;
+    Owned<QRhiTexture> idCopy;
+    Owned<QRhiTexture> depthCopy;
+};
+
 RhiView::RhiView(GraphicsApi api, QWidget* parent) : QRhiWidget(parent), m_api(api)
 {
     setApi(widgetApi(api));
@@ -245,7 +269,164 @@ void RhiView::updateChunks()
     timer.start();
     m_chunks.update(m_scene, m_style);
     m_updateMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
+    m_idsFresh = false;
     update();
+}
+
+bool RhiView::ensureIdTargets(QSize size)
+{
+    if (m_idsFailed) {
+        return false;
+    }
+    if (m_ids != nullptr && m_ids->size == size) {
+        return true;
+    }
+    QRhi* device = rhi();
+    if (!device->isTextureFormatSupported(QRhiTexture::R32UI) || !device->isTextureFormatSupported(QRhiTexture::R32F)) {
+        m_idsFailed = true;
+        K137_ERROR(Viewer, "Picking in the new view needs R32UI and R32F targets, which {} on {} lacks",
+                   m_backend.toStdString(), m_device.toStdString());
+        return false;
+    }
+    if (m_ids == nullptr) {
+        m_ids = std::make_unique<IdTargets>();
+    }
+    IdTargets& targets = *m_ids;
+    targets.size = {};
+    targets.target.reset();
+    const QRhiTexture::Flags flags = QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource;
+    targets.ids.reset(device->newTexture(QRhiTexture::R32UI, size, 1, flags));
+    targets.depths.reset(device->newTexture(QRhiTexture::R32F, size, 1, flags));
+    targets.depthStencil.reset(device->newRenderBuffer(QRhiRenderBuffer::DepthStencil, size, 1));
+    if (!targets.ids->create() || !targets.depths->create() || !targets.depthStencil->create()) {
+        m_idsFailed = true;
+        K137_ERROR(Viewer, "The new view could not create its {}x{} id targets", size.width(), size.height());
+        return false;
+    }
+    QRhiTextureRenderTargetDescription description;
+    description.setColorAttachments(
+        {QRhiColorAttachment(targets.ids.get()), QRhiColorAttachment(targets.depths.get())});
+    description.setDepthStencilBuffer(targets.depthStencil.get());
+    targets.target.reset(device->newTextureRenderTarget(description));
+    const bool first = targets.pass == nullptr;
+    if (first) {
+        targets.pass.reset(targets.target->newCompatibleRenderPassDescriptor());
+    }
+    targets.target->setRenderPassDescriptor(targets.pass.get());
+    if (!targets.target->create() || (first && !m_bodies->setIdTarget(targets.pass.get()))) {
+        m_idsFailed = true;
+        K137_ERROR(Viewer, "The new view could not create its id pass");
+        return false;
+    }
+    targets.size = size;
+    m_idsFresh = false;
+    return true;
+}
+
+std::optional<IdImage> RhiView::readIds(const QRect& deviceRect, const IdStyle& style)
+{
+    if (!m_ready || m_failed || rhi() == nullptr || m_bodies == nullptr) {
+        return std::nullopt;
+    }
+    const camera::Viewport port = viewport();
+    const QSize size(port.width, port.height);
+    const QRect rect = deviceRect.intersected(QRect(QPoint(0, 0), size));
+    if (rect.isEmpty() || !ensureIdTargets(size)) {
+        return std::nullopt;
+    }
+    IdTargets& targets = *m_ids;
+    QRhiCommandBuffer* buffer = nullptr;
+    if (rhi()->beginOffscreenFrame(&buffer) != QRhi::FrameOpSuccess) {
+        return std::nullopt;
+    }
+    if (!m_idsFresh || style != m_idStyle) {
+        QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
+        const DrawList list = m_chunks.pickList(makeFrame(m_camera, port, m_scene.origin, m_style.background));
+        m_idsFresh = m_bodies->prepareIds(list, style, updates);
+        m_idStyle = style;
+        buffer->beginPass(targets.target.get(), QColor(0, 0, 0, 0), {1.0F, 0}, updates);
+        if (m_idsFresh) {
+            m_bodies->drawIds(buffer, size);
+        }
+        buffer->endPass();
+        ++m_idPasses;
+    }
+    if (targets.idCopy == nullptr || targets.idCopy->pixelSize() != rect.size()) {
+        targets.idCopy.reset(rhi()->newTexture(QRhiTexture::R32UI, rect.size(), 1, QRhiTexture::UsedAsTransferSource));
+        targets.depthCopy.reset(
+            rhi()->newTexture(QRhiTexture::R32F, rect.size(), 1, QRhiTexture::UsedAsTransferSource));
+        if (!targets.idCopy->create() || !targets.depthCopy->create()) {
+            targets.idCopy.reset();
+            rhi()->endOffscreenFrame();
+            return std::nullopt;
+        }
+    }
+    const bool flipped = rhi()->isYUpInFramebuffer();
+    QRhiTextureCopyDescription copy;
+    copy.setPixelSize(rect.size());
+    copy.setSourceTopLeft(QPoint(rect.x(), flipped ? size.height() - rect.y() - rect.height() : rect.y()));
+    QRhiReadbackResult idResult;
+    QRhiReadbackResult depthResult;
+    QRhiResourceUpdateBatch* batch = rhi()->nextResourceUpdateBatch();
+    batch->copyTexture(targets.idCopy.get(), targets.ids.get(), copy);
+    batch->copyTexture(targets.depthCopy.get(), targets.depths.get(), copy);
+    batch->readBackTexture(QRhiReadbackDescription(targets.idCopy.get()), &idResult);
+    batch->readBackTexture(QRhiReadbackDescription(targets.depthCopy.get()), &depthResult);
+    buffer->resourceUpdate(batch);
+    if (rhi()->endOffscreenFrame() != QRhi::FrameOpSuccess || !m_idsFresh) {
+        return std::nullopt;
+    }
+    IdImage image;
+    image.width = rect.width();
+    image.height = rect.height();
+    const std::size_t pixels = static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height);
+    const std::size_t rowBytes = static_cast<std::size_t>(image.width) * sizeof(std::uint32_t);
+    if (static_cast<std::size_t>(idResult.data.size()) < pixels * sizeof(std::uint32_t) ||
+        static_cast<std::size_t>(depthResult.data.size()) < pixels * sizeof(float)) {
+        return std::nullopt;
+    }
+    image.ids.resize(pixels);
+    image.depths.resize(pixels);
+    for (int row = 0; row < image.height; ++row) {
+        const auto from = static_cast<std::size_t>(flipped ? image.height - 1 - row : row) * rowBytes;
+        std::memcpy(image.ids.data() + image.indexOf(0, row), idResult.data.constData() + from, rowBytes);
+        std::memcpy(image.depths.data() + image.indexOf(0, row), depthResult.data.constData() + from, rowBytes);
+    }
+    return image;
+}
+
+std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, const IdStyle& style)
+{
+    const double ratio = devicePixelRatioF();
+    const int radius = static_cast<int>(std::lround(kPickTolerance * ratio));
+    const QPoint center(static_cast<int>(std::floor(position.x() * ratio)),
+                        static_cast<int>(std::floor(position.y() * ratio)));
+    const QRect square(center.x() - radius, center.y() - radius, (2 * radius) + 1, (2 * radius) + 1);
+    const camera::Viewport port = viewport();
+    const QRect rect = square.intersected(QRect(0, 0, port.width, port.height));
+    if (rect.isEmpty()) {
+        return std::nullopt;
+    }
+    const std::optional<IdImage> image = readIds(rect, style);
+    if (!image) {
+        return std::nullopt;
+    }
+    std::optional<IdHit> hit = resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds);
+    if (!hit) {
+        return std::nullopt;
+    }
+    const PickId id = decodePickId(hit->id);
+    const std::vector<std::uint64_t>& chunks = m_bodies->idChunks();
+    if (id.chunk >= chunks.size()) {
+        return std::nullopt;
+    }
+    const std::optional<PickedItem> item = m_chunks.itemOf(chunks[id.chunk], id.kind, id.entry);
+    if (!item) {
+        return std::nullopt;
+    }
+    hit->x += rect.x();
+    hit->y += rect.y();
+    return IdPick{.item = *item, .hit = *hit};
 }
 
 std::optional<double> RhiView::benchFrame()
@@ -300,12 +481,15 @@ void RhiView::render(QRhiCommandBuffer* buffer)
 
 void RhiView::releaseResources()
 {
+    m_ids.reset();
     m_bodies.reset();
+    m_idsFresh = false;
 }
 
 void RhiView::setCamera(const camera::Camera& camera)
 {
     m_camera = camera;
+    m_idsFresh = false;
     update();
 }
 
@@ -318,6 +502,7 @@ camera::Viewport RhiView::viewport() const
 void RhiView::resizeEvent(QResizeEvent* event)
 {
     QRhiWidget::resizeEvent(event);
+    m_idsFresh = false;
     placeMessage();
     emit resized();
 }

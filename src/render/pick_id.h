@@ -1,0 +1,72 @@
+// SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <vector>
+
+namespace kalve137::render {
+
+enum class PickKind : std::uint8_t { None, Face, Edge, Point };
+
+struct PickKinds {
+    bool faces = true;
+    bool edges = true;
+    bool points = false;
+
+    bool has(PickKind kind) const;
+    bool operator==(const PickKinds&) const = default;
+};
+
+inline constexpr std::uint32_t kPickChunks = 1U << 14;
+inline constexpr unsigned kPickKindShift = 16;
+inline constexpr unsigned kPickChunkShift = 18;
+
+struct PickId {
+    std::uint32_t chunk = 0;
+    PickKind kind = PickKind::None;
+    std::uint32_t entry = 0;
+};
+
+std::uint32_t encodePickId(std::uint32_t chunk, PickKind kind, std::uint32_t entry);
+PickId decodePickId(std::uint32_t id);
+
+inline constexpr double kPickEdgeWidth = 1.5;
+inline constexpr double kPickPointWidth = 6.0;
+inline constexpr int kPickTolerance = 4;
+
+struct IdStyle {
+    bool points = false;
+    double edgeWidth = kPickEdgeWidth;
+    double pointWidth = kPickPointWidth;
+
+    bool operator==(const IdStyle&) const = default;
+};
+
+struct IdImage {
+    int width = 0;
+    int height = 0;
+    std::vector<std::uint32_t> ids;
+    std::vector<float> depths;
+
+    std::size_t indexOf(int x, int y) const
+    {
+        return (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) + static_cast<std::size_t>(x);
+    }
+    std::uint32_t idAt(int x, int y) const { return ids[indexOf(x, y)]; }
+    float depthAt(int x, int y) const { return depths[indexOf(x, y)]; }
+};
+
+struct IdHit {
+    std::uint32_t id = 0;
+    int x = 0;
+    int y = 0;
+    float depth = 0.0F;
+};
+
+std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds);
+
+} // namespace kalve137::render

@@ -4,10 +4,12 @@
 #pragma once
 
 #include "render/draw_list.h"
+#include "render/pick_id.h"
 #include "render/thread_pool.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -29,6 +31,7 @@ public:
     explicit CpuBackend(int threads = 0);
 
     void draw(const DrawList& list, int supersample, Image& image);
+    void drawIds(const DrawList& list, const IdStyle& style, IdImage& image);
     int threads() const { return m_pool.size(); }
 
 private:
@@ -50,10 +53,12 @@ private:
         bool flat = false;
         bool biased = false;
         bool edge = false;
+        std::uint32_t id = 0;
     };
     struct TileBuffers {
         std::vector<std::uint32_t> color;
         std::vector<float> depth;
+        std::vector<float> window;
     };
     struct Bins {
         std::vector<std::vector<std::pair<std::uint32_t, std::uint32_t>>> entries;
@@ -62,10 +67,15 @@ private:
         std::vector<std::uint32_t> items;
     };
 
+    void prepareTiles(const Frame& frame, int supersample);
     void project(const DrawList& list);
-    void projectEdges(const DrawList& list, const Chunk& chunk);
+    void projectFaces(const DrawList& list, const Chunk& item, std::uint32_t id);
+    void projectSegments(const DrawList& list, std::span<const Segment> segments, std::span<const Entry> palette,
+                         double widthPixels, std::uint32_t id);
     void bin();
-    void shadeTile(int tile, int worker, Image& image);
+    void shadeTile(int tile, int worker);
+    void resolveTile(int tile, int worker, Image& image) const;
+    void copyIds(int tile, int worker, IdImage& image) const;
 
     ThreadPool m_pool;
     Frame m_frame;
@@ -76,6 +86,8 @@ private:
     int m_tilesY = 0;
     int m_tileSamples = 0;
     std::uint32_t m_background = 0;
+    VertexColor m_edgeColor{};
+    bool m_ids = false;
     std::vector<Projected> m_vertices;
     std::vector<Triangle> m_triangles;
     std::vector<TileBuffers> m_tileBuffers;

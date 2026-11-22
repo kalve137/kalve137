@@ -96,16 +96,60 @@ CpuBackend::CpuBackend(int threads) : m_pool(defaultThreads(threads)) {}
 
 void CpuBackend::draw(const DrawList& list, int supersample, Image& image)
 {
-    const Frame& frame = list.frame;
-    m_frame = frame;
-    m_width = std::max(0, frame.width);
-    m_height = std::max(0, frame.height);
+    m_ids = false;
+    prepareTiles(list.frame, supersample);
     image.width = m_width;
     image.height = m_height;
     image.pixels.resize(static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height));
     if (m_width == 0 || m_height == 0) {
         return;
     }
+    project(list);
+    bin();
+    m_pool.run(m_tilesX * m_tilesY, [&](int tile, int worker) {
+        shadeTile(tile, worker);
+        resolveTile(tile, worker, image);
+    });
+}
+
+void CpuBackend::drawIds(const DrawList& list, const IdStyle& style, IdImage& image)
+{
+    m_ids = true;
+    prepareTiles(list.frame, 1);
+    const std::size_t pixels = static_cast<std::size_t>(m_width) * static_cast<std::size_t>(m_height);
+    image.width = m_width;
+    image.height = m_height;
+    image.ids.assign(pixels, 0);
+    image.depths.assign(pixels, 1.0F);
+    if (pixels == 0) {
+        return;
+    }
+    m_vertices.clear();
+    m_triangles.clear();
+    const auto chunks = static_cast<std::uint32_t>(std::min<std::size_t>(list.chunks.size(), kPickChunks));
+    for (std::uint32_t i = 0; i < chunks && list.faces; ++i) {
+        projectFaces(list, list.chunks[i], encodePickId(i, PickKind::Face, 0));
+    }
+    for (std::uint32_t i = 0; i < chunks && list.edges; ++i) {
+        projectSegments(list, list.chunks[i].segments, list.chunks[i].edgePalette, style.edgeWidth * list.pixelRatio,
+                        encodePickId(i, PickKind::Edge, 0));
+    }
+    for (std::uint32_t i = 0; i < chunks && style.points; ++i) {
+        projectSegments(list, list.chunks[i].points, list.chunks[i].pointPalette, style.pointWidth * list.pixelRatio,
+                        encodePickId(i, PickKind::Point, 0));
+    }
+    bin();
+    m_pool.run(m_tilesX * m_tilesY, [&](int tile, int worker) {
+        shadeTile(tile, worker);
+        copyIds(tile, worker, image);
+    });
+}
+
+void CpuBackend::prepareTiles(const Frame& frame, int supersample)
+{
+    m_frame = frame;
+    m_width = std::max(0, frame.width);
+    m_height = std::max(0, frame.height);
     m_supersample = std::max(1, supersample);
     m_tileSamples = kTilePixels * m_supersample;
     m_tilesX = (m_width + kTilePixels - 1) / kTilePixels;
@@ -117,85 +161,88 @@ void CpuBackend::draw(const DrawList& list, int supersample, Image& image)
     for (TileBuffers& buffers : m_tileBuffers) {
         buffers.color.resize(tileArea);
         buffers.depth.resize(tileArea);
+        buffers.window.resize(m_ids ? tileArea : 0);
     }
-    project(list);
-    bin();
-    m_pool.run(m_tilesX * m_tilesY, [&](int tile, int worker) { shadeTile(tile, worker, image); });
 }
 
 void CpuBackend::project(const DrawList& list)
 {
-    const Frame& frame = list.frame;
-    const std::array<float, 16>& m = frame.viewProjection;
-    const double width = static_cast<double>(m_width) * m_supersample;
-    const double height = static_cast<double>(m_height) * m_supersample;
-    const int chunks = m_pool.size() * kChunksPerThread;
     m_vertices.clear();
     m_triangles.clear();
+    m_edgeColor = vertexColor(list.edgeColor);
     for (const Chunk& item : list.chunks) {
         if (list.edges) {
-            projectEdges(list, item);
+            projectSegments(list, item.segments, item.edgePalette, list.edgeWidth * list.pixelRatio, 0);
         }
-        if (!list.faces) {
-            continue;
-        }
-        const std::span<const Vertex> vertices = item.vertices;
-        const auto offset = static_cast<std::uint32_t>(m_vertices.size());
-        m_vertices.resize(m_vertices.size() + vertices.size());
-        m_pool.run(chunks, [&](int chunk, int) {
-            const std::size_t last = chunkStart(vertices.size(), chunk + 1, chunks);
-            for (std::size_t i = chunkStart(vertices.size(), chunk, chunks); i < last; ++i) {
-                const Position& p = vertices[i].position;
-                const auto row = [&](int r) {
-                    const auto index = static_cast<std::size_t>(r);
-                    return (static_cast<double>(m[index]) * p[0]) + (static_cast<double>(m[index + 4]) * p[1]) +
-                           (static_cast<double>(m[index + 8]) * p[2]) + static_cast<double>(m[index + 12]);
-                };
-                const double w = row(3);
-                Projected& out = m_vertices[offset + i];
-                out.valid = w > 0.0;
-                if (!out.valid) {
-                    continue;
-                }
-                out.x = fixed((row(0) / w + 1.0) * 0.5 * width);
-                out.y = fixed((1.0 - row(1) / w) * 0.5 * height);
-                out.z = static_cast<float>(row(2) / w);
-                out.normal = decodeNormal(vertices[i].packed[0], vertices[i].packed[1]);
-                out.position = p;
-            }
-        });
-        const bool cull = list.cullClosed && item.closed;
-        const std::span<const std::uint32_t> indices = item.indices;
-        for (std::size_t i = 0; i + 2 < indices.size(); i += 3) {
-            if (indices[i] >= vertices.size() || indices[i + 1] >= vertices.size() ||
-                indices[i + 2] >= vertices.size()) {
-                continue;
-            }
-            const std::uint32_t entry = entryOf(vertices[indices[i]]);
-            if (entry >= item.palette.size() || (item.palette[entry][3] & kEntryVisible) == 0) {
-                continue;
-            }
-            const Entry& value = item.palette[entry];
-            const VertexColor color{value[0], value[1], value[2], 255};
-            m_triangles.push_back({.a = offset + indices[i],
-                                   .b = offset + indices[i + 1],
-                                   .c = offset + indices[i + 2],
-                                   .color = color,
-                                   .linear = linearOf(color),
-                                   .cull = cull,
-                                   .flat = !list.lit,
-                                   .biased = list.edges});
+        if (list.faces) {
+            projectFaces(list, item, 0);
         }
     }
 }
 
-void CpuBackend::projectEdges(const DrawList& list, const Chunk& chunk)
+void CpuBackend::projectFaces(const DrawList& list, const Chunk& item, std::uint32_t id)
 {
     const std::array<float, 16>& m = list.frame.viewProjection;
     const double width = static_cast<double>(m_width) * m_supersample;
     const double height = static_cast<double>(m_height) * m_supersample;
-    const double edgeWidth = list.edgeWidth * list.pixelRatio * m_supersample;
-    const VertexColor color = vertexColor(list.edgeColor);
+    const int chunks = m_pool.size() * kChunksPerThread;
+    const std::span<const Vertex> vertices = item.vertices;
+    const auto offset = static_cast<std::uint32_t>(m_vertices.size());
+    m_vertices.resize(m_vertices.size() + vertices.size());
+    m_pool.run(chunks, [&](int chunk, int) {
+        const std::size_t last = chunkStart(vertices.size(), chunk + 1, chunks);
+        for (std::size_t i = chunkStart(vertices.size(), chunk, chunks); i < last; ++i) {
+            const Position& p = vertices[i].position;
+            const auto row = [&](int r) {
+                const auto index = static_cast<std::size_t>(r);
+                return (static_cast<double>(m[index]) * p[0]) + (static_cast<double>(m[index + 4]) * p[1]) +
+                       (static_cast<double>(m[index + 8]) * p[2]) + static_cast<double>(m[index + 12]);
+            };
+            const double w = row(3);
+            Projected& out = m_vertices[offset + i];
+            out.valid = w > 0.0;
+            if (!out.valid) {
+                continue;
+            }
+            out.x = fixed((row(0) / w + 1.0) * 0.5 * width);
+            out.y = fixed((1.0 - row(1) / w) * 0.5 * height);
+            out.z = static_cast<float>(row(2) / w);
+            out.normal = decodeNormal(vertices[i].packed[0], vertices[i].packed[1]);
+            out.position = p;
+        }
+    });
+    const bool cull = list.cullClosed && item.closed;
+    const std::span<const std::uint32_t> indices = item.indices;
+    for (std::size_t i = 0; i + 2 < indices.size(); i += 3) {
+        if (indices[i] >= vertices.size() || indices[i + 1] >= vertices.size() || indices[i + 2] >= vertices.size()) {
+            continue;
+        }
+        const std::uint32_t entry = entryOf(vertices[indices[i]]);
+        if (entry >= item.palette.size() || (item.palette[entry][3] & kEntryVisible) == 0) {
+            continue;
+        }
+        const Entry& value = item.palette[entry];
+        const VertexColor color{value[0], value[1], value[2], 255};
+        m_triangles.push_back({.a = offset + indices[i],
+                               .b = offset + indices[i + 1],
+                               .c = offset + indices[i + 2],
+                               .color = color,
+                               .linear = linearOf(color),
+                               .cull = cull,
+                               .flat = !list.lit,
+                               .biased = list.edges,
+                               .id = id | entry});
+    }
+}
+
+void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> segments,
+                                 std::span<const Entry> palette, double widthPixels, std::uint32_t id)
+{
+    const std::array<float, 16>& m = list.frame.viewProjection;
+    const double width = static_cast<double>(m_width) * m_supersample;
+    const double height = static_cast<double>(m_height) * m_supersample;
+    const double edgeWidth = widthPixels * m_supersample;
+    const VertexColor color = m_edgeColor;
     const auto clipOf = [&m](const Position& p) {
         Clip clip{};
         for (std::size_t r = 0; r < clip.size(); ++r) {
@@ -204,9 +251,9 @@ void CpuBackend::projectEdges(const DrawList& list, const Chunk& chunk)
         }
         return clip;
     };
-    for (const Segment& segment : chunk.segments) {
+    for (const Segment& segment : segments) {
         const std::uint32_t entry = entryOf(segment);
-        if (entry >= chunk.edgePalette.size() || (chunk.edgePalette[entry][3] & kEntryVisible) == 0) {
+        if (entry >= palette.size() || (palette[entry][3] & kEntryVisible) == 0) {
             continue;
         }
         const Clip start = clipOf(segment.start);
@@ -230,8 +277,13 @@ void CpuBackend::projectEdges(const DrawList& list, const Chunk& chunk)
             m_vertices.resize(first);
             continue;
         }
-        const Triangle quad{
-            .color = color, .linear = linearOf(color), .cull = false, .flat = true, .biased = false, .edge = true};
+        const Triangle quad{.color = color,
+                            .linear = linearOf(color),
+                            .cull = false,
+                            .flat = true,
+                            .biased = false,
+                            .edge = true,
+                            .id = id | entry};
         Triangle lower = quad;
         lower.a = first;
         lower.b = first + 1;
@@ -314,7 +366,7 @@ void CpuBackend::bin()
     });
 }
 
-void CpuBackend::shadeTile(int tile, int worker, Image& image)
+void CpuBackend::shadeTile(int tile, int worker)
 {
     const int supersample = m_supersample;
     const int size = m_tileSamples;
@@ -327,10 +379,14 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
     TileBuffers& buffers = m_tileBuffers[static_cast<std::size_t>(worker)];
     std::uint32_t* color = buffers.color.data();
     float* depth = buffers.depth.data();
+    float* window = buffers.window.data();
     for (int sy = sy0; sy < sy1; ++sy) {
         const std::size_t row = static_cast<std::size_t>(sy - sy0) * static_cast<std::size_t>(size);
-        std::fill_n(color + row, size, m_background);
+        std::fill_n(color + row, size, m_ids ? 0U : m_background);
         std::fill_n(depth + row, size, std::numeric_limits<float>::infinity());
+        if (m_ids) {
+            std::fill_n(window + row, size, 1.0F);
+        }
     }
 
     for (std::uint32_t k = m_bins.start[static_cast<std::size_t>(tile)];
@@ -395,7 +451,10 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
                     const float biased = z + bias;
                     if ((triangle.edge ? biased <= depth[index] : biased < depth[index]) && z >= -1.0F && z <= 1.0F) {
                         depth[index] = biased;
-                        if (triangle.flat) {
+                        if (m_ids) {
+                            color[index] = triangle.id;
+                            window[index] = (z * 0.5F) + 0.5F;
+                        } else if (triangle.flat) {
                             color[index] = flat;
                         } else {
                             const Normal normal = unit(interpolated(a.normal, dn1, dn2, f1, f2));
@@ -417,7 +476,17 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
             row2 += stepY2;
         }
     }
+}
 
+void CpuBackend::resolveTile(int tile, int worker, Image& image) const
+{
+    const int supersample = m_supersample;
+    const int size = m_tileSamples;
+    const int sx0 = (tile % m_tilesX) * size;
+    const int sy0 = (tile / m_tilesX) * size;
+    const int sx1 = std::min(sx0 + size, m_width * supersample);
+    const int sy1 = std::min(sy0 + size, m_height * supersample);
+    const std::uint32_t* color = m_tileBuffers[static_cast<std::size_t>(worker)].color.data();
     const int samples = supersample * supersample;
     const auto half = static_cast<std::uint32_t>(samples / 2);
     const auto count = static_cast<std::uint32_t>(samples);
@@ -443,6 +512,24 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
             line[x] =
                 kOpaque | (((red + half) / count) << 16) | (((green + half) / count) << 8) | ((blue + half) / count);
         }
+    }
+}
+
+void CpuBackend::copyIds(int tile, int worker, IdImage& image) const
+{
+    const int size = m_tileSamples;
+    const int x0 = (tile % m_tilesX) * size;
+    const int y0 = (tile / m_tilesX) * size;
+    const int x1 = std::min(x0 + size, m_width);
+    const int y1 = std::min(y0 + size, m_height);
+    const TileBuffers& buffers = m_tileBuffers[static_cast<std::size_t>(worker)];
+    for (int y = y0; y < y1; ++y) {
+        const std::size_t from = static_cast<std::size_t>(y - y0) * static_cast<std::size_t>(size);
+        const std::size_t to = image.indexOf(x0, y);
+        std::copy_n(buffers.color.begin() + static_cast<std::ptrdiff_t>(from), x1 - x0,
+                    image.ids.begin() + static_cast<std::ptrdiff_t>(to));
+        std::copy_n(buffers.window.begin() + static_cast<std::ptrdiff_t>(from), x1 - x0,
+                    image.depths.begin() + static_cast<std::ptrdiff_t>(to));
     }
 }
 
