@@ -32,6 +32,7 @@
 #include "core/recompute.h"
 
 #include "platform/platform.h"
+#include "render/rhi/rhi_view.h"
 #include "viewer/occt_view_widget.h"
 
 #include <OcctQtTools.h>
@@ -79,16 +80,28 @@ const char* const kWindowGeometryKey = "windowGeometry";
 
 } // namespace
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
+MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWindow(parent)
 {
     m_session = new DesignSession(this);
     m_autosave = new Autosave(*m_session, this);
 
-    m_view = new viewer::OcctViewWidget(this);
+    if (options.view == ViewKind::New) {
+        m_hiddenView = std::make_unique<viewer::OcctViewWidget>();
+        m_view = m_hiddenView.get();
+        const render::GraphicsApi api = options.graphicsApi.value_or(render::platformGraphicsApi());
+        if (render::canStart(api)) {
+            m_rhiView = new render::RhiView(api, this);
+            setCentralWidget(m_rhiView);
+        } else {
+            setCentralWidget(render::makeFailureNotice(api, this));
+        }
+    } else {
+        m_view = new viewer::OcctViewWidget(this);
+        setCentralWidget(m_view);
+    }
     applyViewportTheme();
-    setCentralWidget(m_view);
 
-    m_scene = std::make_unique<Scene>(m_view);
+    m_scene = std::make_unique<Scene>(m_view, m_session->snapshots());
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
 
     createActions();
@@ -120,11 +133,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     });
     connect(m_session, &DesignSession::visibilityChanged, this, &MainWindow::refreshScene);
     connect(m_session, &DesignSession::fileStateChanged, this, &MainWindow::updateTitle);
-    connect(m_view, &viewer::OcctViewWidget::ready, this, [this] {
-        diagnostics::setGlInfo(m_view->glInfo());
-        refreshScene();
-        fitView();
-    });
+    if (m_rhiView != nullptr) {
+        connect(m_rhiView, &render::RhiView::ready, this, [this] {
+            refreshScene();
+            fitView();
+        });
+    } else {
+        connect(m_view, &viewer::OcctViewWidget::ready, this, [this] {
+            diagnostics::setGlInfo(m_view->glInfo());
+            refreshScene();
+            fitView();
+        });
+    }
     connect(m_view, &viewer::OcctViewWidget::selectionChanged, this, &MainWindow::onViewSelection);
     connect(m_view, &viewer::OcctViewWidget::hoverChanged, this, &MainWindow::onViewHover);
     connect(m_view, &viewer::OcctViewWidget::menuRequested, this, &MainWindow::showMarkingMenu);
@@ -773,12 +793,18 @@ void MainWindow::refreshScene()
         return;
     }
     m_scene->show(document, m_session->model(), *m_session);
+    if (m_rhiView != nullptr) {
+        m_rhiView->setScene(m_session->snapshots().scene(m_session->model()));
+    }
 }
 
 bool MainWindow::event(QEvent* event)
 {
     if (event->type() == QEvent::DevicePixelRatioChange && m_view->isReady()) {
         refreshScene();
+    }
+    if (event->type() == QEvent::DevicePixelRatioChange && m_rhiView != nullptr) {
+        applyViewportTheme();
     }
     return QMainWindow::event(event);
 }
@@ -859,6 +885,14 @@ void MainWindow::applyViewportTheme()
         .axisZ = colors.viewport.axisZ,
         .labelFont = fonts::families().occtMedium,
     });
+    if (m_rhiView != nullptr) {
+        const QColor& canvas = colors.viewport.canvas;
+        m_rhiView->setViewportStyle({
+            .background = {static_cast<float>(canvas.redF()), static_cast<float>(canvas.greenF()),
+                           static_cast<float>(canvas.blueF()), static_cast<float>(canvas.alphaF())},
+            .pixelRatio = devicePixelRatioF(),
+        });
+    }
 }
 
 void MainWindow::applyPreferences()

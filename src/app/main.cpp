@@ -4,8 +4,10 @@
 #include "app/diagnostics/diagnostics.h"
 #include "app/session/preferences.h"
 #include "app/shell/batch_import.h"
+#include "app/shell/bench_orbit.h"
 #include "app/shell/main_window.h"
 #include "app/shell/smoke.h"
+#include "app/shell/startup_options.h"
 #include "app/theme/theme.h"
 
 #include "log/log.h"
@@ -23,6 +25,7 @@
 #include <QTimer>
 
 #include <array>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 
@@ -94,12 +97,19 @@ int main(int argc, char** argv)
     OcctQtTools::qtGlPlatformSetup();
 
     Application app(argc, argv);
-    const QStringList arguments = QApplication::arguments();
+    const kalve137::app::ParsedStartup startup =
+        kalve137::app::parseStartup(QApplication::arguments(), qEnvironmentVariable(kalve137::app::kViewVariable));
+    if (!startup.error.isEmpty()) {
+        std::fprintf(stderr, "%s\n", qPrintable(startup.error));
+        return 2;
+    }
+    const QStringList& arguments = startup.arguments;
     const QString mode = arguments.size() > 1 ? arguments.at(1) : QString();
     const bool smoke = mode == QLatin1String(kalve137::app::kSmokeFlag);
     const bool importBatch = mode == QLatin1String(kalve137::app::kImportBatchFlag);
     const bool importOne = mode == QLatin1String(kalve137::app::kImportOneFlag);
-    const bool headless = smoke || importBatch || importOne;
+    const bool benchOrbit = mode == QLatin1String(kalve137::app::kBenchOrbitFlag);
+    const bool headless = smoke || importBatch || importOne || benchOrbit;
     QApplication::setApplicationName("Kalve 137");
     QApplication::setOrganizationName(headless ? kalve137::app::kSmokeOrganization : "Kalve 137");
     QApplication::setApplicationVersion(KALVE137_VERSION);
@@ -135,8 +145,15 @@ int main(int argc, char** argv)
                      ? kalve137::app::runImportOne(std::filesystem::path(arguments.at(2).toStdU16String()),
                                                    std::filesystem::path(arguments.at(3).toStdU16String()))
                      : 2;
+    } else if (benchOrbit) {
+        constexpr qsizetype kBenchArguments = 5;
+        result =
+            arguments.size() == kBenchArguments
+                ? kalve137::app::runBenchOrbit(startup.options, std::filesystem::path(arguments.at(2).toStdU16String()),
+                                               std::filesystem::path(arguments.at(3).toStdU16String()), arguments.at(4))
+                : 2;
     } else {
-        kalve137::app::MainWindow window;
+        kalve137::app::MainWindow window(startup.options);
         window.show();
         if (arguments.size() > 1) {
             window.openDesignAt(std::filesystem::path(arguments.at(1).toStdU16String()));

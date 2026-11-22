@@ -14,7 +14,6 @@
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
-#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
 #include <NCollection_IndexedDataMap.hxx>
@@ -24,7 +23,6 @@
 #include <Precision.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp.hxx>
-#include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
@@ -34,7 +32,6 @@
 #include <gp_Cylinder.hxx>
 #include <gp_Lin.hxx>
 #include <gp_Pnt2d.hxx>
-#include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 
 #include <algorithm>
@@ -61,8 +58,6 @@ constexpr int kPointSteps = 8;
 constexpr double kViewClearance = 1e-3;
 constexpr double kStepPerClearance = 0.01;
 constexpr double kMarginPerDeflection = 2.0;
-constexpr double kMeshDeflection = 0.001;
-constexpr double kMeshAngle = 0.5;
 
 std::optional<gp_Vec> tangentAt(const TopoDS_Edge& edge, const TopoDS_Vertex& vertex)
 {
@@ -418,41 +413,15 @@ struct ViewBlockers::Faces {
     std::vector<double> margins;
 };
 
-ViewBlockers::ViewBlockers(const std::vector<TopoDS_Shape>& shapes) : m_faces(std::make_unique<Faces>())
+ViewBlockers::ViewBlockers(const std::vector<const snapshot::Mesh*>& meshes) : m_faces(std::make_unique<Faces>())
 {
-    pick::Mesh mesh;
-    for (const TopoDS_Shape& shape : shapes) {
-        if (!BRepTools::Triangulation(shape, Precision::Infinite())) {
-            BRepMesh_IncrementalMesh(shape, kMeshDeflection, true, kMeshAngle);
-        }
-        for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) {
-            TopLoc_Location location;
-            const Handle(Poly_Triangulation) triangulation =
-                BRep_Tool::Triangulation(TopoDS::Face(it.Current()), location);
-            if (triangulation.IsNull()) {
-                continue;
-            }
-            const gp_Trsf placement = location.Transformation();
-            const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
-            for (int i = 1; i <= triangulation->NbNodes(); ++i) {
-                const gp_Pnt node = triangulation->Node(i).Transformed(placement);
-                mesh.vertices.push_back({node.X(), node.Y(), node.Z()});
-            }
-            const auto face = static_cast<std::uint32_t>(m_faces->margins.size());
-            for (int i = 1; i <= triangulation->NbTriangles(); ++i) {
-                int a = 0;
-                int b = 0;
-                int c = 0;
-                triangulation->Triangle(i).Get(a, b, c);
-                mesh.triangles.push_back({base + static_cast<std::uint32_t>(a - 1),
-                                          base + static_cast<std::uint32_t>(b - 1),
-                                          base + static_cast<std::uint32_t>(c - 1)});
-                mesh.faces.push_back(face);
-            }
-            m_faces->margins.push_back(kViewClearance + kMarginPerDeflection * triangulation->Deflection());
+    for (const snapshot::Mesh* mesh : meshes) {
+        for (std::uint32_t face = 0; face < mesh->faceCount; ++face) {
+            const double deflection = face < mesh->faceDeflections.size() ? mesh->faceDeflections[face] : 0.0;
+            m_faces->margins.push_back(kViewClearance + kMarginPerDeflection * deflection);
         }
     }
-    m_faces->scene = std::make_unique<pick::RayScene>(mesh);
+    m_faces->scene = std::make_unique<pick::RayScene>(meshes);
 }
 
 ViewBlockers::~ViewBlockers() = default;

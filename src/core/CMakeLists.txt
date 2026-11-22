@@ -22,6 +22,8 @@ add_library(kalve137_core STATIC
     serialization.h
     shape_store.cpp
     shape_store.h
+    snapshot_cache.cpp
+    snapshot_cache.h
     undo_stack.cpp
     undo_stack.h
 )

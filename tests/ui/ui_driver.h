@@ -29,6 +29,10 @@ namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class RhiView;
+}
+
 namespace kalve137::app {
 class DesignSession;
 class MainWindow;
@@ -59,6 +63,7 @@ public:
 
     app::MainWindow& window() { return *m_window; }
     viewer::OcctViewWidget& view() { return *m_view; }
+    render::RhiView* newView() { return m_newView; }
     app::DesignSession& session() { return *m_session; }
     const core::Document& document() const;
 
@@ -109,6 +114,7 @@ private:
 
     std::unique_ptr<app::MainWindow> m_window;
     viewer::OcctViewWidget* m_view = nullptr;
+    render::RhiView* m_newView = nullptr;
     app::DesignSession* m_session = nullptr;
     Qt::MouseButtons m_buttons;
     QPointer<QWidget> m_grab;

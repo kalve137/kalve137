@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <array>
+#include "snapshot/mesh.h"
+
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -11,14 +12,7 @@
 
 namespace kalve137::pick {
 
-using Point = std::array<double, 3>;
-using Triangle = std::array<std::uint32_t, 3>;
-
-struct Mesh {
-    std::vector<Point> vertices;
-    std::vector<Triangle> triangles;
-    std::vector<std::uint32_t> faces;
-};
+using Point = snapshot::Point;
 
 struct Hit {
     double distance = 0.0;
@@ -28,7 +22,8 @@ struct Hit {
 
 class RayScene {
 public:
-    explicit RayScene(const Mesh& mesh);
+    explicit RayScene(const snapshot::Mesh& mesh);
+    explicit RayScene(const std::vector<const snapshot::Mesh*>& meshes);
     ~RayScene();
     RayScene(const RayScene&) = delete;
     RayScene& operator=(const RayScene&) = delete;

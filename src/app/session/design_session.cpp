@@ -38,6 +38,22 @@ bool usesSketch(const core::FeatureData& data, core::FeatureId sketch)
                       data);
 }
 
+bool isActive(const core::Document& document, const core::Feature& feature)
+{
+    return !feature.suppressed && !document.isRolledBack(feature.id);
+}
+
+bool movesTimeline(const core::Document& before, const core::Document& after)
+{
+    for (const core::Feature& feature : after.features()) {
+        const core::Feature* earlier = before.find(feature.id);
+        if (earlier != nullptr && isActive(before, *earlier) != isActive(after, feature)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 DesignSession::DesignSession(QObject* parent) : QObject(parent)
@@ -52,6 +68,9 @@ void DesignSession::edit(const QString& label, const std::function<void(core::Do
     K137_INFO(App, "Edit: {}", label.toStdString());
     m_undo.push(label.toStdString(), before);
     m_dirty = true;
+    if (movesTimeline(before, m_document)) {
+        jump();
+    }
     rebuild();
     emit fileStateChanged();
 }
@@ -74,6 +93,7 @@ void DesignSession::undo()
     K137_INFO(App, "Undo: {}", m_undo.undoLabel().value_or(std::string{}));
     m_undo.undo(m_document);
     m_dirty = true;
+    jump();
     rebuild();
     emit fileStateChanged();
 }
@@ -86,6 +106,7 @@ void DesignSession::redo()
     K137_INFO(App, "Redo: {}", m_undo.redoLabel().value_or(std::string{}));
     m_undo.redo(m_document);
     m_dirty = true;
+    jump();
     rebuild();
     emit fileStateChanged();
 }
@@ -100,6 +121,7 @@ void DesignSession::reset(core::Document document, std::filesystem::path path)
     m_dirty = false;
     m_visibility.clear();
     m_hiddenBodies.clear();
+    jump();
     rebuild();
     emit fileStateChanged();
     emit visibilityChanged();
@@ -197,6 +219,12 @@ void DesignSession::setOriginVisible(bool visible)
     }
     m_originVisible = visible;
     emit visibilityChanged();
+}
+
+void DesignSession::jump()
+{
+    m_snapshots.clear();
+    emit historyJumped();
 }
 
 void DesignSession::rebuild()

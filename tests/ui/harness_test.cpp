@@ -5,6 +5,7 @@
 
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
+#include "render/rhi/rhi_view.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QAbstractButton>
@@ -30,15 +31,19 @@ using HarnessTest = UiTest;
 TEST_F(HarnessTest, RendersTheWindowOffScreen)
 {
     EXPECT_TRUE(ui->window().testAttribute(Qt::WA_DontShowOnScreen));
-    const QImage view = ui->view().grabFramebuffer();
-    ASSERT_FALSE(view.isNull());
-    std::set<QRgb> colors;
-    for (int y = 0; y < view.height(); y += 16) {
-        for (int x = 0; x < view.width(); x += 16) {
-            colors.insert(view.pixel(x, y));
+    if (render::RhiView* canvas = ui->newView()) {
+        EXPECT_FALSE(canvas->grabFramebuffer().isNull());
+    } else {
+        const QImage view = ui->view().grabFramebuffer();
+        ASSERT_FALSE(view.isNull());
+        std::set<QRgb> colors;
+        for (int y = 0; y < view.height(); y += 16) {
+            for (int x = 0; x < view.width(); x += 16) {
+                colors.insert(view.pixel(x, y));
+            }
         }
+        EXPECT_GT(colors.size(), 3U) << "The view rendered a flat image";
     }
-    EXPECT_GT(colors.size(), 3U) << "The view rendered a flat image";
     const QImage whole = ui->shot();
     EXPECT_EQ(whole.size(), ui->window().size() * ui->window().devicePixelRatio());
     ui->save("start");

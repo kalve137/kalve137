@@ -44,6 +44,8 @@ add_library(kalve137_app STATIC
     session/step_import.h
     shell/batch_import.cpp
     shell/batch_import.h
+    shell/bench_orbit.cpp
+    shell/bench_orbit.h
     shell/command_search.cpp
     shell/command_search.h
     shell/main_window.cpp
@@ -62,6 +64,8 @@ add_library(kalve137_app STATIC
     shell/smoke.h
     shell/shortcuts_dialog.cpp
     shell/shortcuts_dialog.h
+    shell/startup_options.cpp
+    shell/startup_options.h
     shell/toolbar_fit.cpp
     shell/toolbar_fit.h
     shell/version_dialog.cpp
@@ -130,6 +134,7 @@ target_link_libraries(kalve137_app PUBLIC
     kalve137_platform
     kalve137_log
     kalve137_core
+    kalve137_render_rhi
     kalve137_viewer
     occt_qt
     Qt6::Svg

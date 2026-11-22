@@ -6,6 +6,8 @@
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
 #include "app/view/scene_detail.h"
+#include "core/snapshot_cache.h"
+#include "geometry/meshing.h"
 #include "geometry/modeling.h"
 #include "geometry/topology.h"
 
@@ -37,6 +39,7 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
+#include <memory>
 #include <utility>
 #include <variant>
 
@@ -235,8 +238,12 @@ std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick)
     return std::nullopt;
 }
 
-Scene::Scene(viewer::OcctViewWidget* view) : m_view(view)
+Scene::Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots) : m_view(view), m_snapshots(&snapshots)
 {
+    const Handle(Prs3d_Drawer)& drawer = m_view->aisContext()->DefaultDrawer();
+    drawer->SetTypeOfDeflection(Aspect_TOD_RELATIVE);
+    drawer->SetDeviationCoefficient(geometry::kDisplayDeviationCoefficient);
+    drawer->SetDeviationAngle(geometry::kDisplayDeviationAngle);
     updateBoxSelection();
 }
 
@@ -252,13 +259,15 @@ void Scene::updateBoxSelection()
         return;
     }
     m_view->setBoxSelection([this](const std::vector<Handle(SelectMgr_EntityOwner)>& owners) {
-        std::vector<TopoDS_Shape> shown;
+        std::vector<std::shared_ptr<const snapshot::Body>> shown;
+        std::vector<const snapshot::Mesh*> meshes;
         for (const core::Body& body : m_model.bodies) {
             if (!m_hiddenBodies.contains(body.key())) {
-                shown.push_back(body.shape);
+                shown.push_back(m_snapshots->body(body));
+                meshes.push_back(&shown.back()->mesh);
             }
         }
-        const geometry::ViewBlockers blockers(shown);
+        const geometry::ViewBlockers blockers(meshes);
         std::vector<TopoDS_Shape> shapes(owners.size());
         for (std::size_t i = 0; i < owners.size(); ++i) {
             const std::optional<Pick> pick = pickOf(owners[i]);
