@@ -210,6 +210,7 @@ void SketchEditor::openInputs()
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -256,6 +257,7 @@ void SketchEditor::onInputsAccepted()
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -432,6 +434,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -791,6 +794,18 @@ void SketchEditor::clickConstraint(const Hit& hit)
         }
         if (isRoundHit(first) && isLine(hit)) {
             apply(ConstraintKind::Tangent, {hit.id, first.id}, tr("Tangent"));
+            return;
+        }
+        break;
+    case Tool::Concentric:
+        if (both(isRoundHit)) {
+            const Id firstCenter = s.curve(first.id)->points.front();
+            const Id center = s.curve(hit.id)->points.front();
+            if (firstCenter == center) {
+                emit message(tr("Those already share a center"));
+                return;
+            }
+            apply(ConstraintKind::Coincident, {firstCenter, center}, tr("Concentric"));
             return;
         }
         break;

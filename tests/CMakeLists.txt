@@ -51,6 +51,7 @@ gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
+    ui/constraint_ui_test.cpp
     ui/crash_trace.cpp
     ui/crash_trace.h
     ui/dimension_ui_test.cpp

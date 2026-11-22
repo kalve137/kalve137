@@ -592,6 +592,7 @@ void SketchEditor::redrawPreview()
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:

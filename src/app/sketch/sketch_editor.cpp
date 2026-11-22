@@ -274,6 +274,8 @@ QString SketchEditor::hint() const
         return tr("Click two lines");
     case Tool::Tangent:
         return tr("Click a curve and a circle or arc");
+    case Tool::Concentric:
+        return tr("Click two circles or arcs");
     case Tool::Equal:
         return tr("Click two lines or two circles and arcs");
     case Tool::Midpoint:
@@ -371,6 +373,7 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -473,6 +476,7 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -579,6 +583,7 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:

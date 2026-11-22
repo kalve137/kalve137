@@ -12,6 +12,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Copy Details in About for bug reports
 - Help, Open Sample opens dodecahedron as an untitled copy
 - Light theme. Follows system setting by default, Preferences switches it live
+- Concentric sketch constraint joins the centers of two circles or arcs
 
 ### Changed
 

@@ -182,6 +182,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/chamfer.svg
         ${asset_dir}/icons/circle.svg
         ${asset_dir}/icons/coincident.svg
+        ${asset_dir}/icons/concentric.svg
         ${asset_dir}/icons/constrained_orbit.svg
         ${asset_dir}/icons/construct_point.svg
         ${asset_dir}/icons/construction.svg
