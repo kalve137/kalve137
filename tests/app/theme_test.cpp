@@ -30,6 +30,7 @@ using Role = QColor ChromeColors::*;
 
 constexpr double kText = 4.5;
 constexpr double kGraphic = 3.0;
+constexpr double kOutline = 1.5;
 
 QString readStyleSheet()
 {
@@ -115,7 +116,9 @@ void expectFloors(const Palette& palette)
         {"conflictText", c.conflictText, {{"base", c.base}, {"surface", c.surface}, {"raised", c.raised}}, kText},
         {"warning", c.warning, {{"base", c.base}, {"surface", c.surface}, {"raised", c.raised}}, kText},
         {"conflict", c.conflict, {{"canvas", v.canvas}, {"surface", c.surface}}, kGraphic},
-        {"accent", c.accent, {{"canvas", v.canvas}}, kGraphic},
+        {"accent", c.accent, {{"canvas", v.canvas}, {"raisedHover", c.raisedHover}}, kGraphic},
+        {"border", c.border, {{"base", c.base}, {"surface", c.surface}}, kOutline},
+        {"borderHover", c.borderHover, {{"base", c.base}, {"surface", c.surface}}, kOutline},
         {"cubeLabel",
          v.cubeLabel,
          {{"cubeSide", v.cubeSide}, {"cubeEdge", v.cubeEdge}, {"cubeCorner", v.cubeCorner}},
