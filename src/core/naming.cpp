@@ -15,16 +15,19 @@
 #include <NCollection_List.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <gp_Pln.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <limits>
 #include <map>
+#include <ranges>
 #include <variant>
 
 namespace kalve137::core {
@@ -33,6 +36,9 @@ namespace {
 
 constexpr double kParallel = 1e-6;
 constexpr double kOnPlane = 1e-6;
+constexpr std::size_t kKeptPoints = 256;
+constexpr std::size_t kBoxesPerBody = 2;
+constexpr std::size_t kSpareBoxes = 64;
 
 using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
 
@@ -47,6 +53,46 @@ bool hasName(const geometry::FaceNames& names, const TopoDS_Shape& face, const s
 {
     const std::vector<std::string>* list = names.find(face);
     return list != nullptr && std::ranges::find(*list, name) != list->end();
+}
+
+bool samePlace(const TopoDS_Shape& a, const TopoDS_Shape& b)
+{
+    if (a.IsEqual(b)) {
+        return true;
+    }
+    if (a.TShape() != b.TShape() || a.Orientation() != b.Orientation()) {
+        return false;
+    }
+    const gp_Trsf& first = a.Location().Transformation();
+    const gp_Trsf& second = b.Location().Transformation();
+    for (int row = 1; row <= 3; ++row) {
+        for (int column = 1; column <= 4; ++column) {
+            if (first.Value(row, column) != second.Value(row, column)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+int faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face)
+{
+    int index = 0;
+    for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next(), ++index) {
+        if (it.Current().IsEqual(face)) {
+            return index;
+        }
+    }
+    return 0;
+}
+
+TopoDS_Face faceAt(const TopoDS_Shape& shape, int index)
+{
+    TopExp_Explorer it(shape, TopAbs_FACE);
+    for (int i = 0; i < index && it.More(); ++i) {
+        it.Next();
+    }
+    return TopoDS::Face(it.Current());
 }
 
 int sharedNames(const geometry::FaceNames& names, const TopoDS_Shape& face, const std::vector<std::string>& wanted)
@@ -181,7 +227,58 @@ TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point)
     return {point, body.faceNames.edgeNames(body.shape, edge)};
 }
 
-std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref)
+void FaceLookup::clear()
+{
+    m_found.clear();
+    m_boxes.Clear();
+}
+
+const Bnd_Box& FaceLookup::boxOf(const TopoDS_Shape& shape)
+{
+    if (const Bnd_Box* box = m_boxes.Seek(shape)) {
+        return *box;
+    }
+    return *m_boxes.Bound(shape, geometry::geometryBox(shape));
+}
+
+std::optional<FaceHit> FaceLookup::atPoint(const std::vector<Body>& bodies, const gp_Pnt& point)
+{
+    const auto kept = std::ranges::find_if(m_found, [&](const Found& old) { return old.point.IsEqual(point, 0.0); });
+    const Found* last = kept == m_found.end() ? nullptr : &*kept;
+    if (static_cast<std::size_t>(m_boxes.Extent()) > kBoxesPerBody * bodies.size() + kSpareBoxes) {
+        m_boxes.Clear();
+    }
+    Found found{point, {}, std::nullopt, 0};
+    for (std::size_t i = 0; i < bodies.size() && !found.hit; ++i) {
+        const TopoDS_Shape& shape = bodies[i].shape;
+        found.shapes.push_back(shape);
+        if (last != nullptr && i < last->shapes.size() && samePlace(last->shapes[i], shape)) {
+            if (last->hit && last->hit->body == i) {
+                found.hit = FaceHit{i, faceAt(shape, last->faceIndex)};
+                found.faceIndex = last->faceIndex;
+            }
+            continue;
+        }
+        if (!geometry::mayHold(boxOf(shape), point, kRefTolerance)) {
+            continue;
+        }
+        if (auto face = geometry::findFace(shape, point, kRefTolerance)) {
+            found.hit = FaceHit{i, *face};
+            found.faceIndex = faceIndexOf(shape, *face);
+        }
+    }
+    if (last != nullptr) {
+        *kept = std::move(found);
+        return kept->hit;
+    }
+    if (m_found.size() >= kKeptPoints) {
+        m_found.erase(m_found.begin());
+    }
+    m_found.push_back(std::move(found));
+    return m_found.back().hit;
+}
+
+std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup)
 {
     std::optional<FaceHit> best;
     int bestShared = 0;
@@ -205,7 +302,13 @@ std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRe
             return best;
         }
     }
+    if (lookup != nullptr) {
+        return lookup->atPoint(bodies, ref.point);
+    }
     for (std::size_t i = 0; i < bodies.size(); ++i) {
+        if (!geometry::mayHold(geometry::geometryBox(bodies[i].shape), ref.point, kRefTolerance)) {
+            continue;
+        }
         if (auto face = geometry::findFace(bodies[i].shape, ref.point, kRefTolerance)) {
             return FaceHit{i, *face};
         }

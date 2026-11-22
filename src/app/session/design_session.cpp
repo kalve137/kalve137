@@ -226,6 +226,7 @@ void DesignSession::setOriginVisible(bool visible)
 void DesignSession::jump()
 {
     m_snapshots.clear();
+    m_faces.clear();
     emit historyJumped();
 }
 
@@ -233,7 +234,7 @@ void DesignSession::rebuild()
 {
     QElapsedTimer timer;
     timer.start();
-    m_model = core::recompute(m_document);
+    m_model = core::recompute(m_document, &m_faces);
     m_recomputeMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
     for (const core::Feature& feature : m_document.features()) {
         const core::FeatureStatus& status = m_model.status.at(feature.id);

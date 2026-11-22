@@ -67,7 +67,7 @@ bool touches(const TopoDS_Shape& a, const TopoDS_Shape& b)
 
 class Builder {
 public:
-    explicit Builder(Model& model) : m_model(model) {}
+    explicit Builder(Model& model, FaceLookup* lookup = nullptr) : m_model(model), m_lookup(lookup) {}
 
     void build(const Feature& feature)
     {
@@ -88,7 +88,7 @@ private:
         }
         bool faceLost = false;
         if (data.face) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, *data.face);
+            const std::optional<FaceHit> hit = faceOf(*data.face);
             const std::optional<gp_Ax3> frame = hit ? geometry::planarFrame(hit->face) : std::nullopt;
             if (frame) {
                 state.plane = *frame;
@@ -159,7 +159,7 @@ private:
             }
             target = plane->second.frame;
         } else if (data.toFace) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, *data.toFace);
+            const std::optional<FaceHit> hit = faceOf(*data.toFace);
             if (!hit) {
                 throw FeatureError("The face this extrude goes to is gone");
             }
@@ -427,7 +427,7 @@ private:
             body->faceColors.clear();
         }
         for (const TopoRef& ref : data.faces) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, ref);
+            const std::optional<FaceHit> hit = faceOf(ref);
             if (!hit) {
                 ++lost;
                 continue;
@@ -701,7 +701,7 @@ private:
         std::map<std::size_t, std::vector<TopoDS_Face>> facesByBody;
         std::size_t lost = 0;
         for (const TopoRef& ref : refs) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, ref);
+            const std::optional<FaceHit> hit = faceOf(ref);
             if (!hit) {
                 ++lost;
                 continue;
@@ -726,7 +726,10 @@ private:
 
     void warn(FeatureId id, std::string message) { m_model.status[id] = {FeatureHealth::Warning, std::move(message)}; }
 
+    std::optional<FaceHit> faceOf(const TopoRef& ref) const { return resolveFace(m_model.bodies, ref, m_lookup); }
+
     Model& m_model;
+    FaceLookup* m_lookup = nullptr;
 };
 
 bool buildOne(Builder& builder, Model& model, const Feature& feature)
@@ -789,11 +792,11 @@ std::vector<geometry::StepPart> Model::stepParts() const
     return result;
 }
 
-Model recompute(const Document& document)
+Model recompute(const Document& document, FaceLookup* lookup)
 {
     const auto start = std::chrono::steady_clock::now();
     Model model;
-    Builder builder(model);
+    Builder builder(model, lookup);
     const auto& features = document.features();
     std::size_t failed = 0;
     for (std::size_t i = 0; i < features.size(); ++i) {

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <Bnd_Box.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -61,6 +62,8 @@ std::optional<TopoDS_Edge> findEdge(const TopoDS_Shape& shape, const gp_Pnt& poi
 
 gp_Pnt facePoint(const TopoDS_Face& face);
 std::optional<gp_Ax3> planarFrame(const TopoDS_Face& face);
+Bnd_Box geometryBox(const TopoDS_Shape& shape);
+bool mayHold(const Bnd_Box& box, const gp_Pnt& point, double tolerance);
 std::optional<TopoDS_Face> findFace(const TopoDS_Shape& shape, const gp_Pnt& pointOnFace, double tolerance);
 
 } // namespace kalve137::geometry

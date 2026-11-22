@@ -797,6 +797,20 @@ gp_Pnt facePoint(const TopoDS_Face& face)
     return surface.Value(uv.X(), uv.Y());
 }
 
+Bnd_Box geometryBox(const TopoDS_Shape& shape)
+{
+    Bnd_Box box;
+    BRepBndLib::Add(shape, box, false);
+    return box;
+}
+
+bool mayHold(const Bnd_Box& box, const gp_Pnt& point, double tolerance)
+{
+    Bnd_Box grown = box;
+    grown.Enlarge(tolerance);
+    return !grown.IsOut(point);
+}
+
 std::optional<TopoDS_Face> findFace(const TopoDS_Shape& shape, const gp_Pnt& pointOnFace, double tolerance)
 {
     const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(pointOnFace);
@@ -804,6 +818,9 @@ std::optional<TopoDS_Face> findFace(const TopoDS_Shape& shape, const gp_Pnt& poi
     double bestDistance = tolerance;
     for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) {
         const TopoDS_Face& face = TopoDS::Face(it.Current());
+        if (!mayHold(geometryBox(face), pointOnFace, tolerance)) {
+            continue;
+        }
         BRepExtrema_DistShapeShape distance(probe, face);
         if (distance.IsDone() && distance.Value() <= bestDistance) {
             bestDistance = distance.Value();

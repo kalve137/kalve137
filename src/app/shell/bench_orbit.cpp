@@ -426,7 +426,10 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
     const core::BodyKey key = largest->key();
     const std::size_t largestTriangles = trianglesOf(session->snapshots(), *largest);
     const std::uint32_t largestFaces = session->snapshots().body(*largest)->mesh->faceCount;
-    const TopExp_Explorer firstFace(largest->shape, TopAbs_FACE);
+    const core::Body& colored = session->model().bodies.size() > 1 && &session->model().bodies.back() == largest
+                                    ? session->model().bodies.front()
+                                    : session->model().bodies.back();
+    const TopExp_Explorer firstFace(colored.shape, TopAbs_FACE);
     const gp_Pnt facePoint = geometry::facePoint(TopoDS::Face(firstFace.Current()));
 
     const auto added = [session](const QString& label, core::FeatureData data) {
@@ -442,19 +445,23 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
             });
         });
     };
+    core::FeatureId moveId = 0;
+    const auto moved = [session, &moveId]() {
+        return std::function<void(int)>([session, &moveId](int i) {
+            session->edit(QStringLiteral("Bench move"), [&](core::Document& document) {
+                const double distance = kBenchMoveStep * (1 + ((i + 1) % 2));
+                std::get<core::MoveFeature>(document.find(moveId)->data).translation = gp_Vec(distance, 0.0, 0.0);
+            });
+        });
+    };
     const auto move = [&]() {
         core::MoveFeature data;
         data.bodies = {key};
         data.translation = gp_Vec(kBenchMoveStep, 0.0, 0.0);
-        const core::FeatureId id = added(QStringLiteral("Bench move"), data);
-        return std::function<void(int)>([session, id](int i) {
-            session->edit(QStringLiteral("Bench move"), [&](core::Document& document) {
-                const double distance = kBenchMoveStep * (1 + ((i + 1) % 2));
-                std::get<core::MoveFeature>(document.find(id)->data).translation = gp_Vec(distance, 0.0, 0.0);
-            });
-        });
+        moveId = added(QStringLiteral("Bench move"), data);
+        return moved();
     };
-    const std::array<std::tuple<const char*, std::function<std::function<void(int)>()>, bool>, 4> plan{{
+    const std::array<std::tuple<const char*, std::function<std::function<void(int)>()>, bool>, 5> plan{{
         {"hide", [&] { return std::function<void(int)>([&](int i) { session->setBodyVisible(key, i % 2 == 1); }); },
          false},
         {"recolor_body",
@@ -470,6 +477,7 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
                             {.bodies = {}, .faces = {facePoint}, .color = kBenchColors[0], .clear = false});
          },
          true},
+        {"edit_after_face", moved, true},
     }};
 
     QJsonObject changes;
