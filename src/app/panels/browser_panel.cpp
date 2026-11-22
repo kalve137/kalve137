@@ -11,6 +11,7 @@
 
 #include <QHeaderView>
 #include <QMenu>
+#include <QMetaObject>
 #include <QTreeWidgetItemIterator>
 
 #include <algorithm>
@@ -51,16 +52,31 @@ BrowserPanel::BrowserPanel(DesignSession& session, QWidget* parent) : QTreeWidge
             emit editRequested(item->data(0, kIdRole).toInt());
         }
     });
-    connect(&session, &DesignSession::changed, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
-    connect(&session, &DesignSession::fileStateChanged, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
+    connect(&session, &DesignSession::changed, this, &BrowserPanel::queueRebuild);
+    connect(&session, &DesignSession::fileStateChanged, this, &BrowserPanel::queueRebuild);
     connect(&session, &DesignSession::visibilityChanged, this, &BrowserPanel::syncVisibility);
     connect(&session, &DesignSession::bodiesVisibilityChanged, this, &BrowserPanel::syncVisibility);
     connect(theme::notifier(), &theme::Notifier::changed, this, &BrowserPanel::rebuild);
     rebuild();
 }
 
+void BrowserPanel::queueRebuild()
+{
+    if (std::exchange(m_rebuildQueued, true)) {
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            m_rebuildQueued = false;
+            rebuild();
+        },
+        Qt::QueuedConnection);
+}
+
 void BrowserPanel::rebuild()
 {
+    ++m_rebuilds;
     m_rebuilding = true;
     clear();
     const core::Document& document = m_session.document();

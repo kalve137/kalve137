@@ -5,6 +5,7 @@
 #include "ui_test.h"
 
 #include "app/panels/browser_panel.h"
+#include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "viewer/occt_view_widget.h"
 
@@ -168,6 +169,31 @@ TEST_F(MenuTest, BrowserHidesAndShowsABody)
     ui->contextMenu(ui->browserItem("Body1"), "Show");
     EXPECT_TRUE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
     EXPECT_EQ(displayed(), before);
+}
+
+TEST_F(MenuTest, BrowserRebuildsOncePerEditUndoAndRedo)
+{
+    const auto* browser = ui->window().findChild<app::BrowserPanel*>();
+    ASSERT_NE(browser, nullptr);
+    ui->settle();
+    std::size_t rebuilds = browser->rebuilds();
+    const auto expectOne = [&](const char* step) {
+        ui->settle();
+        EXPECT_EQ(browser->rebuilds(), rebuilds + 1) << step;
+        rebuilds = browser->rebuilds();
+    };
+    const auto shows = [&](const QString& name) {
+        return !browser->findItems(name, Qt::MatchExactly | Qt::MatchRecursive).isEmpty();
+    };
+    ui->session().edit(QStringLiteral("Rename"), [](core::Document& document) { document.find(1)->name = "Renamed"; });
+    expectOne("edit");
+    EXPECT_TRUE(shows("Renamed"));
+    ui->trigger("Undo");
+    expectOne("undo");
+    EXPECT_TRUE(shows("Sketch1"));
+    ui->trigger("Redo");
+    expectOne("redo");
+    EXPECT_TRUE(shows("Renamed"));
 }
 
 TEST_F(MenuTest, BrowserEditsTheSketch)
