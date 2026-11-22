@@ -29,6 +29,15 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
         shaders/body.frag
         shaders/edge.vert
         shaders/edge.frag
+        shaders/halo.vert
+        shaders/halo.frag
+        shaders/dash.vert
+        shaders/dash.frag
+        shaders/layer.vert
+        shaders/layer.frag
+        shaders/mask.frag
+        shaders/post.vert
+        shaders/post.frag
         shaders/id_face.vert
         shaders/id_edge.vert
         shaders/id.frag

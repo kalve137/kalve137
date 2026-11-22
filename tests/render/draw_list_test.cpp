@@ -487,8 +487,10 @@ TEST(ChunkSet, AHighlightPatchesThePaletteEntriesAndRebuildsNothing)
     const std::uint64_t palettes = chunks.paletteBuilds();
     const std::uint32_t face = chunks.entryOf(1, 0, 2)->entry;
 
-    chunks.setHighlight(
-        {.hovered = {itemOf(PickKind::Face, 2), itemOf(PickKind::Edge, 3)}, .selected = {itemOf(PickKind::Edge, 5)}});
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 2), itemOf(PickKind::Edge, 3)},
+                         .selected = {itemOf(PickKind::Edge, 5)},
+                         .hoveredOutline = {},
+                         .selectedOutline = {}});
     const Chunk lit = chunks.draw(frameAt({})).chunks.at(0);
     EXPECT_EQ(lit.meshRevision, first.meshRevision);
     EXPECT_NE(lit.paletteRevision, first.paletteRevision);
@@ -505,9 +507,12 @@ TEST(ChunkSet, AHighlightPatchesThePaletteEntriesAndRebuildsNothing)
         EXPECT_EQ(lit.edgePalette[edge][3], kEntryVisible);
     }
 
-    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 2)}, .selected = {itemOf(PickKind::Face, 2)}});
-    EXPECT_EQ(chunks.draw(frameAt({})).chunks.at(0).palette[face][3], kEntryVisible | kEntrySelected)
-        << "selected wins over hovered";
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 2)},
+                         .selected = {itemOf(PickKind::Face, 2)},
+                         .hoveredOutline = {},
+                         .selectedOutline = {}});
+    EXPECT_EQ(chunks.draw(frameAt({})).chunks.at(0).palette[face][3], kEntryVisible | kEntrySelected | kEntryHovered)
+        << "a face can be both";
     chunks.setHighlight({});
     const Chunk cleared = chunks.draw(frameAt({})).chunks.at(0);
     EXPECT_TRUE(std::ranges::equal(cleared.palette, palette));
@@ -517,13 +522,57 @@ TEST(ChunkSet, AHighlightPatchesThePaletteEntriesAndRebuildsNothing)
     EXPECT_EQ(chunks.meshBuilds(), 1U);
 }
 
+TEST(ChunkSet, AnEdgeIsSelectedAndHoveredByItselfOrByAnOutline)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    ChunkSet chunks;
+    drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges));
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 2), itemOf(PickKind::Edge, 4)},
+                         .selected = {itemOf(PickKind::Face, 2), itemOf(PickKind::Edge, 1)},
+                         .hoveredOutline = {itemOf(PickKind::Edge, 1), itemOf(PickKind::Edge, 2)},
+                         .selectedOutline = {itemOf(PickKind::Edge, 2), itemOf(PickKind::Edge, 3)}});
+    const Chunk chunk = chunks.draw(frameAt({})).chunks.at(0);
+    EXPECT_EQ(chunk.palette[chunks.entryOf(1, 0, 2)->entry][3], kEntryVisible | kEntrySelected | kEntryHovered)
+        << "a hovered selected face is both";
+    const std::array expected{EdgeState::Normal,   EdgeState::SelectedHovered, EdgeState::SelectedHovered,
+                              EdgeState::Selected, EdgeState::Hovered,         EdgeState::Normal};
+    for (std::uint32_t edge = 0; edge < expected.size(); ++edge) {
+        EXPECT_EQ(chunk.edgePalette[edge][0], static_cast<std::uint8_t>(expected.at(edge))) << "edge " << edge;
+    }
+
+    chunks.setHighlight({});
+    for (const Entry& entry : chunks.draw(frameAt({})).chunks.at(0).edgePalette) {
+        EXPECT_EQ(entry[0], static_cast<std::uint8_t>(EdgeState::Normal)) << "clearing an outline clears its edges";
+    }
+}
+
+TEST(ChunkSet, AFaceOutlineDrawsInEveryStyle)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    for (const VisualStyle visual :
+         {VisualStyle::Shaded, VisualStyle::ShadedWithEdges, VisualStyle::Wireframe, VisualStyle::VisibleEdges}) {
+        ChunkSet chunks;
+        drawn(chunks, scene, styleOf(visual));
+        chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 0)},
+                             .selected = {},
+                             .hoveredOutline = {itemOf(PickKind::Edge, 0)},
+                             .selectedOutline = {}});
+        EXPECT_TRUE(chunks.draw(frameAt({})).edges) << static_cast<int>(visual);
+    }
+}
+
 TEST(ChunkSet, AHighlightOutlivesAPaletteBuild)
 {
     const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
     ChunkSet chunks;
     const ViewportStyle style = styleOf(VisualStyle::ShadedWithEdges);
     drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, style);
-    chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 1)}, .selected = {itemOf(PickKind::Face, 4)}});
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 1)},
+                         .selected = {itemOf(PickKind::Face, 4)},
+                         .hoveredOutline = {},
+                         .selectedOutline = {}});
     const auto recolored = test::shared(test::bodyOf(body->mesh, {.color = kRed, .faces = {}}));
     const Chunk chunk = drawn(chunks, {.bodies = {recolored}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     EXPECT_EQ(chunk.palette[chunks.entryOf(1, 0, 4)->entry][3], kEntryVisible | kEntrySelected);
@@ -535,22 +584,166 @@ TEST(ChunkSet, ShadedDrawsOnlyTheHighlightedEdges)
 {
     const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
     const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
-    ViewportStyle style = styleOf(VisualStyle::Shaded);
-    style.hover = kGreen;
-    style.selected = kRed;
+    const ViewportStyle style = styleOf(VisualStyle::Shaded);
     ChunkSet chunks;
     EXPECT_FALSE(drawn(chunks, scene, style).edges);
-    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 0)}, .selected = {}});
+    chunks.setHighlight(
+        {.hovered = {itemOf(PickKind::Face, 0)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
     EXPECT_FALSE(chunks.draw(frameAt({})).edges) << "a face highlight draws no edges";
-    chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 0)}, .selected = {}});
+    chunks.setHighlight(
+        {.hovered = {itemOf(PickKind::Edge, 0)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
     const DrawList list = chunks.draw(frameAt({}));
     EXPECT_TRUE(list.edges);
     EXPECT_TRUE(list.highlightedEdgesOnly);
     EXPECT_EQ(list.edgeWidth, kBodyEdgeWidth);
-    EXPECT_EQ(vertexColor(list.hover), vertexColor(kGreen));
-    EXPECT_EQ(vertexColor(list.selected), vertexColor(kRed));
-    EXPECT_FALSE(chunks.pickList(frameAt({})).highlightedEdgesOnly) << "the id pass keeps every edge";
+    EXPECT_FALSE(list.highlight.lines.empty()) << "the hovered edge gets a halo";
+    const DrawList picks = chunks.pickList(frameAt({}));
+    EXPECT_FALSE(picks.highlightedEdgesOnly) << "the id pass keeps every edge";
+    EXPECT_TRUE(picks.highlight.empty()) << "and draws no highlight";
     EXPECT_FALSE(drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges)).highlightedEdgesOnly);
+}
+
+TEST(ChunkSet, AHighlightCarriesItsHaloAndHiddenGeometry)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    ChunkSet chunks;
+    drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges));
+    EXPECT_TRUE(chunks.draw(frameAt({})).highlight.empty());
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 1), itemOf(PickKind::Edge, 0)},
+                         .selected = {itemOf(PickKind::Face, 4), itemOf(PickKind::Edge, 5)},
+                         .hoveredOutline = {itemOf(PickKind::Edge, 6)},
+                         .selectedOutline = {itemOf(PickKind::Edge, 7), itemOf(PickKind::Edge, 8)}});
+    const DrawList list = chunks.draw(frameAt({}));
+    const HighlightDraw& highlight = list.highlight;
+    EXPECT_EQ(highlight.lines.size(), 5U) << "every highlighted edge, one segment each";
+    EXPECT_EQ(highlight.selectedEdges.size(), 1U) << "only a selected edge dashes when hidden, not an outline";
+    EXPECT_EQ(highlight.selectedFaces.size(), 6U) << "two triangles";
+    EXPECT_EQ(highlight.hoveredFaces.size(), 6U);
+    EXPECT_TRUE(highlight.hidden);
+    EXPECT_FALSE(highlight.wireFill);
+    const std::uint64_t revision = highlight.revision;
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Face, 1), itemOf(PickKind::Edge, 0)},
+                         .selected = {itemOf(PickKind::Face, 4), itemOf(PickKind::Edge, 5)},
+                         .hoveredOutline = {itemOf(PickKind::Edge, 6)},
+                         .selectedOutline = {itemOf(PickKind::Edge, 7), itemOf(PickKind::Edge, 8)}});
+    EXPECT_EQ(chunks.draw(frameAt({})).highlight.revision, revision) << "the same highlight uploads nothing";
+
+    const HighlightDraw wire = drawn(chunks, scene, styleOf(VisualStyle::Wireframe)).highlight;
+    EXPECT_FALSE(wire.hidden) << "nothing hides in Wireframe";
+    EXPECT_TRUE(wire.wireFill);
+    EXPECT_EQ(wire.selectedFaces.size(), 6U) << "the highlight outlives a style change";
+}
+
+TEST(ChunkSet, AHoverAloneMatchesTheWholeHighlightAndKeepsTheSelection)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const ViewportStyle style = styleOf(VisualStyle::ShadedWithEdges);
+    const std::set selected{itemOf(PickKind::Face, 4), itemOf(PickKind::Edge, 5)};
+    const std::set selectedOutline{itemOf(PickKind::Edge, 7), itemOf(PickKind::Edge, 8)};
+    const std::set hovered{itemOf(PickKind::Face, 1), itemOf(PickKind::Edge, 0)};
+    const std::set hoveredOutline{itemOf(PickKind::Edge, 6), itemOf(PickKind::Edge, 7)};
+    ChunkSet hover;
+    drawn(hover, scene, style);
+    hover.setHighlight({.hovered = {itemOf(PickKind::Face, 2)},
+                        .selected = selected,
+                        .hoveredOutline = {},
+                        .selectedOutline = selectedOutline});
+    hover.setHover(hovered, hoveredOutline);
+    ChunkSet whole;
+    drawn(whole, scene, style);
+    whole.setHighlight({.hovered = hovered,
+                        .selected = selected,
+                        .hoveredOutline = hoveredOutline,
+                        .selectedOutline = selectedOutline});
+
+    EXPECT_EQ(hover.highlight(), whole.highlight());
+    const DrawList a = hover.draw(frameAt({}));
+    const DrawList b = whole.draw(frameAt({}));
+    EXPECT_TRUE(std::ranges::equal(a.chunks.at(0).palette, b.chunks.at(0).palette));
+    EXPECT_TRUE(std::ranges::equal(a.chunks.at(0).edgePalette, b.chunks.at(0).edgePalette));
+    const auto bytesOf = [](const auto& span) {
+        return std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t*>(span.data()),
+                                         reinterpret_cast<const std::uint8_t*>(span.data() + span.size()));
+    };
+    EXPECT_EQ(bytesOf(a.highlight.lines), bytesOf(b.highlight.lines));
+    EXPECT_EQ(a.highlight.lines.size(), 5U) << "an edge both selected and hovered gets one halo";
+    EXPECT_EQ(bytesOf(a.highlight.selectedEdges), bytesOf(b.highlight.selectedEdges));
+    EXPECT_EQ(bytesOf(a.highlight.selectedFaces), bytesOf(b.highlight.selectedFaces));
+    EXPECT_EQ(bytesOf(a.highlight.hoveredFaces), bytesOf(b.highlight.hoveredFaces));
+
+    const std::uint64_t writes = hover.highlightWrites();
+    hover.setHover(hovered, hoveredOutline);
+    EXPECT_EQ(hover.highlightWrites(), writes) << "the same hover writes nothing";
+    hover.setHover({}, {});
+    const DrawList cleared = hover.draw(frameAt({}));
+    EXPECT_EQ(cleared.highlight.lines.size(), 3U) << "the selection keeps its halo";
+    EXPECT_EQ(cleared.highlight.selectedFaces.size(), 6U);
+    EXPECT_TRUE(cleared.highlight.hoveredFaces.empty());
+}
+
+TEST(Highlighted, LiftsTowardWhiteAndGildsHalfway)
+{
+    const Encoded gray{0.5F, 0.5F, 0.5F};
+    const Encoded lifted = highlighted(gray, true, false);
+    for (const float channel : lifted) {
+        EXPECT_FLOAT_EQ(channel, 0.5F + (0.5F * kHoverStep)) << "hover lifts 30% toward white";
+    }
+    const Encoded gold = encodedOf(kSelectedGold);
+    const Encoded selected = highlighted(gray, false, true);
+    for (std::size_t c = 0; c < gray.size(); ++c) {
+        EXPECT_FLOAT_EQ(selected.at(c), 0.5F + ((gold.at(c) - 0.5F) * kSelectedMix)) << c;
+    }
+    const Encoded both = highlighted(gray, true, true);
+    EXPECT_EQ(both, pushAway(selected, kHoverStep)) << "hovering a selected item lifts its gold";
+    EXPECT_EQ(highlighted(gray, false, false), gray);
+
+    EXPECT_EQ(highlighted(gold, false, true), gold) << "a painted gold face stays gold";
+    const Encoded white{0.95F, 0.95F, 0.95F};
+    const Encoded paled = highlighted(white, false, true);
+    EXPECT_LT(paled[2], 0.5F) << "a near-white face turns clearly gold";
+    const Encoded dimmed = highlighted(white, true, false);
+    EXPECT_FLOAT_EQ(dimmed[0], 0.95F * (1.0F - kHoverStep)) << "hover darkens a near-white face";
+}
+
+TEST(Highlighted, PushesByLuminance)
+{
+    EXPECT_FLOAT_EQ(luminanceOf({1.0F, 1.0F, 1.0F}), 1.0F);
+    EXPECT_NEAR(luminanceOf({0.0F, 1.0F, 0.0F}), 0.7152F, 1e-4F);
+    EXPECT_GT(pushAway({0.79F, 0.79F, 0.79F}, 0.5F)[0], 0.79F) << "under the near-white line moves toward white";
+    EXPECT_LT(pushAway({0.8F, 0.8F, 0.8F}, 0.5F)[0], 0.8F) << "at the line moves toward black";
+    EXPECT_EQ(pushAway({0.3F, 0.4F, 0.5F}, 0.0F), (Encoded{0.3F, 0.4F, 0.5F}));
+}
+
+TEST(HaloBounds, ReachesTheHaloAroundTheHighlightOnly)
+{
+    DrawList list;
+    list.frame.viewProjection = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    list.frame.width = 200;
+    list.frame.height = 100;
+    list.edgeWidth = 1.0;
+    EXPECT_FALSE(haloBounds(list)) << "nothing highlighted";
+
+    const std::vector<Segment> lines{packSegment({-0.5F, 0.5F, 0.0F}, {0.5F, 0.5F, 0.0F}, 0)};
+    list.highlight.lines = lines;
+    EXPECT_EQ(haloBounds(list), (PixelRect{.x = 44, .y = 19, .width = 112, .height = 12}));
+
+    const std::vector<Segment> outside{packSegment({5.0F, 0.0F, 0.0F}, {6.0F, 0.0F, 0.0F}, 0)};
+    list.highlight.lines = outside;
+    EXPECT_FALSE(haloBounds(list)) << "a highlight right of the frame";
+
+    list.frame.viewProjection[11] = 1.0F;
+    const std::vector<Segment> behind{packSegment({0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -2.0F}, 0)};
+    list.highlight.lines = behind;
+    EXPECT_EQ(haloBounds(list), (PixelRect{.x = 0, .y = 0, .width = 200, .height = 100}));
+
+    list.highlight.lines = {};
+    const std::vector<Position> faces{{0.0F, 0.0F, 0.0F}, {0.125F, 0.0F, 0.0F}, {0.0F, 0.25F, 0.0F}};
+    list.highlight.hoveredFaces = faces;
+    EXPECT_FALSE(haloBounds(list)) << "a hovered face pushes nothing outside Wireframe";
+    list.highlight.wireFill = true;
+    EXPECT_EQ(haloBounds(list), (PixelRect{.x = 98, .y = 35, .width = 17, .height = 17}));
 }
 
 TEST(Light, FollowsTheLookFormula)

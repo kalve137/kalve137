@@ -41,27 +41,33 @@ private:
         float z = 0.0F;
         Normal normal{};
         Position position{};
+        float across = 0.0F;
+        float along = 0.0F;
+        float span = 0.0F;
         bool valid = false;
     };
+    enum class Pass : std::uint8_t { Face, GoldFill, MaskFill, Halo, Edge, HiddenFace, HiddenEdge };
     struct Triangle {
         std::uint32_t a = 0;
         std::uint32_t b = 0;
         std::uint32_t c = 0;
         VertexColor color{};
         Linear linear{};
-        VertexColor highlight{};
-        Linear highlightLinear{};
+        Pass pass = Pass::Face;
+        bool hovered = false;
+        bool selected = false;
         float weight = 0.0F;
         bool cull = false;
         bool flat = false;
-        bool biased = false;
-        bool edge = false;
+        float bias = 0.0F;
+        bool alongX = false;
         std::uint32_t id = 0;
     };
     struct TileBuffers {
         std::vector<std::uint32_t> color;
         std::vector<float> depth;
         std::vector<float> window;
+        std::vector<float> mask;
     };
     struct Bins {
         std::vector<std::vector<std::pair<std::uint32_t, std::uint32_t>>> entries;
@@ -75,6 +81,9 @@ private:
     void projectFaces(const DrawList& list, const Chunk& item, std::uint32_t id);
     void projectSegments(const DrawList& list, std::span<const Segment> segments, std::span<const Entry> palette,
                          double widthPixels, std::uint32_t id);
+    void projectHighlight(const DrawList& list, std::span<const Position> faces, Pass pass, float weight, float bias);
+    void projectLines(const DrawList& list, std::span<const Segment> segments, double widthPixels, Pass pass);
+    bool addQuad(const DrawList& list, const Segment& segment, double widthPixels, const Triangle& quad);
     void bin();
     void shadeTile(int tile, int worker);
     void resolveTile(int tile, int worker, Image& image) const;
@@ -90,8 +99,11 @@ private:
     int m_tileSamples = 0;
     std::uint32_t m_background = 0;
     VertexColor m_edgeColor{};
-    VertexColor m_hover{};
-    VertexColor m_selected{};
+    double m_edgePixels = 0.0;
+    double m_highlightPixels = 0.0;
+    double m_haloPixels = 0.0;
+    float m_dash = 0.0F;
+    float m_gap = 0.0F;
     bool m_highlightedEdgesOnly = false;
     bool m_ids = false;
     std::vector<Projected> m_vertices;

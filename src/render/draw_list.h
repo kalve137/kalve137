@@ -63,7 +63,7 @@ inline constexpr std::uint8_t kEntrySelected = 4;
 inline constexpr std::uint32_t kPaletteWidth = 256;
 inline constexpr std::uint32_t kPaletteEntries = 1U << 16;
 
-enum class EdgeState : std::uint8_t { Normal, Hovered, Selected };
+enum class EdgeState : std::uint8_t { Normal, Hovered, Selected, SelectedHovered };
 
 struct Chunk {
     std::uint64_t id = 0;
@@ -79,6 +79,21 @@ struct Chunk {
     std::span<const Entry> pointPalette;
 };
 
+struct HighlightDraw {
+    std::uint64_t revision = 0;
+    std::span<const Segment> lines;
+    std::span<const Segment> selectedEdges;
+    std::span<const Position> selectedFaces;
+    std::span<const Position> hoveredFaces;
+    bool hidden = false;
+    bool wireFill = false;
+
+    bool empty() const
+    {
+        return lines.empty() && selectedEdges.empty() && selectedFaces.empty() && hoveredFaces.empty();
+    }
+};
+
 struct DrawList {
     Frame frame;
     bool lit = true;
@@ -90,12 +105,27 @@ struct DrawList {
     bool highlightedEdgesOnly = false;
     snapshot::Color edgeColor{};
     double edgeWidth = 0.0;
-    snapshot::Color hover{};
-    snapshot::Color selected{};
+    HighlightDraw highlight;
 };
+
+using Encoded = std::array<float, 3>;
+float luminanceOf(const Encoded& color);
+Encoded pushAway(const Encoded& color, float step);
+Encoded highlighted(const Encoded& color, bool hovered, bool selected);
+Encoded encodedOf(const snapshot::Color& color);
 
 Segment packSegment(const Position& start, const Position& end, std::uint32_t entry);
 std::uint32_t entryOf(const Segment& segment);
+
+struct PixelRect {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+
+    bool operator==(const PixelRect&) const = default;
+};
+std::optional<PixelRect> haloBounds(const DrawList& list);
 
 std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene);
 std::optional<camera::Box> sceneBounds(const snapshot::Scene& scene);

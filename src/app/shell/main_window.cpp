@@ -973,8 +973,6 @@ void MainWindow::applyNewViewStyle()
         .body = color(colors.viewport.body),
         .bodyEdge = color(colors.viewport.bodyEdge),
         .wire = color(colors.viewport.wire),
-        .hover = color(colors.viewport.hover),
-        .selected = color(colors.chrome.accent),
         .visualStyle = visual(m_preferences.visualStyle),
         .pixelRatio = devicePixelRatioF(),
     });

@@ -6,7 +6,7 @@
 layout(location = 0) in vec3 linearColor;
 layout(location = 1) in vec3 surfaceNormal;
 layout(location = 2) in vec3 surfacePosition;
-layout(location = 3) flat in vec4 highlight;
+layout(location = 3) flat in vec2 state;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -20,8 +20,9 @@ layout(std140, binding = 0) uniform Frame {
     vec4 options;
     vec4 edge;
     vec4 target;
-    vec4 hover;
-    vec4 selected;
+    vec4 gold;
+    vec4 steps;
+    vec4 hidden;
 };
 
 vec3 toSrgb(vec3 linear)
@@ -50,11 +51,20 @@ vec3 shade(vec3 color)
     return color * (look.x + look.y * diffuse) + specular.rgb * shine;
 }
 
+vec3 pushAway(vec3 color, float amount)
+{
+    float toward = dot(color, vec3(0.2126, 0.7152, 0.0722)) >= steps.y ? 0.0 : 1.0;
+    return mix(color, vec3(toward), amount);
+}
+
 void main()
 {
     vec3 encoded = toSrgb(shade(linearColor));
-    if (highlight.a > 0.0) {
-        encoded = mix(encoded, toSrgb(shade(highlight.rgb)), highlight.a);
+    if (state.y > 0.5) {
+        encoded = mix(encoded, gold.rgb, gold.a);
+    }
+    if (state.x > 0.5) {
+        encoded = pushAway(encoded, steps.x);
     }
     fragColor = vec4(encoded, 1.0);
 }

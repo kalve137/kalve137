@@ -98,6 +98,8 @@ std::size_t verticesOf(const snapshot::Mesh& mesh)
     return (mesh.vertices.size() + pieces - 1) / pieces;
 }
 
+constexpr std::uint32_t kNoEdge = std::numeric_limits<std::uint32_t>::max();
+
 std::uint32_t faceAt(const snapshot::Mesh& mesh, std::size_t triangle)
 {
     const std::uint32_t face = triangle < mesh.faces.size() ? mesh.faces[triangle] : 0U;
@@ -137,8 +139,6 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
     m_pixelRatio = style.pixelRatio;
     m_fallback = style.body;
     m_fill = style.background;
-    m_hover = style.hover;
-    m_selected = style.selected;
     if (scene.origin != m_origin) {
         m_origin = scene.origin;
         for (const auto& chunk : m_chunks) {
@@ -204,6 +204,7 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
             buildPalette(*chunk);
         }
     }
+    buildHighlightGeometry(true);
 }
 
 void ChunkSet::place(const Key& key, const Shown& shown)
@@ -354,7 +355,8 @@ void ChunkSet::buildPalette(Data& chunk)
         std::fill_n(chunk.edgePalette.begin() + slot.firstEdgeEntry, slot.edgeEntryCount, edge);
         std::fill_n(chunk.pointPalette.begin() + slot.firstPointEntry, slot.pointEntryCount, edge);
     }
-    for (const std::set<PickedItem>* items : {&m_highlight.hovered, &m_highlight.selected}) {
+    for (const std::set<PickedItem>* items :
+         {&m_highlight.hovered, &m_highlight.selected, &m_highlight.hoveredOutline, &m_highlight.selectedOutline}) {
         for (const PickedItem& item : *items) {
             Data* owner = nullptr;
             if (Entry* entry = entryFor(item, &owner); entry != nullptr && owner == &chunk) {
@@ -372,12 +374,42 @@ void ChunkSet::setHighlight(Highlight highlight)
     if (highlight == m_highlight) {
         return;
     }
+    const bool selection =
+        highlight.selected != m_highlight.selected || highlight.selectedOutline != m_highlight.selectedOutline;
     std::set<PickedItem> changed;
-    for (const Highlight* side : {&m_highlight, &highlight}) {
-        changed.insert(side->hovered.begin(), side->hovered.end());
-        changed.insert(side->selected.begin(), side->selected.end());
+    addChanged(m_highlight.hovered, highlight.hovered, changed);
+    addChanged(m_highlight.hoveredOutline, highlight.hoveredOutline, changed);
+    if (selection) {
+        addChanged(m_highlight.selected, highlight.selected, changed);
+        addChanged(m_highlight.selectedOutline, highlight.selectedOutline, changed);
     }
     m_highlight = std::move(highlight);
+    writeChanged(changed);
+    buildHighlightGeometry(selection);
+}
+
+void ChunkSet::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline)
+{
+    if (hovered == m_highlight.hovered && hoveredOutline == m_highlight.hoveredOutline) {
+        return;
+    }
+    std::set<PickedItem> changed;
+    addChanged(m_highlight.hovered, hovered, changed);
+    addChanged(m_highlight.hoveredOutline, hoveredOutline, changed);
+    m_highlight.hovered = std::move(hovered);
+    m_highlight.hoveredOutline = std::move(hoveredOutline);
+    writeChanged(changed);
+    buildHighlightGeometry(false);
+}
+
+void ChunkSet::addChanged(const std::set<PickedItem>& before, const std::set<PickedItem>& after,
+                          std::set<PickedItem>& changed)
+{
+    std::ranges::set_symmetric_difference(before, after, std::inserter(changed, changed.end()));
+}
+
+void ChunkSet::writeChanged(const std::set<PickedItem>& changed)
+{
     std::set<Data*> written;
     for (const PickedItem& item : changed) {
         Data* owner = nullptr;
@@ -390,6 +422,139 @@ void ChunkSet::setHighlight(Highlight highlight)
         chunk->paletteRevision = m_nextId++;
     }
     ++m_highlightWrites;
+}
+
+void ChunkSet::buildHighlightGeometry(bool selectionChanged)
+{
+    const bool had =
+        !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() || !m_hoveredFaces.empty();
+    m_lines.clear();
+    m_hoveredFaces.clear();
+    using Body = std::pair<int, int>;
+    const auto collect = [](const std::set<PickedItem>& items, PickKind kind,
+                            std::map<Body, std::set<std::uint32_t>>& into) {
+        for (const PickedItem& item : items) {
+            if (item.kind == kind) {
+                into[{item.feature, item.part}].insert(item.index);
+            }
+        }
+    };
+    std::map<Body, std::set<std::uint32_t>> lines;
+    std::map<Body, std::set<std::uint32_t>> hoveredFaces;
+    collect(m_highlight.hovered, PickKind::Edge, lines);
+    collect(m_highlight.hoveredOutline, PickKind::Edge, lines);
+    collect(m_highlight.hovered, PickKind::Face, hoveredFaces);
+    std::erase_if(m_itemIndexes, [](const auto& entry) { return entry.second.mesh.expired(); });
+    const auto meshOf = [this](const Body& body) -> std::shared_ptr<const snapshot::Mesh> {
+        const auto found = m_owner.find({body.first, body.second, 0});
+        if (found == m_owner.end()) {
+            return nullptr;
+        }
+        const Slot& slot = found->second->members.at(found->first);
+        return slot.visible ? slot.mesh : nullptr;
+    };
+    const auto addEdges = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Segment>& into) {
+        for (const auto& [body, ids] : wanted) {
+            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body);
+            if (mesh == nullptr) {
+                continue;
+            }
+            const ItemIndex& index = indexOf(body, mesh);
+            for (const std::uint32_t id : ids) {
+                if (id >= index.edgeAt.size() || index.edgeAt[id] == kNoEdge) {
+                    continue;
+                }
+                const snapshot::Edge& edge = mesh->edges[index.edgeAt[id]];
+                for (std::size_t i = 1; i < edge.points.size(); ++i) {
+                    into.push_back(packSegment(relativePosition(edge.points[i - 1], m_origin),
+                                               relativePosition(edge.points[i], m_origin), 0));
+                }
+            }
+        }
+    };
+    const auto addFaces = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Position>& into) {
+        for (const auto& [body, ids] : wanted) {
+            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body);
+            if (mesh == nullptr) {
+                continue;
+            }
+            const ItemIndex& index = indexOf(body, mesh);
+            for (const std::uint32_t id : ids) {
+                if (id + 1 >= index.faceStart.size()) {
+                    continue;
+                }
+                for (std::uint32_t at = index.faceStart[id]; at < index.faceStart[id + 1]; ++at) {
+                    const snapshot::Triangle& triangle = mesh->triangles[index.faceTriangles[at]];
+                    if (!valid(*mesh, triangle)) {
+                        continue;
+                    }
+                    for (const std::uint32_t vertex : triangle) {
+                        into.push_back(relativePosition(mesh->vertices[vertex], m_origin));
+                    }
+                }
+            }
+        }
+    };
+    if (selectionChanged) {
+        std::map<Body, std::set<std::uint32_t>> selectedEdges;
+        std::map<Body, std::set<std::uint32_t>> selectedFaces;
+        m_selectedLineIds.clear();
+        collect(m_highlight.selected, PickKind::Edge, m_selectedLineIds);
+        collect(m_highlight.selectedOutline, PickKind::Edge, m_selectedLineIds);
+        collect(m_highlight.selected, PickKind::Edge, selectedEdges);
+        collect(m_highlight.selected, PickKind::Face, selectedFaces);
+        m_selectedLines.clear();
+        m_selectedEdges.clear();
+        m_selectedFaces.clear();
+        addEdges(m_selectedLineIds, m_selectedLines);
+        addEdges(selectedEdges, m_selectedEdges);
+        addFaces(selectedFaces, m_selectedFaces);
+    }
+    for (auto& [body, ids] : lines) {
+        if (const auto selected = m_selectedLineIds.find(body); selected != m_selectedLineIds.end()) {
+            std::erase_if(ids, [&](std::uint32_t id) { return selected->second.contains(id); });
+        }
+    }
+    m_lines.assign(m_selectedLines.begin(), m_selectedLines.end());
+    addEdges(lines, m_lines);
+    addFaces(hoveredFaces, m_hoveredFaces);
+    const bool has =
+        !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() || !m_hoveredFaces.empty();
+    if (had || has) {
+        m_highlightRevision = m_nextId++;
+    }
+}
+
+const ChunkSet::ItemIndex& ChunkSet::indexOf(std::pair<int, int> body,
+                                             const std::shared_ptr<const snapshot::Mesh>& mesh)
+{
+    ItemIndex& index = m_itemIndexes[body];
+    if (index.mesh.lock() == mesh) {
+        return index;
+    }
+    index = {.mesh = mesh, .faceStart = {}, .faceTriangles = {}, .edgeAt = {}};
+    const std::uint32_t faces = facesOf(*mesh);
+    index.faceStart.assign(static_cast<std::size_t>(faces) + 1, 0);
+    for (std::size_t i = 0; i < mesh->triangles.size(); ++i) {
+        ++index.faceStart[faceAt(*mesh, i) + 1];
+    }
+    for (std::size_t face = 0; face < faces; ++face) {
+        index.faceStart[face + 1] += index.faceStart[face];
+    }
+    index.faceTriangles.resize(mesh->triangles.size());
+    std::vector<std::uint32_t> next(index.faceStart.begin(), index.faceStart.end() - 1);
+    for (std::size_t i = 0; i < mesh->triangles.size(); ++i) {
+        index.faceTriangles[next[faceAt(*mesh, i)]++] = static_cast<std::uint32_t>(i);
+    }
+    std::size_t edges = mesh->edgeCount;
+    for (const snapshot::Edge& edge : mesh->edges) {
+        edges = std::max<std::size_t>(edges, static_cast<std::size_t>(edge.id) + 1);
+    }
+    index.edgeAt.assign(edges, kNoEdge);
+    for (std::size_t i = 0; i < mesh->edges.size(); ++i) {
+        index.edgeAt[mesh->edges[i].id] = static_cast<std::uint32_t>(i);
+    }
+    return index;
 }
 
 Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
@@ -436,21 +601,26 @@ Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
 
 void ChunkSet::writeState(const PickedItem& item, Entry& entry) const
 {
-    const bool selected = m_highlight.selected.contains(item);
-    const bool hovered = !selected && m_highlight.hovered.contains(item);
     if (item.kind == PickKind::Face) {
-        const std::uint8_t state = selected ? kEntrySelected : hovered ? kEntryHovered : std::uint8_t{0};
-        entry[3] = static_cast<std::uint8_t>((entry[3] & kEntryVisible) | state);
+        const auto selected = m_highlight.selected.contains(item) ? kEntrySelected : std::uint8_t{0};
+        const auto hovered = m_highlight.hovered.contains(item) ? kEntryHovered : std::uint8_t{0};
+        entry[3] = static_cast<std::uint8_t>((entry[3] & kEntryVisible) | selected | hovered);
         return;
     }
-    const EdgeState state = selected ? EdgeState::Selected : hovered ? EdgeState::Hovered : EdgeState::Normal;
+    const bool selected = m_highlight.selected.contains(item) || m_highlight.selectedOutline.contains(item);
+    const bool hovered = m_highlight.hovered.contains(item) || m_highlight.hoveredOutline.contains(item);
+    const EdgeState state = selected && hovered ? EdgeState::SelectedHovered
+                            : selected          ? EdgeState::Selected
+                            : hovered           ? EdgeState::Hovered
+                                                : EdgeState::Normal;
     entry[0] = static_cast<std::uint8_t>(state);
 }
 
 bool ChunkSet::edgesHighlighted() const
 {
     const auto edge = [](const PickedItem& item) { return item.kind == PickKind::Edge; };
-    return std::ranges::any_of(m_highlight.hovered, edge) || std::ranges::any_of(m_highlight.selected, edge);
+    return std::ranges::any_of(m_highlight.hovered, edge) || std::ranges::any_of(m_highlight.selected, edge) ||
+           !m_highlight.hoveredOutline.empty() || !m_highlight.selectedOutline.empty();
 }
 
 Entry ChunkSet::colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const
@@ -493,8 +663,13 @@ DrawList ChunkSet::draw(const Frame& frame) const
                   .highlightedEdgesOnly = highlightedOnly,
                   .edgeColor = m_edgeColor,
                   .edgeWidth = m_edgeWidth,
-                  .hover = m_hover,
-                  .selected = m_selected};
+                  .highlight = {.revision = m_highlightRevision,
+                                .lines = m_lines,
+                                .selectedEdges = m_selectedEdges,
+                                .selectedFaces = m_selectedFaces,
+                                .hoveredFaces = m_hoveredFaces,
+                                .hidden = m_drawn,
+                                .wireFill = !m_drawn}};
     for (const auto& chunk : m_chunks) {
         if ((!m_drawn || chunk->indices.empty()) && (!edges || chunk->segments.empty())) {
             continue;
@@ -513,6 +688,7 @@ DrawList ChunkSet::pickList(const Frame& frame) const
     DrawList list = draw(frame);
     list.edges = true;
     list.highlightedEdgesOnly = false;
+    list.highlight = {};
     list.chunks.clear();
     for (const auto& chunk : m_chunks) {
         if (std::ranges::any_of(chunk->members, [](const auto& item) { return item.second.visible; })) {
@@ -578,6 +754,7 @@ void ChunkSet::clear()
 {
     m_chunks.clear();
     m_owner.clear();
+    buildHighlightGeometry(true);
 }
 
 std::size_t ChunkSet::triangleCount() const
