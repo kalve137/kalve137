@@ -70,12 +70,12 @@ constexpr double kViewCubeFacetFraction = 0.55;
 constexpr double kViewCubeAxesPadding = 6.0;
 constexpr double kViewCubeAxisRadius = 1.4;
 constexpr double kViewCubeAxisConeRadius = 3.2;
-constexpr double kViewCubeFontHeight = 10.0;
+constexpr double kViewCubeFontHeight = 12.0;
 constexpr double kViewCubeAxisFontHeight = 15.0;
 constexpr double kViewTransitionSeconds = 0.5;
 constexpr double kInstantTransitionSeconds = 0.001;
 constexpr float kHoverTransparency = static_cast<float>(style::kTintStrong);
-constexpr double kViewCubeHoverTransparency = style::kTintSolid;
+constexpr double kViewCubeHoverTransparency = style::kTintOpaque;
 
 template <typename Drawable = Aspect_Drawable>
 Drawable toDrawable(WId id)
@@ -298,22 +298,30 @@ void OcctViewWidget::setHighlightColors(const QColor& hover, const QColor& selec
 void OcctViewWidget::setViewCubeStyle(const ViewCubeStyle& style)
 {
     const auto occt = [](const QColor& color) { return OcctQtTools::qtColorToOcct(color); };
-    const Quantity_Color face = occt(style.face);
-    const auto scaled = [&face](double factor) {
-        return Quantity_Color(std::min(1.0, face.Red() * factor), std::min(1.0, face.Green() * factor),
-                              std::min(1.0, face.Blue() * factor), Quantity_TOC_RGB);
+    const auto lit = [&style, &occt](const QColor& color) {
+        const Quantity_Color base = occt(color);
+        const auto scaled = [&base](double factor) {
+            return Quantity_Color(std::min(1.0, base.Red() * factor), std::min(1.0, base.Green() * factor),
+                                  std::min(1.0, base.Blue() * factor), Quantity_TOC_RGB);
+        };
+        Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
+        material.SetMaterialType(Graphic3d_MATERIAL_PHYSIC);
+        material.SetAmbientColor(Quantity_Color(Quantity_NOC_BLACK));
+        material.SetSpecularColor(Quantity_Color(Quantity_NOC_BLACK));
+        material.SetEmissiveColor(scaled(style.shading.glow));
+        material.SetDiffuseColor(scaled(style.shading.diffuse));
+        return material;
     };
-    Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
-    material.SetMaterialType(Graphic3d_MATERIAL_PHYSIC);
-    material.SetAmbientColor(Quantity_Color(Quantity_NOC_BLACK));
-    material.SetSpecularColor(Quantity_Color(Quantity_NOC_BLACK));
-    material.SetEmissiveColor(scaled(style.shading.glow));
-    material.SetDiffuseColor(scaled(style.shading.diffuse));
-    m_viewCube->SetBoxColor(face);
-    m_viewCube->BoxEdgeStyle()->SetColor(face);
-    m_viewCube->BoxCornerStyle()->SetColor(face);
-    for (const Handle(Prs3d_ShadingAspect)& aspect :
-         {m_viewCube->Attributes()->ShadingAspect(), m_viewCube->BoxEdgeStyle(), m_viewCube->BoxCornerStyle()}) {
+    m_viewCube->SetBoxColor(occt(style.side));
+    m_viewCube->BoxEdgeStyle()->SetColor(occt(style.edge));
+    m_viewCube->BoxCornerStyle()->SetColor(occt(style.corner));
+    const std::pair<Handle(Prs3d_ShadingAspect), QColor> tones[] = {
+        {m_viewCube->Attributes()->ShadingAspect(), style.side},
+        {m_viewCube->BoxEdgeStyle(), style.edge},
+        {m_viewCube->BoxCornerStyle(), style.corner},
+    };
+    for (const auto& [aspect, color] : tones) {
+        const Graphic3d_MaterialAspect material = lit(color);
         aspect->Aspect()->SetShadingModel(Graphic3d_TypeOfShadingModel_Phong);
         aspect->Aspect()->SetFrontMaterial(material);
         aspect->Aspect()->SetBackMaterial(material);

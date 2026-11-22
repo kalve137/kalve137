@@ -69,6 +69,7 @@ add_executable(kalve137_uitests
     ui/ui_driver.h
     ui/ui_main.cpp
     ui/ui_test.h
+    ui/view_cube_ui_test.cpp
     ui/workflow_ui_test.cpp
 )
 set_target_properties(kalve137_uitests PROPERTIES AUTOUIC OFF)

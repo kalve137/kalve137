@@ -11,6 +11,7 @@ inline constexpr double kStrokeRegular = 2.0;
 inline constexpr double kStrokeBold = 3.0;
 inline constexpr double kStrokeHalo = 5.0;
 
+inline constexpr double kTintOpaque = 0.0;
 inline constexpr double kTintSolid = 0.2;
 inline constexpr double kTintStrong = 0.4;
 inline constexpr double kTintHalf = 0.55;

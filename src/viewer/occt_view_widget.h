@@ -34,7 +34,9 @@ namespace kalve137::viewer {
 class ViewCube;
 
 struct ViewCubeStyle {
-    QColor face;
+    QColor side;
+    QColor edge;
+    QColor corner;
     style::Shading shading;
     QColor label;
     QColor hover;
