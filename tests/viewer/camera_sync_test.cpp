@@ -4,6 +4,7 @@
 #include "../camera/occt_compare.h"
 
 #include "camera/camera.h"
+#include "camera/gravity.h"
 #include "viewer/occt_view_widget.h"
 
 #include <gtest/gtest.h>
@@ -18,6 +19,7 @@
 
 #include <QTest>
 
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -133,6 +135,9 @@ TEST(SyncedView, FindsTheBoundsAndGravityPointOfAShownView)
         const gp_Pnt expectedGravity = shown.gravityPoint();
         EXPECT_LT(gravity.Distance(expectedGravity), kTolerance) << "gravity point";
         EXPECT_LT(expectedGravity.X(), 100.0) << "the far box is off screen";
+        const std::array<camera::Box, 2> boxes{camera::Box{{-20.0, -10.0, 0.0}, {20.0, 30.0, 40.0}},
+                                               camera::Box{{900.0, 0.0, 0.0}, {910.0, 10.0, 10.0}}};
+        test::expectNear(camera::gravityPoint(camera, boxes), expectedGravity.XYZ(), 1e-6);
     }
 }
 

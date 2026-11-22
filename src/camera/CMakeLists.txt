@@ -4,6 +4,8 @@
 add_library(kalve137_camera STATIC
     camera.cpp
     camera.h
+    gravity.cpp
+    gravity.h
     math.cpp
     math.h
     navigation.h

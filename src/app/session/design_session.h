@@ -7,6 +7,7 @@
 #include "core/recompute.h"
 #include "core/snapshot_cache.h"
 #include "core/undo_stack.h"
+#include "pick/scene_rays.h"
 
 #include <QObject>
 #include <QString>
@@ -28,6 +29,7 @@ public:
     const core::Document& document() const { return m_document; }
     const core::Model& model() const { return m_model; }
     core::SnapshotCache& snapshots() { return m_snapshots; }
+    pick::SceneRays& rays() { return m_rays; }
     gp_Ax3 sketchPlane(core::FeatureId sketch) const;
 
     void edit(const QString& label, const std::function<void(core::Document&)>& change);
@@ -66,6 +68,7 @@ private:
     core::Document m_document;
     core::Model m_model;
     core::SnapshotCache m_snapshots;
+    pick::SceneRays m_rays;
     core::UndoStack m_undo;
     std::filesystem::path m_path;
     bool m_dirty = false;

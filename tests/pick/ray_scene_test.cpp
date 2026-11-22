@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "pick/ray_scene.h"
+#include "pick/scene_rays.h"
+#include "snapshot/body.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -95,6 +98,68 @@ TEST(RayScene, NumbersFacesOnAcrossMeshes)
     const std::optional<Hit> second = scene.first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0}, 3.0);
     ASSERT_TRUE(second);
     EXPECT_EQ(second->face, near.faceCount + 1U);
+}
+
+TEST(SceneRays, OneRayScenePerSetOfMeshes)
+{
+    auto square = std::make_shared<Mesh>();
+    addSquare(*square, 2.0, 0);
+    const auto body = std::make_shared<const snapshot::Body>(snapshot::Body{.mesh = square});
+    snapshot::Scene scene{.bodies = {body}};
+    SceneRays rays;
+    EXPECT_EQ(rays.rays(snapshot::Scene{}), nullptr);
+    const std::shared_ptr<const RayScene> first = rays.rays(scene);
+    ASSERT_NE(first, nullptr);
+    EXPECT_EQ(rays.rays(scene), first);
+
+    snapshot::Body recolored = *body;
+    recolored.appearance.color = snapshot::Color{1.0F, 0.0F, 0.0F};
+    scene.bodies = {std::make_shared<const snapshot::Body>(recolored)};
+    EXPECT_EQ(rays.rays(scene), first) << "a color edit keeps the mesh and the ray scene";
+    EXPECT_EQ(rays.builds(), 1U);
+
+    auto moved = std::make_shared<Mesh>();
+    addSquare(*moved, 4.0, 0);
+    scene.bodies = {std::make_shared<const snapshot::Body>(snapshot::Body{.mesh = moved})};
+    const std::shared_ptr<const RayScene> second = rays.rays(scene);
+    EXPECT_NE(second, first);
+    EXPECT_EQ(rays.builds(), 2U);
+    const std::optional<Hit> hit = second->first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0});
+    ASSERT_TRUE(hit);
+    EXPECT_NEAR(hit->distance, 4.0, kTolerance);
+}
+
+TEST(SceneRays, APreparedSceneIsBuiltOnce)
+{
+    auto square = std::make_shared<Mesh>();
+    addSquare(*square, 2.0, 0);
+    const snapshot::Scene scene{.bodies = {std::make_shared<const snapshot::Body>(snapshot::Body{.mesh = square})}};
+    SceneRays rays;
+    rays.prepare(snapshot::Scene{});
+    EXPECT_EQ(rays.builds(), 0U);
+    rays.prepare(scene);
+    rays.prepare(scene);
+    const std::shared_ptr<const RayScene> prepared = rays.rays(scene);
+    ASSERT_NE(prepared, nullptr);
+    EXPECT_TRUE(prepared->first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0}));
+    rays.prepare(scene);
+    EXPECT_EQ(rays.rays(scene), prepared);
+    EXPECT_EQ(rays.builds(), 1U);
+}
+
+TEST(SceneRays, AStalePreparedSceneIsNotUsed)
+{
+    auto near = std::make_shared<Mesh>();
+    addSquare(*near, 2.0, 0);
+    auto far = std::make_shared<Mesh>();
+    addSquare(*far, 4.0, 0);
+    SceneRays rays;
+    rays.prepare(snapshot::Scene{.bodies = {std::make_shared<const snapshot::Body>(snapshot::Body{.mesh = near})}});
+    const std::shared_ptr<const RayScene> current = rays.rays(SceneRays::Meshes{far});
+    ASSERT_NE(current, nullptr);
+    const std::optional<Hit> hit = current->first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0});
+    ASSERT_TRUE(hit);
+    EXPECT_NEAR(hit->distance, 4.0, kTolerance);
 }
 
 } // namespace

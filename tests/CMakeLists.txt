@@ -11,6 +11,7 @@ add_executable(kalve137_tests
     app/startup_options_test.cpp
     app/theme_test.cpp
     camera/camera_test.cpp
+    camera/gravity_test.cpp
     camera/jitter_test.cpp
     camera/navigator_test.cpp
     camera/occt_compare.h
