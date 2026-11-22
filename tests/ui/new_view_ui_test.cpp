@@ -466,17 +466,23 @@ TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
     const render::Highlight highlight{
         .hovered = {item(render::PickKind::Face, 5)},
         .selected = {item(render::PickKind::Face, 2)},
+        .hoveredOutline = {},
+        .selectedOutline = {},
     };
     const render::ViewportStyle original = canvas->viewportStyle();
-    for (const render::VisualStyle visual : {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Shaded}) {
+    for (const render::VisualStyle visual : {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Shaded,
+                                             render::VisualStyle::Wireframe, render::VisualStyle::VisibleEdges}) {
         render::ViewportStyle style = original;
         style.visualStyle = visual;
         canvas->setViewportStyle(style);
         canvas->setHighlight({});
         const QImage plain = grabbed(*canvas);
         render::Highlight withEdges = highlight;
+        withEdges.selected.insert(item(render::PickKind::Edge, 0));
+        withEdges.selected.insert(item(render::PickKind::Face, 4));
         for (std::uint32_t edge = 0; edge < box->mesh->edgeCount; ++edge) {
-            (edge % 2 == 0 ? withEdges.hovered : withEdges.selected).insert(item(render::PickKind::Edge, edge));
+            (edge % 2 == 0 ? withEdges.hoveredOutline : withEdges.selectedOutline)
+                .insert(item(render::PickKind::Edge, edge));
         }
         canvas->setHighlight(withEdges);
         const QImage gpu = grabbed(*canvas);

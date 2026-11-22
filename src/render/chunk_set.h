@@ -38,6 +38,8 @@ struct PickedItem {
 struct Highlight {
     std::set<PickedItem> hovered;
     std::set<PickedItem> selected;
+    std::set<PickedItem> hoveredOutline;
+    std::set<PickedItem> selectedOutline;
 
     bool operator==(const Highlight&) const = default;
 };
@@ -50,6 +52,7 @@ public:
 
     void update(const snapshot::Scene& scene, const ViewportStyle& style);
     void setHighlight(Highlight highlight);
+    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
     const Highlight& highlight() const { return m_highlight; }
     DrawList draw(const Frame& frame) const;
     DrawList pickList(const Frame& frame) const;
@@ -106,6 +109,12 @@ private:
         std::shared_ptr<const snapshot::Body> body;
         bool visible = true;
     };
+    struct ItemIndex {
+        std::weak_ptr<const snapshot::Mesh> mesh;
+        std::vector<std::uint32_t> faceStart;
+        std::vector<std::uint32_t> faceTriangles;
+        std::vector<std::uint32_t> edgeAt;
+    };
 
     std::map<Key, Shown> shownOf(const snapshot::Scene& scene) const;
     void place(const Key& key, const Shown& shown);
@@ -117,7 +126,12 @@ private:
     Entry colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const;
     Entry* entryFor(const PickedItem& item, Data** chunk);
     void writeState(const PickedItem& item, Entry& entry) const;
+    static void addChanged(const std::set<PickedItem>& before, const std::set<PickedItem>& after,
+                           std::set<PickedItem>& changed);
+    void writeChanged(const std::set<PickedItem>& changed);
     bool edgesHighlighted() const;
+    void buildHighlightGeometry(bool selectionChanged);
+    const ItemIndex& indexOf(std::pair<int, int> body, const std::shared_ptr<const snapshot::Mesh>& mesh);
 
     std::size_t m_vertexBudget;
     std::vector<std::unique_ptr<Data>> m_chunks;
@@ -132,9 +146,15 @@ private:
     snapshot::Color m_edgeColor;
     snapshot::Color m_fallback;
     snapshot::Color m_fill;
-    snapshot::Color m_hover;
-    snapshot::Color m_selected;
     Highlight m_highlight;
+    std::vector<Segment> m_lines;
+    std::vector<Segment> m_selectedLines;
+    std::vector<Segment> m_selectedEdges;
+    std::vector<Position> m_selectedFaces;
+    std::vector<Position> m_hoveredFaces;
+    std::map<std::pair<int, int>, ItemIndex> m_itemIndexes;
+    std::map<std::pair<int, int>, std::set<std::uint32_t>> m_selectedLineIds;
+    std::uint64_t m_highlightRevision = 0;
     std::uint64_t m_nextId = 1;
     std::uint64_t m_meshBuilds = 0;
     std::uint64_t m_paletteBuilds = 0;

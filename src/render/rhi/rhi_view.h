@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 
 class QLabel;
 class QRhiCommandBuffer;
@@ -65,6 +66,7 @@ public:
     const snapshot::Scene& scene() const { return m_scene; }
     const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
     void setHighlight(Highlight highlight);
+    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
     camera::Viewport viewport() const;

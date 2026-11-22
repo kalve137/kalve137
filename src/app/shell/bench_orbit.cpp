@@ -7,6 +7,8 @@
 #include "app/session/step_import.h"
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
+#include "app/view/new_view_picker.h"
+#include "app/view/pick.h"
 #include "camera/camera.h"
 #include "camera/math.h"
 #include "camera/navigation.h"
@@ -82,6 +84,7 @@ constexpr int kHoverMoves = 80;
 constexpr int kStaleMoves = 20;
 constexpr double kStaleTurn = 0.002;
 constexpr double kHoverSpan = 0.6;
+constexpr int kSelectReach = 200;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 
@@ -357,6 +360,49 @@ QJsonObject benchHeader(MainWindow& window, bool newView, const std::filesystem:
     };
 }
 
+bool selectForBench(MainWindow& window)
+{
+    if (!qEnvironmentVariableIsSet("KALVE137_BENCH_SELECT") || window.newView() == nullptr) {
+        return false;
+    }
+    auto* picker = window.findChild<NewViewPicker*>();
+    if (picker == nullptr) {
+        return false;
+    }
+    render::RhiView& view = *window.newView();
+    const QPointF middle(view.width() / 2.0, view.height() / 2.0);
+    const auto nearest = [&](Pick::Kind kind) -> std::optional<QPointF> {
+        for (int ring = 0; ring <= kSelectReach; ++ring) {
+            const auto radius = static_cast<double>(ring);
+            const int steps = std::max(1, static_cast<int>(std::ceil(2.0 * std::numbers::pi * radius)));
+            for (int i = 0; i < steps; ++i) {
+                const double angle = 2.0 * std::numbers::pi * i / steps;
+                const QPointF at = middle + QPointF(radius * std::cos(angle), radius * std::sin(angle));
+                picker->hoverAt(at);
+                const std::optional<Pick> hovered = picker->hovered();
+                if (hovered && hovered->kind == kind) {
+                    return at;
+                }
+            }
+        }
+        return std::nullopt;
+    };
+    const std::optional<QPointF> face = nearest(Pick::Kind::Face);
+    if (face) {
+        picker->clickAt(*face, Qt::NoModifier);
+    }
+    const std::optional<QPointF> edge = nearest(Pick::Kind::Edge);
+    if (edge) {
+        picker->clickAt(*edge, Qt::ShiftModifier);
+    }
+    picker->hoverAt({0.0, 0.0});
+    QApplication::processEvents();
+    if (!face || !edge) {
+        K137_WARN(App, "The bench selection found {} face and {} edge", face ? 1 : 0, edge ? 1 : 0);
+    }
+    return face && edge;
+}
+
 int writeResult(const QJsonObject& result, const std::filesystem::path& out)
 {
     QFile file(QString::fromStdU16String(out.u16string()));
@@ -619,6 +665,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
         K137_ERROR(App, "The hover bench could not draw a frame");
         return 1;
     }
+    const bool selected = selectForBench(window);
 
     const auto positionOf = [&](int i) {
         const double along = (static_cast<double>(i % kHoverMoves) + 0.5) / kHoverMoves;
@@ -691,6 +738,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
     }
 
     QJsonObject result = benchHeader(window, true, design, size);
+    result.insert("selected", selected);
     result.insert("moves", kHoverMoves);
     result.insert("changed", static_cast<int>(changedMs.size()));
     result.insert("changed_median_ms", percentile(changedMs, 0.5));
@@ -725,6 +773,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const double loadMs = elapsedMs(timer);
     const auto* session = window.findChild<DesignSession*>();
     const ColdBuild cold = buildColdSnapshots(session->model());
+    const bool selected = selectForBench(window);
 
     const std::optional<double> pressMs = firstPress(window);
     const Orbit timed = orbit(window);
@@ -736,6 +785,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         return 1;
     }
     QJsonObject result = benchHeader(window, newView, design, size);
+    result.insert("selected", selected);
     const QJsonObject timing{
         {"frames", kOrbitFrames},
         {"median_ms", percentile(frames, 0.5)},

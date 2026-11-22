@@ -15,9 +15,11 @@
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace kalve137::snapshot {
@@ -74,9 +76,12 @@ private:
         ShapeMap faces;
         ShapeMap edges;
         ShapeMap vertices;
+        mutable std::map<int, std::vector<std::uint32_t>> outlines;
     };
 
     std::optional<Found> pickAt(QPointF position) const;
+    const Items& itemsOf(const core::Body& body) const;
+    void addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const;
     std::optional<Pick> pickOf(const Found& found) const;
     const core::Body* bodyOf(const render::PickedItem& item) const;
     std::shared_ptr<const snapshot::Mesh> meshOf(const render::PickedItem& item) const;
@@ -86,6 +91,8 @@ private:
     void setHovered(std::optional<Found> found);
     void dropStale();
     void showHighlight();
+    void showHover();
+    void addHover(render::Highlight& highlight) const;
     void announce(void (PickSource::*signal)());
 
     render::RhiView* m_view;

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace kalve137::render {
 
@@ -207,6 +208,91 @@ Segment packSegment(const Position& start, const Position& end, std::uint32_t en
 std::uint32_t entryOf(const Segment& segment)
 {
     return static_cast<std::uint32_t>(segment.packed[0]) | (static_cast<std::uint32_t>(segment.packed[1]) << 8);
+}
+
+std::optional<PixelRect> haloBounds(const DrawList& list)
+{
+    constexpr double kMargin = 2.0;
+    constexpr float kNearW = 1e-6F;
+    const HighlightDraw& highlight = list.highlight;
+    const bool masked = highlight.wireFill && !highlight.hoveredFaces.empty();
+    const Frame& frame = list.frame;
+    if ((highlight.lines.empty() && !masked) || frame.width <= 0 || frame.height <= 0) {
+        return std::nullopt;
+    }
+    const PixelRect whole{.x = 0, .y = 0, .width = frame.width, .height = frame.height};
+    const std::array<float, 16>& m = frame.viewProjection;
+    double left = std::numeric_limits<double>::max();
+    double top = left;
+    double right = std::numeric_limits<double>::lowest();
+    double bottom = right;
+    bool behind = false;
+    const auto add = [&](const Position& p, double reach) {
+        const float x = (m[0] * p[0]) + (m[4] * p[1]) + (m[8] * p[2]) + m[12];
+        const float y = (m[1] * p[0]) + (m[5] * p[1]) + (m[9] * p[2]) + m[13];
+        const float w = (m[3] * p[0]) + (m[7] * p[1]) + (m[11] * p[2]) + m[15];
+        if (w < kNearW) {
+            behind = true;
+            return;
+        }
+        const double px = (x / w + 1.0) * 0.5 * frame.width;
+        const double py = (1.0 - y / w) * 0.5 * frame.height;
+        left = std::min(left, px - reach);
+        right = std::max(right, px + reach);
+        top = std::min(top, py - reach);
+        bottom = std::max(bottom, py + reach);
+    };
+    const double lineReach = (kHighlightEdgeWidth * list.pixelRatio * 0.5) + (kHaloWidth * list.pixelRatio) + kMargin;
+    for (const Segment& segment : highlight.lines) {
+        add(segment.start, lineReach);
+        add(segment.end, lineReach);
+    }
+    if (masked) {
+        for (const Position& position : highlight.hoveredFaces) {
+            add(position, kMargin);
+        }
+    }
+    if (behind) {
+        return whole;
+    }
+    const auto clamped = [](double value, int size) { return std::clamp(value, 0.0, static_cast<double>(size)); };
+    const int x0 = static_cast<int>(std::floor(clamped(left, frame.width)));
+    const int y0 = static_cast<int>(std::floor(clamped(top, frame.height)));
+    const int x1 = static_cast<int>(std::ceil(clamped(right, frame.width)));
+    const int y1 = static_cast<int>(std::ceil(clamped(bottom, frame.height)));
+    if (x1 <= x0 || y1 <= y0) {
+        return std::nullopt;
+    }
+    return PixelRect{.x = x0, .y = y0, .width = x1 - x0, .height = y1 - y0};
+}
+
+float luminanceOf(const Encoded& color)
+{
+    return (0.2126F * color[0]) + (0.7152F * color[1]) + (0.0722F * color[2]);
+}
+
+Encoded pushAway(const Encoded& color, float step)
+{
+    const float toward = luminanceOf(color) >= kNearWhite ? 0.0F : 1.0F;
+    return {color[0] + ((toward - color[0]) * step), color[1] + ((toward - color[1]) * step),
+            color[2] + ((toward - color[2]) * step)};
+}
+
+Encoded highlighted(const Encoded& color, bool hovered, bool selected)
+{
+    Encoded result = color;
+    if (selected) {
+        const Encoded gold = encodedOf(kSelectedGold);
+        for (std::size_t c = 0; c < result.size(); ++c) {
+            result.at(c) += (gold.at(c) - result.at(c)) * kSelectedMix;
+        }
+    }
+    return hovered ? pushAway(result, kHoverStep) : result;
+}
+
+Encoded encodedOf(const snapshot::Color& color)
+{
+    return {color.red, color.green, color.blue};
 }
 
 } // namespace kalve137::render

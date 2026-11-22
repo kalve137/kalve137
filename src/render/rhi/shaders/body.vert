@@ -9,7 +9,7 @@ layout(location = 1) in vec4 normalAndEntry;
 layout(location = 0) out vec3 linearColor;
 layout(location = 1) out vec3 surfaceNormal;
 layout(location = 2) out vec3 surfacePosition;
-layout(location = 3) flat out vec4 highlight;
+layout(location = 3) flat out vec2 state;
 
 layout(std140, binding = 0) uniform Frame {
     mat4 viewProjection;
@@ -21,8 +21,9 @@ layout(std140, binding = 0) uniform Frame {
     vec4 options;
     vec4 edge;
     vec4 target;
-    vec4 hover;
-    vec4 selected;
+    vec4 gold;
+    vec4 steps;
+    vec4 hidden;
 };
 
 layout(binding = 1) uniform sampler2D palette;
@@ -56,9 +57,7 @@ void main()
     linearColor = toLinear(value.rgb);
     surfaceNormal = decodeNormal(normalAndEntry.xy);
     surfacePosition = position;
-    highlight = (flags & selectedFlag) != 0 ? vec4(toLinear(selected.rgb), 1.0)
-                : (flags & hoveredFlag) != 0 ? vec4(toLinear(hover.rgb), hover.a)
-                                             : vec4(0.0);
+    state = vec2((flags & hoveredFlag) != 0 ? 1.0 : 0.0, (flags & selectedFlag) != 0 ? 1.0 : 0.0);
     if ((flags & visibleFlag) == 0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         return;

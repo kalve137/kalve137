@@ -278,6 +278,16 @@ void RhiView::setHighlight(Highlight highlight)
     update();
 }
 
+void RhiView::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline)
+{
+    const Highlight& current = m_chunks.highlight();
+    if (hovered == current.hovered && hoveredOutline == current.hoveredOutline) {
+        return;
+    }
+    m_chunks.setHover(std::move(hovered), std::move(hoveredOutline));
+    update();
+}
+
 void RhiView::updateChunks()
 {
     QElapsedTimer timer;
@@ -541,6 +551,9 @@ void RhiView::initialize(QRhiCommandBuffer*)
     if (!m_bodies->setTarget(renderTarget()->renderPassDescriptor(), sampleCount())) {
         fail();
     }
+    if (!m_bodies->setPostTarget(resolvedTexture())) {
+        K137_WARN(Viewer, "The new view could not create its halo pass, highlights draw without halos");
+    }
 }
 
 void RhiView::render(QRhiCommandBuffer* buffer)
@@ -633,6 +646,9 @@ void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
         m_bodies->draw(buffer, target->pixelSize());
     }
     buffer->endPass();
+    if (!m_failed && m_bodies != nullptr) {
+        m_bodies->drawPost(buffer);
+    }
 }
 
 QRhiTexture* RhiView::resolvedTexture() const

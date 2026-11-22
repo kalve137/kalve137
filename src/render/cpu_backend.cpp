@@ -90,6 +90,18 @@ Normal unit(const Normal& vector)
     return length > 0.0F ? Normal{vector[0] / length, vector[1] / length, vector[2] / length} : vector;
 }
 
+float haloStrength(float across, float along, float span, float corePixels, float haloPixels)
+{
+    const float past = std::max({-along, along - span, 0.0F});
+    const float outside = std::max(std::hypot(across, past) - corePixels, 0.0F);
+    return kHaloStep * std::clamp(1.0F - (outside / std::max(haloPixels, 1e-3F)), 0.0F, 1.0F);
+}
+
+bool dashedOff(int pixel, float dash, float gap)
+{
+    return std::fmod(static_cast<float>(pixel), dash + gap) >= dash;
+}
+
 } // namespace
 
 CpuBackend::CpuBackend(int threads) : m_pool(defaultThreads(threads)) {}
@@ -162,6 +174,7 @@ void CpuBackend::prepareTiles(const Frame& frame, int supersample)
         buffers.color.resize(tileArea);
         buffers.depth.resize(tileArea);
         buffers.window.resize(m_ids ? tileArea : 0);
+        buffers.mask.resize(m_ids ? 0 : tileArea);
     }
 }
 
@@ -170,16 +183,95 @@ void CpuBackend::project(const DrawList& list)
     m_vertices.clear();
     m_triangles.clear();
     m_edgeColor = vertexColor(list.edgeColor);
-    m_hover = vertexColor(list.hover);
-    m_selected = vertexColor(list.selected);
     m_highlightedEdgesOnly = list.highlightedEdgesOnly;
+    m_edgePixels = list.edgeWidth * list.pixelRatio;
+    m_highlightPixels = kHighlightEdgeWidth * list.pixelRatio;
+    m_haloPixels = kHaloWidth * list.pixelRatio;
+    m_dash = static_cast<float>(kHiddenDash * list.pixelRatio);
+    m_gap = static_cast<float>(kHiddenGap * list.pixelRatio);
+    const HighlightDraw& highlight = list.highlight;
     for (const Chunk& item : list.chunks) {
-        if (list.edges) {
-            projectSegments(list, item.segments, item.edgePalette, list.edgeWidth * list.pixelRatio, 0);
-        }
         if (list.faces) {
             projectFaces(list, item, 0);
         }
+    }
+    if (highlight.wireFill) {
+        projectHighlight(list, highlight.selectedFaces, Pass::GoldFill, kWireFaceWeight, 0.0F);
+        projectHighlight(list, highlight.hoveredFaces, Pass::MaskFill, kWireFaceWeight, 0.0F);
+    }
+    projectLines(list, highlight.lines, m_highlightPixels + (2.0 * m_haloPixels), Pass::Halo);
+    for (const Chunk& item : list.chunks) {
+        if (list.edges) {
+            projectSegments(list, item.segments, item.edgePalette, m_edgePixels, 0);
+        }
+    }
+    if (highlight.hidden) {
+        projectHighlight(list, highlight.selectedFaces, Pass::HiddenFace, kHiddenFaceWeight, list.edges ? 0.0F : -1.0F);
+        projectLines(list, highlight.selectedEdges, m_highlightPixels, Pass::HiddenEdge);
+    }
+}
+
+void CpuBackend::projectHighlight(const DrawList& list, std::span<const Position> faces, Pass pass, float weight,
+                                  float bias)
+{
+    const std::array<float, 16>& m = list.frame.viewProjection;
+    const double width = static_cast<double>(m_width) * m_supersample;
+    const double height = static_cast<double>(m_height) * m_supersample;
+    const VertexColor gold = vertexColor(kSelectedGold);
+    for (std::size_t i = 0; i + 2 < faces.size(); i += 3) {
+        const auto first = static_cast<std::uint32_t>(m_vertices.size());
+        for (std::size_t k = 0; k < 3; ++k) {
+            const Position& p = faces[i + k];
+            const auto row = [&](std::size_t r) {
+                return (static_cast<double>(m[r]) * p[0]) + (static_cast<double>(m[r + 4]) * p[1]) +
+                       (static_cast<double>(m[r + 8]) * p[2]) + static_cast<double>(m[r + 12]);
+            };
+            const double w = row(3);
+            Projected out;
+            out.valid = w > 0.0;
+            if (out.valid) {
+                out.x = fixed((row(0) / w + 1.0) * 0.5 * width);
+                out.y = fixed((1.0 - row(1) / w) * 0.5 * height);
+                out.z = static_cast<float>(row(2) / w);
+            }
+            m_vertices.push_back(out);
+        }
+        m_triangles.push_back({.a = first,
+                               .b = first + 1,
+                               .c = first + 2,
+                               .color = gold,
+                               .linear = {},
+                               .pass = pass,
+                               .hovered = false,
+                               .selected = false,
+                               .weight = weight,
+                               .cull = false,
+                               .flat = true,
+                               .bias = bias,
+                               .alongX = false,
+                               .id = 0});
+    }
+}
+
+void CpuBackend::projectLines(const DrawList& list, std::span<const Segment> segments, double widthPixels, Pass pass)
+{
+    const VertexColor gold = vertexColor(kSelectedGold);
+    for (const Segment& segment : segments) {
+        addQuad(list, segment, widthPixels,
+                {.a = 0,
+                 .b = 0,
+                 .c = 0,
+                 .color = gold,
+                 .linear = {},
+                 .pass = pass,
+                 .hovered = false,
+                 .selected = false,
+                 .weight = 0.0F,
+                 .cull = false,
+                 .flat = true,
+                 .bias = 0.0F,
+                 .alongX = false,
+                 .id = 0});
     }
 }
 
@@ -226,23 +318,19 @@ void CpuBackend::projectFaces(const DrawList& list, const Chunk& item, std::uint
         }
         const Entry& value = item.palette[entry];
         const VertexColor color{value[0], value[1], value[2], 255};
-        const bool selected = (value[3] & kEntrySelected) != 0;
-        const bool hovered = !selected && (value[3] & kEntryHovered) != 0;
-        const VertexColor highlight = selected ? m_selected : m_hover;
         m_triangles.push_back({.a = offset + indices[i],
                                .b = offset + indices[i + 1],
                                .c = offset + indices[i + 2],
                                .color = color,
                                .linear = linearOf(color),
-                               .highlight = highlight,
-                               .highlightLinear = linearOf(highlight),
-                               .weight = m_ids      ? 0.0F
-                                         : selected ? 1.0F
-                                         : hovered  ? kHoverWeight
-                                                    : 0.0F,
+                               .pass = Pass::Face,
+                               .hovered = !m_ids && (value[3] & kEntryHovered) != 0,
+                               .selected = !m_ids && (value[3] & kEntrySelected) != 0,
+                               .weight = 0.0F,
                                .cull = cull,
                                .flat = !list.lit,
-                               .biased = list.edges,
+                               .bias = list.edges ? 1.0F : 0.0F,
+                               .alongX = false,
                                .id = id | entry});
     }
 }
@@ -250,10 +338,49 @@ void CpuBackend::projectFaces(const DrawList& list, const Chunk& item, std::uint
 void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> segments,
                                  std::span<const Entry> palette, double widthPixels, std::uint32_t id)
 {
+    const Encoded gold = encodedOf(kSelectedGold);
+    const Encoded edge = encodedOf(list.edgeColor);
+    for (const Segment& segment : segments) {
+        const std::uint32_t entry = entryOf(segment);
+        if (entry >= palette.size() || (palette[entry][3] & kEntryVisible) == 0) {
+            continue;
+        }
+        const auto state = static_cast<EdgeState>(palette[entry][0]);
+        if (!m_ids && m_highlightedEdgesOnly && state == EdgeState::Normal) {
+            continue;
+        }
+        const bool selected = state == EdgeState::Selected || state == EdgeState::SelectedHovered;
+        const bool hovered = state == EdgeState::Hovered || state == EdgeState::SelectedHovered;
+        Encoded shown = selected ? gold : edge;
+        if (hovered) {
+            shown = pushAway(shown, kHoverStep);
+        }
+        const VertexColor color =
+            m_ids ? m_edgeColor : vertexColor({.red = shown[0], .green = shown[1], .blue = shown[2], .alpha = 1.0F});
+        const bool wide = !m_ids && state != EdgeState::Normal;
+        addQuad(list, segment, wide ? m_highlightPixels : widthPixels,
+                {.a = 0,
+                 .b = 0,
+                 .c = 0,
+                 .color = color,
+                 .linear = linearOf(color),
+                 .pass = Pass::Edge,
+                 .hovered = false,
+                 .selected = false,
+                 .weight = 0.0F,
+                 .cull = false,
+                 .flat = true,
+                 .bias = 0.0F,
+                 .alongX = false,
+                 .id = id | entry});
+    }
+}
+
+bool CpuBackend::addQuad(const DrawList& list, const Segment& segment, double widthPixels, const Triangle& quad)
+{
     const std::array<float, 16>& m = list.frame.viewProjection;
     const double width = static_cast<double>(m_width) * m_supersample;
     const double height = static_cast<double>(m_height) * m_supersample;
-    const double edgeWidth = widthPixels * m_supersample;
     const auto clipOf = [&m](const Position& p) {
         Clip clip{};
         for (std::size_t r = 0; r < clip.size(); ++r) {
@@ -262,59 +389,51 @@ void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> 
         }
         return clip;
     };
-    for (const Segment& segment : segments) {
-        const std::uint32_t entry = entryOf(segment);
-        if (entry >= palette.size() || (palette[entry][3] & kEntryVisible) == 0) {
-            continue;
+    const Clip start = clipOf(segment.start);
+    const Clip end = clipOf(segment.end);
+    std::array<std::array<double, 3>, kEdgeCorners> corners{};
+    for (int corner = 0; corner < kEdgeCorners; ++corner) {
+        const std::optional<Clip> at = expandEdge(start, end, corner, widthPixels * m_supersample, width, height);
+        if (!at.has_value() || (*at)[3] <= 0.0) {
+            return false;
         }
-        const auto state = static_cast<EdgeState>(palette[entry][0]);
-        const bool highlighted = state == EdgeState::Hovered || state == EdgeState::Selected;
-        if (!m_ids && m_highlightedEdgesOnly && !highlighted) {
-            continue;
-        }
-        const VertexColor color = m_ids                          ? m_edgeColor
-                                  : state == EdgeState::Selected ? m_selected
-                                  : state == EdgeState::Hovered  ? m_hover
-                                                                 : m_edgeColor;
-        const Clip start = clipOf(segment.start);
-        const Clip end = clipOf(segment.end);
-        const auto first = static_cast<std::uint32_t>(m_vertices.size());
-        bool drawn = true;
-        for (int corner = 0; corner < kEdgeCorners && drawn; ++corner) {
-            const std::optional<Clip> at = expandEdge(start, end, corner, edgeWidth, width, height);
-            drawn = at.has_value() && (*at)[3] > 0.0;
-            if (drawn) {
-                const Clip& c = *at;
-                m_vertices.push_back({.x = fixed((c[0] / c[3] + 1.0) * 0.5 * width),
-                                      .y = fixed((1.0 - c[1] / c[3]) * 0.5 * height),
-                                      .z = static_cast<float>(c[2] / c[3]),
-                                      .normal = {},
-                                      .position = {},
-                                      .valid = true});
-            }
-        }
-        if (!drawn) {
-            m_vertices.resize(first);
-            continue;
-        }
-        const Triangle quad{.color = color,
-                            .linear = linearOf(color),
-                            .cull = false,
-                            .flat = true,
-                            .biased = false,
-                            .edge = true,
-                            .id = id | entry};
-        Triangle lower = quad;
-        lower.a = first;
-        lower.b = first + 1;
-        lower.c = first + 2;
-        Triangle upper = quad;
-        upper.a = first + 1;
-        upper.b = first + 3;
-        upper.c = first + 2;
-        m_triangles.push_back(lower);
-        m_triangles.push_back(upper);
+        const Clip& c = *at;
+        corners.at(static_cast<std::size_t>(corner)) = {(c[0] / c[3] + 1.0) * 0.5 * width,
+                                                        (1.0 - c[1] / c[3]) * 0.5 * height, c[2] / c[3]};
     }
+    const double half = widthPixels * 0.5;
+    const double quadLength = std::hypot(corners[2][0] + corners[3][0] - corners[0][0] - corners[1][0],
+                                         corners[2][1] + corners[3][1] - corners[0][1] - corners[1][1]) *
+                              0.5 / m_supersample;
+    const auto span = static_cast<float>(std::max(quadLength - widthPixels, 0.0));
+    const auto first = static_cast<std::uint32_t>(m_vertices.size());
+    for (int corner = 0; corner < kEdgeCorners; ++corner) {
+        const std::array<double, 3>& c = corners.at(static_cast<std::size_t>(corner));
+        const float side = (corner % 2) == 0 ? -1.0F : 1.0F;
+        m_vertices.push_back({.x = fixed(c[0]),
+                              .y = fixed(c[1]),
+                              .z = static_cast<float>(c[2]),
+                              .normal = {},
+                              .position = {},
+                              .across = side * static_cast<float>(half),
+                              .along = corner >= 2 ? span + static_cast<float>(half) : -static_cast<float>(half),
+                              .span = span,
+                              .valid = true});
+    }
+    const double dx = std::abs((end[0] / end[3]) - (start[0] / start[3])) * width;
+    const double dy = std::abs((end[1] / end[3]) - (start[1] / start[3])) * height;
+    Triangle lower = quad;
+    lower.alongX = dx >= dy;
+    lower.a = first;
+    lower.b = first + 1;
+    lower.c = first + 2;
+    Triangle upper = lower;
+    upper.a = first + 1;
+    upper.b = first + 3;
+    upper.c = first + 2;
+    m_triangles.push_back(lower);
+    m_triangles.push_back(upper);
+    return true;
 }
 
 void CpuBackend::bin()
@@ -400,12 +519,15 @@ void CpuBackend::shadeTile(int tile, int worker)
     std::uint32_t* color = buffers.color.data();
     float* depth = buffers.depth.data();
     float* window = buffers.window.data();
+    float* mask = buffers.mask.data();
     for (int sy = sy0; sy < sy1; ++sy) {
         const std::size_t row = static_cast<std::size_t>(sy - sy0) * static_cast<std::size_t>(size);
         std::fill_n(color + row, size, m_ids ? 0U : m_background);
         std::fill_n(depth + row, size, std::numeric_limits<float>::infinity());
         if (m_ids) {
             std::fill_n(window + row, size, 1.0F);
+        } else {
+            std::fill_n(mask + row, size, 0.0F);
         }
     }
 
@@ -449,20 +571,39 @@ void CpuBackend::shadeTile(int tile, int worker)
         const Normal dn2 = difference(c.normal, a.normal, inverse);
         const Position dp1 = difference(b.position, a.position, inverse);
         const Position dp2 = difference(c.position, a.position, inverse);
-        const float weight = triangle.weight;
-        const auto blend = [weight](std::uint8_t base, std::uint8_t tint) {
-            return (static_cast<float>(base) * (1.0F - weight)) + (static_cast<float>(tint) * weight);
+        const Pass pass = triangle.pass;
+        const bool lifted = triangle.hovered || triangle.selected;
+        const auto look = [&triangle](const Encoded& base) {
+            const Encoded shown = highlighted(base, triangle.hovered, triangle.selected);
+            return pack(shown[0] * kByte, shown[1] * kByte, shown[2] * kByte);
         };
-        const std::uint32_t flat =
-            pack(blend(triangle.color[0], triangle.highlight[0]), blend(triangle.color[1], triangle.highlight[1]),
-                 blend(triangle.color[2], triangle.highlight[2]));
+        const auto bytes = [](std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+            return Encoded{static_cast<float>(red) / kByte, static_cast<float>(green) / kByte,
+                           static_cast<float>(blue) / kByte};
+        };
+        const std::uint32_t flat = lifted ? look(bytes(triangle.color[0], triangle.color[1], triangle.color[2]))
+                                          : pack(triangle.color[0], triangle.color[1], triangle.color[2]);
+        const float weight = triangle.weight;
+        const auto mixGold = [&triangle, weight](std::uint32_t under) {
+            const auto mixed = [&](unsigned shift, std::uint8_t gold) {
+                return (static_cast<float>((under >> shift) & 0xFFU) * (1.0F - weight)) +
+                       (static_cast<float>(gold) * weight);
+            };
+            return pack(mixed(16, triangle.color[0]), mixed(8, triangle.color[1]), mixed(0, triangle.color[2]));
+        };
         float bias = 0.0F;
-        if (triangle.biased) {
+        if (triangle.bias != 0.0F) {
             const float slopeX = std::abs((dz1 * static_cast<float>(stepX1)) + (dz2 * static_cast<float>(stepX2)));
             const float slopeY = std::abs((dz1 * static_cast<float>(stepY1)) + (dz2 * static_cast<float>(stepY2)));
-            bias = (kFaceBiasSlope * std::max(slopeX, slopeY) * static_cast<float>(supersample)) +
-                   (static_cast<float>(kFaceBiasUnits) * kDepthUnit);
+            bias = triangle.bias * ((kFaceBiasSlope * std::max(slopeX, slopeY) * static_cast<float>(supersample)) +
+                                    (static_cast<float>(kFaceBiasUnits) * kDepthUnit));
         }
+        const float dAcross1 = (b.across - a.across) * inverse;
+        const float dAcross2 = (c.across - a.across) * inverse;
+        const float dAlong1 = (b.along - a.along) * inverse;
+        const float dAlong2 = (c.along - a.along) * inverse;
+        const auto corePixels = static_cast<float>(m_highlightPixels * 0.5);
+        const auto haloPixels = static_cast<float>(m_haloPixels);
         for (int sy = minY; sy <= maxY; ++sy) {
             std::int64_t e0 = row0;
             std::int64_t e1 = row1;
@@ -470,37 +611,74 @@ void CpuBackend::shadeTile(int tile, int worker)
             std::size_t index = (static_cast<std::size_t>(sy - sy0) * static_cast<std::size_t>(size)) +
                                 static_cast<std::size_t>(minX - sx0);
             for (int sx = minX; sx <= maxX; ++sx, ++index) {
-                if ((e0 | e1 | e2) >= 0) {
-                    const auto f1 = static_cast<float>(e1);
-                    const auto f2 = static_cast<float>(e2);
-                    const float z = a.z + (dz1 * f1) + (dz2 * f2);
-                    const float biased = z + bias;
-                    if ((triangle.edge ? biased <= depth[index] : biased < depth[index]) && z >= -1.0F && z <= 1.0F) {
+                if ((e0 | e1 | e2) < 0) {
+                    e0 += stepX0;
+                    e1 += stepX1;
+                    e2 += stepX2;
+                    continue;
+                }
+                const auto f1 = static_cast<float>(e1);
+                const auto f2 = static_cast<float>(e2);
+                const float z = a.z + (dz1 * f1) + (dz2 * f2);
+                const float biased = z + bias;
+                const bool clipped = z < -1.0F || z > 1.0F;
+                switch (pass) {
+                case Pass::Face:
+                case Pass::Edge:
+                    if ((pass == Pass::Edge ? biased <= depth[index] : biased < depth[index]) && !clipped) {
                         depth[index] = biased;
                         if (m_ids) {
                             color[index] = triangle.id;
                             window[index] = (z * 0.5F) + 0.5F;
-                        } else if (triangle.flat) {
-                            color[index] = flat;
-                        } else {
-                            const Normal normal = unit(interpolated(a.normal, dn1, dn2, f1, f2));
-                            const Normal view = m_frame.perspective
-                                                    ? viewAt(interpolated(a.position, dp1, dp2, f1, f2), m_frame)
-                                                    : m_frame.eye;
-                            const Linear shaded = lit(normal, view, triangle.linear, m_frame);
-                            if (weight > 0.0F) {
-                                const Linear tint = lit(normal, view, triangle.highlightLinear, m_frame);
-                                const auto mixed = [&](std::size_t c) {
-                                    return (static_cast<float>(encoded(shaded[c])) * (1.0F - weight)) +
-                                           (static_cast<float>(encoded(tint[c])) * weight);
-                                };
-                                color[index] = pack(mixed(0), mixed(1), mixed(2));
-                            } else {
-                                color[index] = kOpaque | (encoded(shaded[0]) << 16) | (encoded(shaded[1]) << 8) |
-                                               encoded(shaded[2]);
-                            }
+                            break;
                         }
+                        mask[index] = 0.0F;
+                        if (triangle.flat) {
+                            color[index] = flat;
+                            break;
+                        }
+                        const Normal normal = unit(interpolated(a.normal, dn1, dn2, f1, f2));
+                        const Normal view = m_frame.perspective
+                                                ? viewAt(interpolated(a.position, dp1, dp2, f1, f2), m_frame)
+                                                : m_frame.eye;
+                        const Linear shaded = lit(normal, view, triangle.linear, m_frame);
+                        const std::uint32_t red = encoded(shaded[0]);
+                        const std::uint32_t green = encoded(shaded[1]);
+                        const std::uint32_t blue = encoded(shaded[2]);
+                        color[index] =
+                            lifted ? look(bytes(static_cast<std::uint8_t>(red), static_cast<std::uint8_t>(green),
+                                                static_cast<std::uint8_t>(blue)))
+                                   : kOpaque | (red << 16) | (green << 8) | blue;
                     }
+                    break;
+                case Pass::GoldFill:
+                    color[index] = mixGold(color[index]);
+                    mask[index] = 0.0F;
+                    break;
+                case Pass::MaskFill:
+                    mask[index] = std::max(mask[index], weight);
+                    break;
+                case Pass::Halo:
+                    if (biased <= depth[index] && !clipped) {
+                        const float across = a.across + (dAcross1 * f1) + (dAcross2 * f2);
+                        const float along = a.along + (dAlong1 * f1) + (dAlong2 * f2);
+                        mask[index] =
+                            std::max(mask[index], haloStrength(across, along, a.span, corePixels, haloPixels));
+                    }
+                    break;
+                case Pass::HiddenFace:
+                    if (biased > depth[index] && !clipped) {
+                        color[index] = mixGold(color[index]);
+                        mask[index] = 0.0F;
+                    }
+                    break;
+                case Pass::HiddenEdge:
+                    if (z > depth[index] && !clipped &&
+                        !dashedOff(triangle.alongX ? sx / supersample : sy / supersample, m_dash, m_gap)) {
+                        color[index] = pack(triangle.color[0], triangle.color[1], triangle.color[2]);
+                        mask[index] = 0.0F;
+                    }
+                    break;
                 }
                 e0 += stepX0;
                 e1 += stepX1;
@@ -522,6 +700,7 @@ void CpuBackend::resolveTile(int tile, int worker, Image& image) const
     const int sx1 = std::min(sx0 + size, m_width * supersample);
     const int sy1 = std::min(sy0 + size, m_height * supersample);
     const std::uint32_t* color = m_tileBuffers[static_cast<std::size_t>(worker)].color.data();
+    const float* mask = m_tileBuffers[static_cast<std::size_t>(worker)].mask.data();
     const int samples = supersample * supersample;
     const auto half = static_cast<std::uint32_t>(samples / 2);
     const auto count = static_cast<std::uint32_t>(samples);
@@ -531,18 +710,29 @@ void CpuBackend::resolveTile(int tile, int worker, Image& image) const
             std::uint32_t red = 0;
             std::uint32_t green = 0;
             std::uint32_t blue = 0;
+            float push = 0.0F;
             const std::size_t base =
                 (static_cast<std::size_t>((y * supersample) - sy0) * static_cast<std::size_t>(size)) +
                 static_cast<std::size_t>((x * supersample) - sx0);
             for (int oy = 0; oy < supersample; ++oy) {
                 for (int ox = 0; ox < supersample; ++ox) {
-                    const std::uint32_t value =
-                        color[base + (static_cast<std::size_t>(oy) * static_cast<std::size_t>(size)) +
-                              static_cast<std::size_t>(ox)];
+                    const std::size_t at = base + (static_cast<std::size_t>(oy) * static_cast<std::size_t>(size)) +
+                                           static_cast<std::size_t>(ox);
+                    const std::uint32_t value = color[at];
                     red += (value >> 16) & 0xFFU;
                     green += (value >> 8) & 0xFFU;
                     blue += value & 0xFFU;
+                    push += mask[at];
                 }
+            }
+            push /= static_cast<float>(count);
+            if (push > 0.0F) {
+                const auto channel = [count](std::uint32_t sum) {
+                    return static_cast<float>(sum) / static_cast<float>(count) / kByte;
+                };
+                const Encoded shown = pushAway({channel(red), channel(green), channel(blue)}, push);
+                line[x] = pack(shown[0] * kByte, shown[1] * kByte, shown[2] * kByte);
+                continue;
             }
             line[x] =
                 kOpaque | (((red + half) / count) << 16) | (((green + half) / count) << 8) | ((blue + half) / count);

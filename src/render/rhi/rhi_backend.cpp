@@ -8,6 +8,7 @@
 #include "render/style.h"
 
 #include <QByteArray>
+#include <QColor>
 #include <QFile>
 #include <QMatrix4x4>
 #include <QString>
@@ -49,9 +50,13 @@ struct Uniforms {
     std::array<float, 4> options{};
     std::array<float, 4> edge{};
     std::array<float, 4> target{};
-    std::array<float, 4> hover{};
-    std::array<float, 4> selected{};
+    std::array<float, 4> gold{};
+    std::array<float, 4> steps{};
+    std::array<float, 4> hidden{};
 };
+
+constexpr quint32 kPositionStride = sizeof(Position);
+constexpr int kPostCorners = 3;
 
 struct PickUniforms {
     std::array<std::uint32_t, 4> pick{};
@@ -253,6 +258,113 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::idPipeline(QRhiRenderPassDes
     return result;
 }
 
+RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSpec& spec,
+                                                                QRhiRenderPassDescriptor* pass, int samples,
+                                                                QRhiShaderResourceBindings* bindings) const
+{
+    const QShader vertex = loadShader(QString::fromLatin1(spec.vertex));
+    const QShader fragment = loadShader(QString::fromLatin1(spec.fragment));
+    if (!vertex.isValid() || !fragment.isValid()) {
+        K137_ERROR(Viewer, "The new view could not load its {} and {} shaders", spec.vertex, spec.fragment);
+        return nullptr;
+    }
+    Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
+    result->setShaderStages({{QRhiShaderStage::Vertex, vertex}, {QRhiShaderStage::Fragment, fragment}});
+    QRhiVertexInputLayout layout;
+    switch (spec.input) {
+    case Input::Lines:
+        layout.setBindings({QRhiVertexInputBinding(kCornerStride),
+                            QRhiVertexInputBinding(kSegmentStride, QRhiVertexInputBinding::PerInstance)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0},
+                              {1, 1, QRhiVertexInputAttribute::Float3, kStartOffset},
+                              {1, 2, QRhiVertexInputAttribute::Float3, kEndOffset}});
+        result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        break;
+    case Input::Positions:
+        layout.setBindings({QRhiVertexInputBinding(kPositionStride)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, 0}});
+        result->setTopology(QRhiGraphicsPipeline::Triangles);
+        break;
+    case Input::None:
+        result->setTopology(QRhiGraphicsPipeline::Triangles);
+        break;
+    }
+    result->setVertexInputLayout(layout);
+    result->setCullMode(QRhiGraphicsPipeline::None);
+    result->setDepthTest(spec.depth != Depth::Off);
+    result->setDepthWrite(false);
+    result->setDepthOp(spec.depth == Depth::Greater ? QRhiGraphicsPipeline::Greater
+                                                    : QRhiGraphicsPipeline::LessOrEqual);
+    result->setDepthBias(spec.biasUnits);
+    result->setSlopeScaledDepthBias(spec.biasSlope);
+    QRhiGraphicsPipeline::TargetBlend blend;
+    switch (spec.blend) {
+    case Blend::Opaque:
+        break;
+    case Blend::Mask:
+        blend.colorWrite = QRhiGraphicsPipeline::A;
+        blend.enable = true;
+        blend.srcAlpha = QRhiGraphicsPipeline::One;
+        blend.dstAlpha = QRhiGraphicsPipeline::One;
+        blend.opAlpha = QRhiGraphicsPipeline::Min;
+        break;
+    case Blend::Constant:
+        blend.enable = true;
+        blend.srcColor = QRhiGraphicsPipeline::ConstantColor;
+        blend.dstColor = QRhiGraphicsPipeline::OneMinusConstantColor;
+        blend.srcAlpha = QRhiGraphicsPipeline::One;
+        blend.dstAlpha = QRhiGraphicsPipeline::Zero;
+        break;
+    }
+    result->setTargetBlends({blend});
+    if (spec.scissor) {
+        result->setFlags(QRhiGraphicsPipeline::UsesScissor);
+    }
+    result->setSampleCount(samples);
+    result->setShaderResourceBindings(bindings);
+    result->setRenderPassDescriptor(pass);
+    if (!result->create()) {
+        K137_ERROR(Viewer, "The new view could not create its {} pipeline at {}x samples", spec.fragment, samples);
+        return nullptr;
+    }
+    return result;
+}
+
+bool RhiBackend::setPostTarget(QRhiTexture* resolved)
+{
+    m_post.reset();
+    m_postBindings.reset();
+    m_postTarget.reset();
+    m_postPass.reset();
+    m_postSource.reset();
+    m_resolved = resolved;
+    if (resolved == nullptr || !createShared()) {
+        return false;
+    }
+    m_postSource.reset(m_rhi->newTexture(resolved->format(), resolved->pixelSize()));
+    if (!m_postSource->create()) {
+        return false;
+    }
+    m_postTarget.reset(
+        m_rhi->newTextureRenderTarget({QRhiColorAttachment(resolved)}, QRhiTextureRenderTarget::PreserveColorContents));
+    m_postPass.reset(m_postTarget->newCompatibleRenderPassDescriptor());
+    m_postTarget->setRenderPassDescriptor(m_postPass.get());
+    if (!m_postTarget->create()) {
+        return false;
+    }
+    m_postBindings.reset(m_rhi->newShaderResourceBindings());
+    m_postBindings->setBindings(
+        {QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::FragmentStage, m_uniforms.get()),
+         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_postSource.get(),
+                                                   m_sampler.get())});
+    if (!m_postBindings->create()) {
+        return false;
+    }
+    m_post = pipelineFor({"post.vert", "post.frag", Input::None, Depth::Off, 0, 0.0F, Blend::Opaque, true},
+                         m_postPass.get(), 1, m_postBindings.get());
+    return m_post != nullptr;
+}
+
 bool RhiBackend::setIdTarget(QRhiRenderPassDescriptor* pass)
 {
     if (!createShared()) {
@@ -271,6 +383,11 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
         face.reset();
     }
     m_edges.reset();
+    m_halo.reset();
+    m_maskFill.reset();
+    m_goldFill.reset();
+    m_hiddenFaces = {};
+    m_hiddenEdges.reset();
     if (!createShared()) {
         K137_ERROR(Viewer, "The new view could not create its shared GPU resources");
         return false;
@@ -282,7 +399,17 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
         }
     }
     m_edges = edgePipeline(pass, samples);
-    return m_edges != nullptr;
+    const auto make = [&](const PipelineSpec& spec) { return pipelineFor(spec, pass, samples, m_layout.get()); };
+    m_halo = make({"halo.vert", "halo.frag", Input::Lines, Depth::LessOrEqual, 0, 0.0F, Blend::Mask});
+    m_maskFill = make({"layer.vert", "mask.frag", Input::Positions, Depth::Off, 0, 0.0F, Blend::Mask});
+    m_goldFill = make({"layer.vert", "layer.frag", Input::Positions, Depth::Off, 0, 0.0F, Blend::Constant});
+    m_hiddenFaces.at(0) = make({"layer.vert", "layer.frag", Input::Positions, Depth::Greater, -kFaceBiasUnits,
+                                -kFaceBiasSlope, Blend::Constant});
+    m_hiddenFaces.at(1) =
+        make({"layer.vert", "layer.frag", Input::Positions, Depth::Greater, 0, 0.0F, Blend::Constant});
+    m_hiddenEdges = make({"dash.vert", "dash.frag", Input::Lines, Depth::Greater, 0, 0.0F, Blend::Opaque});
+    return m_edges != nullptr && m_halo != nullptr && m_maskFill != nullptr && m_goldFill != nullptr &&
+           m_hiddenFaces.at(0) != nullptr && m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr;
 }
 
 bool RhiBackend::refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
@@ -401,23 +528,79 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
     uniforms.light = {frame.light[0], frame.light[1], frame.light[2], 0.0F};
     uniforms.look = {look.ambient, look.diffuse, look.shininess, 0.0F};
     uniforms.specular = {look.specular[0], look.specular[1], look.specular[2], 0.0F};
-    uniforms.options = {list.lit ? 1.0F : 0.0F, list.highlightedEdgesOnly ? 1.0F : 0.0F, 0.0F, 0.0F};
+    uniforms.options = {list.lit ? 1.0F : 0.0F, list.highlightedEdgesOnly ? 1.0F : 0.0F,
+                        m_rhi->isYUpInFramebuffer() ? 1.0F : 0.0F, 0.0F};
     uniforms.edge = {list.edgeColor.red, list.edgeColor.green, list.edgeColor.blue, 1.0F};
     uniforms.target = {static_cast<float>(frame.width), static_cast<float>(frame.height),
-                       static_cast<float>(list.edgeWidth * list.pixelRatio), 0.0F};
-    uniforms.hover = {list.hover.red, list.hover.green, list.hover.blue, kHoverWeight};
-    uniforms.selected = {list.selected.red, list.selected.green, list.selected.blue, 1.0F};
+                       static_cast<float>(list.edgeWidth * list.pixelRatio),
+                       static_cast<float>(kHighlightEdgeWidth * list.pixelRatio)};
+    uniforms.gold = {kSelectedGold.red, kSelectedGold.green, kSelectedGold.blue, kSelectedMix};
+    uniforms.steps = {kHoverStep, kNearWhite, kHaloStep, static_cast<float>(kHaloWidth * list.pixelRatio)};
+    uniforms.hidden = {static_cast<float>(kHiddenDash * list.pixelRatio),
+                       static_cast<float>(kHiddenGap * list.pixelRatio), kHiddenFaceWeight, kWireFaceWeight};
     updates->updateDynamicBuffer(m_uniforms.get(), 0, sizeof(Uniforms), &uniforms);
+}
+
+bool RhiBackend::upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
+                        QRhiResourceUpdateBatch* updates)
+{
+    geometry.buffer.reset();
+    geometry.count = 0;
+    if (bytes == 0) {
+        return true;
+    }
+    if (!fitsBuffer(bytes)) {
+        return false;
+    }
+    geometry.buffer.reset(
+        m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, static_cast<quint32>(bytes)));
+    if (!geometry.buffer->create()) {
+        geometry.buffer.reset();
+        return false;
+    }
+    updates->uploadStaticBuffer(geometry.buffer.get(), data);
+    geometry.count = static_cast<std::uint32_t>(count);
+    return true;
+}
+
+bool RhiBackend::refreshHighlight(const HighlightDraw& highlight, QRhiResourceUpdateBatch* updates)
+{
+    if (highlight.revision == m_highlight.revision) {
+        return true;
+    }
+    m_highlight.revision = 0;
+    const bool uploaded = upload(highlight.lines.data(), highlight.lines.size_bytes(), highlight.lines.size(),
+                                 m_highlight.lines, updates) &&
+                          upload(highlight.selectedEdges.data(), highlight.selectedEdges.size_bytes(),
+                                 highlight.selectedEdges.size(), m_highlight.selectedEdges, updates) &&
+                          upload(highlight.selectedFaces.data(), highlight.selectedFaces.size_bytes(),
+                                 highlight.selectedFaces.size(), m_highlight.selectedFaces, updates) &&
+                          upload(highlight.hoveredFaces.data(), highlight.hoveredFaces.size_bytes(),
+                                 highlight.hoveredFaces.size(), m_highlight.hoveredFaces, updates);
+    if (uploaded) {
+        m_highlight.revision = highlight.revision;
+    }
+    return uploaded;
 }
 
 bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
 {
     m_calls.clear();
     m_edgeCalls.clear();
+    m_postNeeded = false;
     if (m_edges == nullptr || std::ranges::any_of(m_faces, [](const auto& face) { return face == nullptr; })) {
         return false;
     }
     writeUniforms(list, updates);
+    if (!refreshHighlight(list.highlight, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its highlight");
+        return false;
+    }
+    m_hiddenPass = list.highlight.hidden;
+    m_wireFill = list.highlight.wireFill;
+    const std::optional<PixelRect> bounds = m_post != nullptr ? haloBounds(list) : std::nullopt;
+    m_postNeeded = bounds.has_value();
+    m_postRect = bounds.value_or(PixelRect{});
     for (auto& [id, gpu] : m_chunks) {
         gpu.used = false;
     }
@@ -573,18 +756,89 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
         buffer->setVertexInput(0, 1, &input, call.gpu->indices.get(), 0, QRhiCommandBuffer::IndexUInt32);
         buffer->drawIndexed(call.gpu->indexCount);
     }
-    if (m_edgeCalls.empty()) {
+    if (m_wireFill) {
+        drawTriangles(buffer, m_goldFill.get(), m_highlight.selectedFaces, viewport, kWireFaceWeight);
+        if (m_postNeeded) {
+            drawTriangles(buffer, m_maskFill.get(), m_highlight.hoveredFaces, viewport, 0.0F);
+        }
+    }
+    if (m_postNeeded) {
+        drawLines(buffer, m_halo.get(), m_highlight.lines, viewport);
+    }
+    if (!m_edgeCalls.empty()) {
+        buffer->setGraphicsPipeline(m_edges.get());
+        buffer->setViewport(viewport);
+        for (const Gpu* gpu : m_edgeCalls) {
+            buffer->setShaderResources(gpu->edges.bindings.get());
+            const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{
+                QRhiCommandBuffer::VertexInput(m_corners.get(), 0),
+                QRhiCommandBuffer::VertexInput(gpu->segments.get(), 0)};
+            buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data());
+            buffer->draw(kEdgeCorners, gpu->segmentCount);
+        }
+    }
+    if (m_hiddenPass) {
+        drawTriangles(buffer, m_hiddenFaces.at(m_biased ? 1 : 0).get(), m_highlight.selectedFaces, viewport,
+                      kHiddenFaceWeight);
+        drawLines(buffer, m_hiddenEdges.get(), m_highlight.selectedEdges, viewport);
+    }
+}
+
+void RhiBackend::drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& lines,
+                           const QRhiViewport& viewport) const
+{
+    if (lines.count == 0) {
         return;
     }
-    buffer->setGraphicsPipeline(m_edges.get());
+    buffer->setGraphicsPipeline(pipeline);
     buffer->setViewport(viewport);
-    for (const Gpu* gpu : m_edgeCalls) {
-        buffer->setShaderResources(gpu->edges.bindings.get());
-        const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{
-            QRhiCommandBuffer::VertexInput(m_corners.get(), 0), QRhiCommandBuffer::VertexInput(gpu->segments.get(), 0)};
-        buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data());
-        buffer->draw(kEdgeCorners, gpu->segmentCount);
+    buffer->setShaderResources(m_layout.get());
+    const std::array<QRhiCommandBuffer::VertexInput, 2> inputs{QRhiCommandBuffer::VertexInput(m_corners.get(), 0),
+                                                               QRhiCommandBuffer::VertexInput(lines.buffer.get(), 0)};
+    buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data());
+    buffer->draw(kEdgeCorners, lines.count);
+}
+
+void RhiBackend::drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& triangles,
+                               const QRhiViewport& viewport, float weight) const
+{
+    if (triangles.count == 0) {
+        return;
     }
+    buffer->setGraphicsPipeline(pipeline);
+    buffer->setViewport(viewport);
+    buffer->setBlendConstants(QColor::fromRgbF(weight, weight, weight, weight));
+    buffer->setShaderResources(m_layout.get());
+    const QRhiCommandBuffer::VertexInput input(triangles.buffer.get(), 0);
+    buffer->setVertexInput(0, 1, &input);
+    buffer->draw(triangles.count);
+}
+
+void RhiBackend::drawPost(QRhiCommandBuffer* buffer) const
+{
+    if (!m_postNeeded) {
+        return;
+    }
+    const QSize size = m_postTarget->pixelSize();
+    const QRect rect = QRect(m_postRect.x, m_postRect.y, m_postRect.width, m_postRect.height) & QRect({}, size);
+    if (rect.isEmpty()) {
+        return;
+    }
+    const int fromBottom = size.height() - rect.y() - rect.height();
+    const QPoint corner(rect.x(), m_rhi->isYUpInFramebuffer() ? fromBottom : rect.y());
+    QRhiTextureCopyDescription description;
+    description.setPixelSize(rect.size());
+    description.setSourceTopLeft(corner);
+    description.setDestinationTopLeft(corner);
+    QRhiResourceUpdateBatch* copy = m_rhi->nextResourceUpdateBatch();
+    copy->copyTexture(m_postSource.get(), m_resolved, description);
+    buffer->beginPass(m_postTarget.get(), QColor(), {1.0F, 0}, copy);
+    buffer->setGraphicsPipeline(m_post.get());
+    buffer->setViewport(QRhiViewport(0, 0, static_cast<float>(size.width()), static_cast<float>(size.height())));
+    buffer->setScissor(QRhiScissor(rect.x(), fromBottom, rect.width(), rect.height()));
+    buffer->setShaderResources(m_postBindings.get());
+    buffer->draw(kPostCorners);
+    buffer->endPass();
 }
 
 } // namespace kalve137::render
