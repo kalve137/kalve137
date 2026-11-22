@@ -12,8 +12,11 @@
 namespace kalve137::app {
 
 inline constexpr const char* kBenchOrbitFlag = "--bench-orbit";
+inline constexpr const char* kBenchChangeFlag = "--bench-change";
 
 int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
                   const QString& size);
+int runBenchChange(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                   const QString& size);
 
 } // namespace kalve137::app

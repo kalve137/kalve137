@@ -7,6 +7,8 @@
 
 #include "log/log.h"
 
+#include <QElapsedTimer>
+
 #include <variant>
 
 namespace kalve137::app {
@@ -229,7 +231,10 @@ void DesignSession::jump()
 
 void DesignSession::rebuild()
 {
+    QElapsedTimer timer;
+    timer.start();
     m_model = core::recompute(m_document);
+    m_recomputeMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
     for (const core::Feature& feature : m_document.features()) {
         const core::FeatureStatus& status = m_model.status.at(feature.id);
         if (status.health == core::FeatureHealth::Failed) {

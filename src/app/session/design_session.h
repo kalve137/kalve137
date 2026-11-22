@@ -28,6 +28,7 @@ public:
 
     const core::Document& document() const { return m_document; }
     const core::Model& model() const { return m_model; }
+    double lastRecomputeMs() const { return m_recomputeMs; }
     core::SnapshotCache& snapshots() { return m_snapshots; }
     pick::SceneRays& rays() { return m_rays; }
     gp_Ax3 sketchPlane(core::FeatureId sketch) const;
@@ -72,6 +73,7 @@ private:
     core::UndoStack m_undo;
     std::filesystem::path m_path;
     bool m_dirty = false;
+    double m_recomputeMs = 0.0;
     std::map<core::FeatureId, bool> m_visibility;
     std::set<core::BodyKey> m_hiddenBodies;
     bool m_originVisible = false;
