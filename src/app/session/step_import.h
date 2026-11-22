@@ -13,4 +13,7 @@ namespace kalve137::app {
 
 core::ImportFeature importFeature(const std::filesystem::path& path, std::vector<geometry::StepPart> parts);
 
+std::vector<geometry::StepPart> readStepForImport(const std::filesystem::path& path,
+                                                  const geometry::ProgressCallback& progress = {});
+
 } // namespace kalve137::app

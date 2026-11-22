@@ -18,11 +18,13 @@
 #include "core/serialization.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
+#include "render/rhi/rhi_view.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QCloseEvent>
 #include <QDialog>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
@@ -151,7 +153,7 @@ std::vector<geometry::StepPart> readStepInBackground(QWidget* parent, const std:
     std::atomic<double> fraction = 0.0;
     std::atomic<bool> stop = false;
     auto task = std::async(std::launch::async, [&] {
-        return geometry::readStepParts(path, [&](double done) {
+        return readStepForImport(path, [&](double done) {
             fraction = done;
             return !stop;
         });
@@ -549,6 +551,8 @@ void MainWindow::importStep()
     const QString name = toQString(path.stem());
     statusBar()->showMessage(tr("Importing %1...").arg(toQString(path.filename())));
     std::vector<geometry::StepPart> parts;
+    QElapsedTimer timer;
+    timer.start();
     try {
         parts = readStepInBackground(this, path);
     } catch (const geometry::ImportCanceled&) {
@@ -559,6 +563,7 @@ void MainWindow::importStep()
         reportFailure(this, tr("Import Failed"), error);
         return;
     }
+    const qint64 workerMs = timer.restart();
     leaveModes();
     {
         const BusyCursor busy;
@@ -567,6 +572,15 @@ void MainWindow::importStep()
         fitView();
     }
     statusBar()->showMessage(tr("Imported %1").arg(toQString(path.filename())), kMessageTimeoutMs);
+    const auto logFirstFrame = [workerMs, timer, file = path.filename().string()] {
+        K137_INFO(Io, "Imported {}: {} ms on the worker, {} ms on the UI thread until the first frame", file, workerMs,
+                  timer.elapsed());
+    };
+    if (m_rhiView != nullptr) {
+        connect(m_rhiView, &QRhiWidget::frameSubmitted, this, logFirstFrame, Qt::SingleShotConnection);
+    } else {
+        connect(m_view, &viewer::OcctViewWidget::rendered, this, logFirstFrame, Qt::SingleShotConnection);
+    }
 }
 
 void MainWindow::exportStep()

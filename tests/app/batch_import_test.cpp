@@ -5,6 +5,7 @@
 #include "app/shell/batch_import.h"
 
 #include "geometry/exchange.h"
+#include "geometry/meshing.h"
 #include "geometry/shapes.h"
 
 #include <gtest/gtest.h>
@@ -13,8 +14,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <BRepTools.hxx>
 #include <gp_Pnt.hxx>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -44,6 +47,40 @@ TEST(StepImport, NamesUnnamedPartsAfterTheFile)
         "rig.stp", {{"Base", makeBox(1.0, 1.0, 1.0), {}, {}, {}}, {"", makeBox(2.0, 2.0, 2.0), {}, {}, {}}});
     EXPECT_EQ(several.parts.at(0).name, "Base");
     EXPECT_EQ(several.parts.at(1).name, "rig 2");
+}
+
+TEST(StepImport, MeshesPartsAtTheDisplayDeflection)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-import-mesh";
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+    kalve137::geometry::writeStep({{"Pin", makeCylinder(gp_Pnt(0.0, 0.0, 0.0), 5.0, 10.0), std::nullopt}},
+                                  folder / "pin.step");
+
+    std::vector<double> reported;
+    const std::vector<StepPart> parts = kalve137::app::readStepForImport(folder / "pin.step", [&](double done) {
+        reported.push_back(done);
+        return true;
+    });
+
+    ASSERT_EQ(parts.size(), 1U);
+    const TopoDS_Shape& shape = parts.front().shape;
+    EXPECT_TRUE(BRepTools::Triangulation(shape, kalve137::geometry::displayDeflection(shape)));
+    ASSERT_FALSE(reported.empty());
+    EXPECT_TRUE(std::ranges::is_sorted(reported));
+    std::filesystem::remove_all(folder);
+}
+
+TEST(StepImport, StopsWhenCanceled)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-import-cancel";
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+    kalve137::geometry::writeStep({{"Box", makeBox(10.0, 10.0, 10.0), std::nullopt}}, folder / "box.step");
+
+    EXPECT_THROW(kalve137::app::readStepForImport(folder / "box.step", [](double) { return false; }),
+                 kalve137::geometry::ImportCanceled);
+    std::filesystem::remove_all(folder);
 }
 
 TEST(BatchImport, MeasuresOneFileEndToEnd)
