@@ -5,6 +5,7 @@
 
 #include "app/diagnostics/diagnostics.h"
 #include "app/session/preferences.h"
+#include "app/shell/startup_options.h"
 #include "app/sketch/sketch_editor.h"
 
 #include "core/feature.h"
@@ -31,6 +32,10 @@ namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class RhiView;
+}
+
 namespace kalve137::app {
 
 class Autosave;
@@ -49,10 +54,12 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(const StartupOptions& options = {}, QWidget* parent = nullptr);
     ~MainWindow() override;
 
     void openDesignAt(const std::filesystem::path& path);
+    viewer::OcctViewWidget* oldView() const { return m_view; }
+    render::RhiView* newView() const { return m_rhiView; }
 
 protected:
     bool event(QEvent* event) override;
@@ -127,6 +134,8 @@ private:
     DesignSession* m_session = nullptr;
     Autosave* m_autosave = nullptr;
     viewer::OcctViewWidget* m_view = nullptr;
+    render::RhiView* m_rhiView = nullptr;
+    std::unique_ptr<viewer::OcctViewWidget> m_hiddenView;
     std::unique_ptr<Scene> m_scene;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;

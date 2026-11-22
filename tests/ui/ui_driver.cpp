@@ -12,6 +12,7 @@
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "log/log.h"
+#include "render/rhi/rhi_view.h"
 #include "sketch/dimension.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
@@ -397,7 +398,7 @@ bool paintsAccent(QWidget& button)
            kAccentTolerance;
 }
 
-UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>())
+UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>(app::startupFromEnvironment()))
 {
     std::error_code ignored;
     std::filesystem::remove_all(shotFolder(), ignored);
@@ -405,12 +406,22 @@ UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>())
     m_window->resize(kWindowSize);
     m_window->show();
     keepActive();
-    m_view = m_window->findChild<viewer::OcctViewWidget*>();
+    m_newView = m_window->newView();
+    m_view = m_newView == nullptr ? m_window->oldView() : nullptr;
     m_session = m_window->findChild<app::DesignSession*>();
-    EXPECT_NE(m_view, nullptr);
+    EXPECT_TRUE(m_view != nullptr || m_newView != nullptr);
     EXPECT_NE(m_session, nullptr);
     settle();
-    EXPECT_TRUE(m_view->isReady()) << "The view did not initialize off screen";
+    if (m_newView != nullptr) {
+        QElapsedTimer clock;
+        clock.start();
+        while (!m_newView->isReady() && !m_newView->hasFailed() && clock.elapsed() < kAnimationLimitMs) {
+            QTest::qWait(kFrameMs);
+        }
+        EXPECT_TRUE(m_newView->isReady()) << "The new view did not initialize off screen";
+    } else {
+        EXPECT_TRUE(m_view->isReady()) << "The view did not initialize off screen";
+    }
     settle();
 }
 
@@ -472,6 +483,9 @@ void UiDriver::frame()
     QCoreApplication::processEvents();
     if (m_view != nullptr) {
         m_view->grabFramebuffer();
+    }
+    if (m_newView != nullptr && m_newView->isReady()) {
+        m_newView->grabFramebuffer();
     }
     QCoreApplication::processEvents();
 }

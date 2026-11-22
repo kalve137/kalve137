@@ -83,6 +83,11 @@ public:
     const gp_Ax3& gridPlane() const { return m_grid->plane(); }
     void setGridExtent(const std::optional<GridExtent>& extent);
     void redraw();
+    void orbitBy(double radians);
+    void setFrameTiming(bool timed) { m_frameTiming = timed; }
+    std::optional<double> lastFrameMs() const { return m_lastFrameMs; }
+    QString deviceName();
+    int sampleCount() const;
 
     void setLeftButtonCaptured(bool captured);
     bool isLeftButtonCaptured() const { return m_leftCaptured; }
@@ -186,6 +191,8 @@ private:
     Qt::KeyboardModifiers m_boxModifiers;
     bool m_boxing = false;
     bool m_selectedByBox = false;
+    bool m_frameTiming = false;
+    std::optional<double> m_lastFrameMs;
 };
 
 } // namespace kalve137::viewer

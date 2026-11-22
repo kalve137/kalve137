@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "geometry/body_mesh.h"
 #include "geometry/exchange.h"
 #include "geometry/face_colors.h"
 #include "geometry/modeling.h"
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -26,6 +28,32 @@
 namespace {
 
 using namespace kalve137::geometry;
+
+class Blockers {
+public:
+    explicit Blockers(const std::vector<TopoDS_Shape>& shapes)
+    {
+        m_meshes.reserve(shapes.size());
+        for (const TopoDS_Shape& shape : shapes) {
+            m_meshes.push_back(meshBody(shape));
+        }
+        std::vector<const kalve137::snapshot::Mesh*> meshes;
+        meshes.reserve(m_meshes.size());
+        for (const kalve137::snapshot::Mesh& mesh : m_meshes) {
+            meshes.push_back(&mesh);
+        }
+        m_blockers = std::make_unique<ViewBlockers>(meshes);
+    }
+
+    bool blocks(const gp_Pnt& point, const gp_Dir& towardViewer) const
+    {
+        return m_blockers->blocks(point, towardViewer);
+    }
+
+private:
+    std::vector<kalve137::snapshot::Mesh> m_meshes;
+    std::unique_ptr<ViewBlockers> m_blockers;
+};
 
 TEST(Geometry, BoxVolume)
 {
@@ -463,7 +491,7 @@ TEST(Exchange, BrepTextRoundTrips)
 
 TEST(Topology, BlocksViewOnlyWhenTheBodyIsInTheWay)
 {
-    const ViewBlockers box({makeBox(10.0, 10.0, 10.0)});
+    const Blockers box({makeBox(10.0, 10.0, 10.0)});
     const gp_Pnt onTop(5.0, 5.0, 10.0);
     EXPECT_FALSE(box.blocks(onTop, gp_Dir(0, 0, 1)));
     EXPECT_TRUE(box.blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
@@ -475,11 +503,11 @@ TEST(Topology, BlocksViewAcrossSeveralBodies)
 {
     gp_Trsf aside;
     aside.SetTranslation(gp_Vec(0.0, 0.0, 20.0));
-    const ViewBlockers stack({makeBox(10.0, 10.0, 10.0), makeBox(10.0, 10.0, 10.0).Moved(TopLoc_Location(aside))});
+    const Blockers stack({makeBox(10.0, 10.0, 10.0), makeBox(10.0, 10.0, 10.0).Moved(TopLoc_Location(aside))});
     EXPECT_TRUE(stack.blocks(gp_Pnt(5.0, 5.0, 10.0), gp_Dir(0, 0, 1)));
     EXPECT_FALSE(stack.blocks(gp_Pnt(5.0, 5.0, 30.0), gp_Dir(0, 0, 1)));
     EXPECT_FALSE(stack.blocks(gp_Pnt(15.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
-    EXPECT_FALSE(ViewBlockers({}).blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
+    EXPECT_FALSE(Blockers({}).blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
 }
 
 TEST(Topology, SamplePointsLieOnTheShape)
@@ -505,7 +533,7 @@ TEST(Topology, FaceSamplesSeePastAShadeOverItsMiddle)
     ASSERT_TRUE(top);
     gp_Trsf above;
     above.SetTranslation(gp_Vec(0.0, 0.0, 12.0));
-    const ViewBlockers shade({makeBox(6.0, 10.0, 2.0).Moved(TopLoc_Location(above))});
+    const Blockers shade({makeBox(6.0, 10.0, 2.0).Moved(TopLoc_Location(above))});
     const gp_Dir up(0, 0, 1);
 
     const std::vector<gp_Pnt> points = samplePoints(*top);

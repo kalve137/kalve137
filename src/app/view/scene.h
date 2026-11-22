@@ -29,6 +29,10 @@ namespace kalve137::geometry {
 class ViewBlockers;
 }
 
+namespace kalve137::core {
+class SnapshotCache;
+}
+
 namespace kalve137::viewer {
 class OcctViewWidget;
 }
@@ -86,7 +90,7 @@ std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick);
 
 class Scene {
 public:
-    explicit Scene(viewer::OcctViewWidget* view);
+    Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots);
     ~Scene();
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
@@ -140,6 +144,7 @@ private:
                  int displayMode = AIS_Shaded);
 
     viewer::OcctViewWidget* m_view;
+    core::SnapshotCache* m_snapshots;
     core::Document m_document;
     core::Model m_model;
     std::set<core::FeatureId> m_hidden;

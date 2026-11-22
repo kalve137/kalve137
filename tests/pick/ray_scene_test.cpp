@@ -5,17 +5,22 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace kalve137::pick {
 namespace {
+
+using snapshot::Mesh;
 
 constexpr double kTolerance = 1e-4;
 constexpr double kFar = 1000.0;
 
 void addSquare(Mesh& mesh, double z, std::uint32_t face, double offset = 0.0)
 {
+    mesh.faceCount = std::max(mesh.faceCount, face + 1);
     const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
     mesh.vertices.push_back({offset - 1.0, -1.0, z});
     mesh.vertices.push_back({offset + 1.0, -1.0, z});
@@ -75,6 +80,21 @@ TEST(RayScene, EmptyMeshHitsNothing)
 {
     const RayScene scene(Mesh{});
     EXPECT_FALSE(scene.first({0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}));
+}
+
+TEST(RayScene, NumbersFacesOnAcrossMeshes)
+{
+    Mesh near;
+    addSquare(near, 2.0, 2);
+    Mesh far;
+    addSquare(far, 5.0, 1);
+    const RayScene scene(std::vector<const Mesh*>{&near, &far});
+    const std::optional<Hit> first = scene.first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0});
+    ASSERT_TRUE(first);
+    EXPECT_EQ(first->face, 2U);
+    const std::optional<Hit> second = scene.first({0.2, 0.3, 0.0}, {0.0, 0.0, 1.0}, 3.0);
+    ASSERT_TRUE(second);
+    EXPECT_EQ(second->face, near.faceCount + 1U);
 }
 
 } // namespace

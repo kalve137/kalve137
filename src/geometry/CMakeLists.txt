@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 add_library(kalve137_geometry STATIC
+    body_mesh.cpp
+    body_mesh.h
     exchange.cpp
     exchange.h
     face_colors.cpp
@@ -10,6 +12,8 @@ add_library(kalve137_geometry STATIC
     face_names.h
     measure.cpp
     measure.h
+    meshing.cpp
+    meshing.h
     modeling.cpp
     modeling.h
     shapes.cpp
@@ -20,6 +24,7 @@ add_library(kalve137_geometry STATIC
 target_include_directories(kalve137_geometry PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(kalve137_geometry
     PUBLIC
+        kalve137_snapshot
         TKBRep
         TKMath
         TKernel

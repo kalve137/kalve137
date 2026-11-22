@@ -7,6 +7,8 @@ include(GoogleTest)
 
 add_executable(kalve137_tests
     app/batch_import_test.cpp
+    app/design_session_test.cpp
+    app/startup_options_test.cpp
     app/theme_test.cpp
     core/core_test.cpp
     core/expression_test.cpp
@@ -15,13 +17,17 @@ add_executable(kalve137_tests
     core/naming_test.cpp
     core/sample_test.cpp
     core/shape_store_test.cpp
+    core/snapshot_cache_test.cpp
     core/sweep_test.cpp
+    geometry/body_mesh_test.cpp
+    geometry/box_selection_compare_test.cpp
     geometry/geometry_test.cpp
     geometry/measure_test.cpp
     integration/workflow_test.cpp
     log/log_test.cpp
     pick/ray_scene_test.cpp
     platform/crash_test.cpp
+    render/positions_test.cpp
     sketch/build_test.cpp
     sketch/dimension_test.cpp
     sketch/draft_test.cpp
@@ -40,6 +46,7 @@ target_link_libraries(kalve137_tests PRIVATE
     kalve137_log
     kalve137_pick
     kalve137_platform
+    kalve137_render
     kalve137_sketch
     kalve137_viewer
     GTest::gtest_main
@@ -61,6 +68,7 @@ add_executable(kalve137_uitests
     ui/hero_ui_test.cpp
     ui/line_ui_test.cpp
     ui/menu_ui_test.cpp
+    ui/new_view_ui_test.cpp
     ui/preferences_ui_test.cpp
     ui/recent_values_ui_test.cpp
     ui/scenario.cpp
@@ -105,3 +113,10 @@ foreach(scale 125 150 175)
         RUN_SERIAL TRUE
     )
 endforeach()
+add_test(NAME NewView.Harness
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*)
+set_tests_properties(NewView.Harness PROPERTIES
+    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
+    LABELS ui
+    RUN_SERIAL TRUE
+)

@@ -16,8 +16,11 @@
 
 #include <Standard_WarningsDisable.hxx>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
 #include <Standard_WarningsRestore.hxx>
 
 #include <AIS_AnimationCamera.hxx>
@@ -38,7 +41,9 @@
 #include <TCollection_AsciiString.hxx>
 #include <V3d_AmbientLight.hxx>
 #include <V3d_DirectionalLight.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Dir.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -702,6 +707,8 @@ void OcctViewWidget::paintGL()
     if (m_view.IsNull() || m_view->Window().IsNull()) {
         return;
     }
+    QElapsedTimer frameTimer;
+    frameTimer.start();
 
     const double oldPixelRatio = m_view->Window()->DevicePixelRatio();
     if (m_view->Window()->NativeHandle() != OcctGlTools::GetGlNativeWindow(toDrawable(effectiveWinId()))) {
@@ -738,7 +745,37 @@ void OcctViewWidget::paintGL()
     }
 
     OcctGlTools::ResetGlStateAfterOcct(m_view);
+    if (m_frameTiming) {
+        context()->functions()->glFinish();
+        m_lastFrameMs = static_cast<double>(frameTimer.nsecsElapsed()) / 1e6;
+    }
     emit rendered();
+}
+
+void OcctViewWidget::orbitBy(double radians)
+{
+    const Handle(Graphic3d_Camera)& camera = m_view->Camera();
+    gp_Trsf turn;
+    turn.SetRotation(gp_Ax1(camera->Center(), camera->Up()), radians);
+    camera->Transform(turn);
+    m_view->Invalidate();
+}
+
+QString OcctViewWidget::deviceName()
+{
+    if (!isReady()) {
+        return {};
+    }
+    makeCurrent();
+    const auto* renderer = reinterpret_cast<const char*>(context()->functions()->glGetString(GL_RENDERER));
+    QString name = renderer != nullptr ? QString::fromUtf8(renderer) : QString();
+    doneCurrent();
+    return name;
+}
+
+int OcctViewWidget::sampleCount() const
+{
+    return m_view.IsNull() ? 0 : m_view->RenderingParams().NbMsaaSamples;
 }
 
 bool OcctViewWidget::event(QEvent* event)

@@ -22,17 +22,22 @@ struct RayScene::Tree {
 
 namespace {
 
-Point centerOf(const std::vector<Point>& vertices)
+Point centerOf(const std::vector<const snapshot::Mesh*>& meshes)
 {
-    if (vertices.empty()) {
-        return {};
-    }
-    Point low = vertices.front();
-    Point high = vertices.front();
-    for (const Point& vertex : vertices) {
-        for (std::size_t axis = 0; axis < 3; ++axis) {
-            low[axis] = std::min(low[axis], vertex[axis]);
-            high[axis] = std::max(high[axis], vertex[axis]);
+    bool any = false;
+    Point low{};
+    Point high{};
+    for (const snapshot::Mesh* mesh : meshes) {
+        for (const Point& vertex : mesh->vertices) {
+            if (!any) {
+                low = vertex;
+                high = vertex;
+                any = true;
+            }
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                low[axis] = std::min(low[axis], vertex[axis]);
+                high[axis] = std::max(high[axis], vertex[axis]);
+            }
         }
     }
     return {(low[0] + high[0]) / 2.0, (low[1] + high[1]) / 2.0, (low[2] + high[2]) / 2.0};
@@ -40,23 +45,32 @@ Point centerOf(const std::vector<Point>& vertices)
 
 } // namespace
 
-RayScene::RayScene(const Mesh& mesh) : m_tree(std::make_unique<Tree>())
+RayScene::RayScene(const snapshot::Mesh& mesh) : RayScene(std::vector<const snapshot::Mesh*>{&mesh}) {}
+
+RayScene::RayScene(const std::vector<const snapshot::Mesh*>& meshes) : m_tree(std::make_unique<Tree>())
 {
-    m_tree->center = centerOf(mesh.vertices);
-    m_tree->vertices.reserve(mesh.vertices.size());
-    for (const Point& vertex : mesh.vertices) {
-        m_tree->vertices.emplace_back(static_cast<float>(vertex[0] - m_tree->center[0]),
-                                      static_cast<float>(vertex[1] - m_tree->center[1]),
-                                      static_cast<float>(vertex[2] - m_tree->center[2]), 0.0F);
+    m_tree->center = centerOf(meshes);
+    std::uint32_t faceBase = 0;
+    for (const snapshot::Mesh* mesh : meshes) {
+        const auto vertexBase = static_cast<std::uint32_t>(m_tree->vertices.size());
+        for (const Point& vertex : mesh->vertices) {
+            m_tree->vertices.emplace_back(static_cast<float>(vertex[0] - m_tree->center[0]),
+                                          static_cast<float>(vertex[1] - m_tree->center[1]),
+                                          static_cast<float>(vertex[2] - m_tree->center[2]), 0.0F);
+        }
+        for (const snapshot::Triangle& triangle : mesh->triangles) {
+            for (const std::uint32_t corner : triangle) {
+                m_tree->indices.push_back(vertexBase + corner);
+            }
+        }
+        for (const std::uint32_t face : mesh->faces) {
+            m_tree->faces.push_back(faceBase + face);
+        }
+        faceBase += mesh->faceCount;
     }
-    m_tree->indices.reserve(mesh.triangles.size() * 3);
-    for (const Triangle& triangle : mesh.triangles) {
-        m_tree->indices.insert(m_tree->indices.end(), triangle.begin(), triangle.end());
-    }
-    m_tree->faces = mesh.faces;
-    if (!mesh.triangles.empty()) {
+    if (!m_tree->faces.empty()) {
         m_tree->bvh.Build(m_tree->vertices.data(), m_tree->indices.data(),
-                          static_cast<std::uint32_t>(mesh.triangles.size()));
+                          static_cast<std::uint32_t>(m_tree->faces.size()));
     }
 }
 
