@@ -6,8 +6,10 @@
 #include <QColor>
 #include <QMargins>
 #include <QObject>
+#include <QSize>
 
 class QApplication;
+class QWidget;
 
 namespace kalve137::app::theme {
 
@@ -117,6 +119,8 @@ inline constexpr int kRowIconSize = 16;
 inline constexpr int kWidthNarrow = 320;
 inline constexpr int kWidthRegular = 480;
 inline constexpr int kWidthWide = 640;
+
+QSize onScreen(const QWidget& window, QSize wanted);
 
 void apply(QApplication& app, Scheme scheme = Scheme::System);
 

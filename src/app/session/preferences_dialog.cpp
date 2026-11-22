@@ -140,7 +140,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     layout->addWidget(buttons);
 
     load(preferences);
-    resize(kDialogSize);
+    resize(theme::onScreen(*this, kDialogSize));
 }
 
 Preferences PreferencesDialog::preferences() const

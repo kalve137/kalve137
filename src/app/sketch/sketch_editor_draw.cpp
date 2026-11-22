@@ -356,7 +356,7 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
             aspect->MakeArrows3d(false);
             aspect->MakeText3d(false);
             aspect->ArrowAspect()->SetLength(wpp * 10.0);
-            aspect->TextAspect()->SetHeight(kDimensionTextPixels * textScale);
+            aspect->TextAspect()->SetHeight(kDimensionTextPixels);
             aspect->SetTextVerticalPosition(Prs3d_DTVP_Center);
             if (flyout) {
                 aspect->SetTextHorizontalPosition(Prs3d_DTHP_Center);

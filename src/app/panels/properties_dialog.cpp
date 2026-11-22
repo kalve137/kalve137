@@ -89,7 +89,7 @@ void showProperties(QWidget* parent, const core::Model& model)
 
     QDialog dialog(parent);
     dialog.setWindowTitle(QDialog::tr("Properties"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
     auto* text = new QTextBrowser(&dialog);
     text->setHtml(html);

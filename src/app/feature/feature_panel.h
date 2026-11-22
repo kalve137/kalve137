@@ -23,6 +23,7 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QPushButton;
+class QScrollArea;
 class QTimer;
 class QVBoxLayout;
 
@@ -153,6 +154,7 @@ private:
     QVBoxLayout* m_layout = nullptr;
     QWidget* m_form = nullptr;
     QLabel* m_selection = nullptr;
+    QScrollArea* m_itemsArea = nullptr;
     QWidget* m_items = nullptr;
     QVBoxLayout* m_itemsLayout = nullptr;
     QLabel* m_error = nullptr;

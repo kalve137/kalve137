@@ -23,6 +23,7 @@
 #include <QLayoutItem>
 #include <QPushButton>
 #include <QScopedValueRollback>
+#include <QScrollArea>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -34,6 +35,12 @@ namespace kalve137::app {
 
 using feature_panel_detail::counted;
 using feature_panel_detail::kMatchTolerance;
+
+namespace {
+
+constexpr int kVisibleItems = 5;
+
+} // namespace
 
 FeaturePanel::Resolved FeaturePanel::resolve() const
 {
@@ -493,6 +500,7 @@ void FeaturePanel::refreshItems(const std::vector<QString>& items)
         }
         delete item;
     }
+    int rowHeight = 0;
     for (std::size_t i = 0; i < items.size(); ++i) {
         auto* row = new QWidget(m_items);
         auto* layout = new QHBoxLayout(row);
@@ -508,8 +516,10 @@ void FeaturePanel::refreshItems(const std::vector<QString>& items)
         layout->addWidget(remove);
         connect(remove, &QToolButton::clicked, this, [this, i] { removeItem(i); });
         m_itemsLayout->addWidget(row);
+        rowHeight = row->sizeHint().height();
     }
-    m_items->setVisible(!items.empty());
+    m_itemsArea->setFixedHeight(rowHeight * std::min(static_cast<int>(items.size()), kVisibleItems));
+    m_itemsArea->setVisible(!items.empty());
 }
 
 void FeaturePanel::removeItem(std::size_t index)

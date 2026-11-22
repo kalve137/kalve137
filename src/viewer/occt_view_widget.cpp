@@ -357,11 +357,11 @@ void OcctViewWidget::scaleViewCube()
     m_viewCube->SetAxesRadius(kViewCubeAxisRadius * ratio);
     m_viewCube->SetAxesConeRadius(kViewCubeAxisConeRadius * ratio);
     m_viewCube->SetAxesSphereRadius(kViewCubeAxisConeRadius * ratio);
-    m_viewCube->SetFontHeight(kViewCubeFontHeight * ratio);
+    m_viewCube->SetFontHeight(kViewCubeFontHeight);
     if (m_viewCube->Attributes()->HasOwnDatumAspect()) {
         const Handle(Prs3d_DatumAspect)& datum = m_viewCube->Attributes()->DatumAspect();
         for (const Prs3d_DatumParts part : {Prs3d_DatumParts_XAxis, Prs3d_DatumParts_YAxis, Prs3d_DatumParts_ZAxis}) {
-            datum->TextAspect(part)->SetHeight(kViewCubeAxisFontHeight * ratio);
+            datum->TextAspect(part)->SetHeight(kViewCubeAxisFontHeight);
         }
     }
     const Vec2i offset(static_cast<int>(std::lround(kViewCubeOffsetX * ratio)),
@@ -664,6 +664,8 @@ void OcctViewWidget::initializeGL()
         return;
     }
     m_context->SetPixelTolerance(static_cast<int>(std::lround(kPickTolerancePixels * devicePixelRatioF())));
+    m_view->ChangeRenderingParams().Resolution =
+        static_cast<unsigned int>(std::lround(Graphic3d_RenderingParams::THE_DEFAULT_RESOLUTION * devicePixelRatioF()));
     scaleViewCube();
 
     makeCurrent();

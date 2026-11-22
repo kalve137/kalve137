@@ -14,6 +14,7 @@
 #include <QFontMetrics>
 #include <QPalette>
 #include <QProxyStyle>
+#include <QScreen>
 #include <QStyleFactory>
 #include <QStyleHints>
 #include <QWidget>
@@ -22,6 +23,8 @@
 namespace kalve137::app::theme {
 
 namespace {
+
+constexpr int kWindowFrameRoom = 2 * kSpaceXxl;
 
 class Style : public QProxyStyle {
 public:
@@ -145,6 +148,16 @@ Notifier* notifier()
 {
     static Notifier instance;
     return &instance;
+}
+
+QSize onScreen(const QWidget& window, QSize wanted)
+{
+    const QScreen* screen = window.screen();
+    if (screen == nullptr) {
+        return wanted;
+    }
+    const QSize room = screen->availableGeometry().size() - QSize(kWindowFrameRoom, kWindowFrameRoom);
+    return wanted.boundedTo(room);
 }
 
 void setScheme(Scheme scheme)

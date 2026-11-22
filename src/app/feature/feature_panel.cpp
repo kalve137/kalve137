@@ -700,6 +700,7 @@ void FeaturePanel::finish()
         m_form->deleteLater();
     }
     m_form = nullptr;
+    m_itemsArea = nullptr;
     m_items = nullptr;
     m_itemsLayout = nullptr;
     m_axis = nullptr;

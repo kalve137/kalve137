@@ -25,6 +25,8 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Large STEP imports show up sooner since faces are meshed in parallel
 - View cube is a shaded rhombicuboctahedron with larger edge and corner targets
 - View cube hover reads clearly in both themes, labels included
+- Toolbars switch to smaller icons without labels on narrow windows, so every tool and Finish Sketch stay in reach
+- Viewport lines and grid labels follow display scaling
 
 ### Fixed
 
@@ -38,6 +40,8 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Dialogs show only a close button
 - Third-Party Notices open wider
 - File dialogs start in last used folder when no project is open
+- Dialogs and first window fit on small screens
+- Long selections in feature panels scroll instead of pushing OK out of view
 - Report a Problem notes missing crash report or unsaved design instead of disabling its checkbox
 - Dimension lines keep their contrast over light faces
 - Marking menu list sits lower and skips disabled and duplicate recent commands

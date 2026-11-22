@@ -18,6 +18,7 @@
 #include "app/shell/modal_scrim.h"
 #include "app/shell/notices_dialog.h"
 #include "app/shell/shortcuts_dialog.h"
+#include "app/shell/toolbar_fit.h"
 #include "app/sketch/sketch_palette.h"
 #include "app/theme/fonts.h"
 #include "app/theme/icons.h"
@@ -107,7 +108,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
 
     if (!restoreGeometry(QSettings().value(kWindowGeometryKey).toByteArray()) ||
         QGuiApplication::screenAt(geometry().center()) == nullptr) {
-        resize(sizeHint());
+        resize(theme::onScreen(*this, sizeHint()));
         move(QGuiApplication::primaryScreen()->availableGeometry().center() - rect().center());
     }
 
@@ -548,6 +549,15 @@ void MainWindow::createToolBars()
     if (auto* button = qobject_cast<QToolButton*>(m_sketchBar->widgetForAction(m_finishSketch))) {
         button->setObjectName("finishSketch");
     }
+    for (QToolBar* bar : {create, m_sketchBar}) {
+        std::vector<QToolButton*> labeled;
+        for (QToolButton* button : bar->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly)) {
+            if (button->toolButtonStyle() == Qt::ToolButtonTextUnderIcon && button->objectName() != "finishSketch") {
+                labeled.push_back(button);
+            }
+        }
+        new ToolBarFit(bar, std::move(labeled));
+    }
     m_sketchBar->hide();
 }
 
@@ -723,6 +733,14 @@ void MainWindow::refreshScene()
         return;
     }
     m_scene->show(document, m_session->model(), *m_session);
+}
+
+bool MainWindow::event(QEvent* event)
+{
+    if (event->type() == QEvent::DevicePixelRatioChange && m_view->isReady()) {
+        refreshScene();
+    }
+    return QMainWindow::event(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

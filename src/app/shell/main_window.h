@@ -55,6 +55,7 @@ public:
     void openDesignAt(const std::filesystem::path& path);
 
 protected:
+    bool event(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
 private:

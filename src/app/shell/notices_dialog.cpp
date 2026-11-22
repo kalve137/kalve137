@@ -31,7 +31,7 @@ void showThirdPartyNotices(QWidget* window)
 {
     QDialog dialog(window);
     dialog.setWindowTitle(QDialog::tr("Third-Party Notices"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
 
     auto* text = new QTextBrowser(&dialog);
