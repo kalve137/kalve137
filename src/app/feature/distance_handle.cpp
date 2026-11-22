@@ -3,6 +3,7 @@
 
 #include "app/feature/distance_handle.h"
 
+#include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
 #include "app/theme/theme.h"
 
@@ -128,8 +129,13 @@ DistanceHandle::DistanceHandle(viewer::OcctViewWidget* view, QObject* parent) : 
     m_box->setObjectName("canvasInput");
     m_box->setFixedWidth(kBoxWidth);
     m_box->hide();
+    m_recentValues = new RecentValuesMenu(
+        m_box, [this] { return m_box->quantity(); }, [this](double value) { m_box->chooseValue(value); });
     connect(m_box, &ValueEdit::valueChanged, this, &DistanceHandle::edited);
-    connect(m_box, &ValueEdit::accepted, this, &DistanceHandle::accepted);
+    connect(m_box, &ValueEdit::accepted, this, [this] {
+        m_recentValues->commit(m_box->value());
+        emit accepted();
+    });
     connect(view, &viewer::OcctViewWidget::rendered, this, &DistanceHandle::refresh, Qt::QueuedConnection);
     view->installEventFilter(this);
 }
@@ -189,6 +195,7 @@ void DistanceHandle::hide()
     m_dragOffset.reset();
     setHover(false);
     m_overlay->hide();
+    m_recentValues->reset();
     const bool hadFocus = m_box->hasFocus();
     m_box->hide();
     if (hadFocus) {

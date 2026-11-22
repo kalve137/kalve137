@@ -62,6 +62,7 @@ add_executable(kalve137_uitests
     ui/line_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/preferences_ui_test.cpp
+    ui/recent_values_ui_test.cpp
     ui/scenario.cpp
     ui/select_ui_test.cpp
     ui/scenario.h

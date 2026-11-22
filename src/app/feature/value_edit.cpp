@@ -76,6 +76,14 @@ void ValueEdit::setValue(double value)
     showValue();
 }
 
+void ValueEdit::chooseValue(double value)
+{
+    m_value = std::clamp(value, m_minimum, m_maximum);
+    showValue();
+    selectAll();
+    emit valueChanged(m_value);
+}
+
 void ValueEdit::setRange(double minimum, double maximum)
 {
     m_minimum = minimum;

@@ -21,6 +21,7 @@ class OcctViewWidget;
 
 namespace kalve137::app {
 
+class RecentValuesMenu;
 class ValueEdit;
 
 class DistanceHandle : public QObject {
@@ -67,6 +68,7 @@ private:
     viewer::OcctViewWidget* m_view;
     QWidget* m_overlay = nullptr;
     ValueEdit* m_box = nullptr;
+    RecentValuesMenu* m_recentValues = nullptr;
     gp_Pnt m_origin;
     gp_Dir m_direction;
     std::optional<gp_Ax1> m_arcAxis;
