@@ -77,6 +77,9 @@ try {
         throw "The package is missing: $($missing -join ', ')"
     }
     $unwanted = 'bin\kalve137.pdb', 'bin\vc_redist.x64.exe', 'bin\opengl32sw.dll', 'bin\opengl32.dll', 'translations'
+    $unwanted += 'plugins\tls', 'plugins\networkinformation', 'plugins\generic\qtuiotouchplugin.dll'
+    $unwanted += Get-ChildItem -Path $top -Recurse -Filter 'Qt6Network*' |
+        ForEach-Object { $_.FullName.Substring($top.Length + 1) }
     $present = $unwanted | Where-Object { Test-Path (Join-Path $top $_) }
     if ($present) {
         throw "The package carries files it should not: $($present -join ', ')"
