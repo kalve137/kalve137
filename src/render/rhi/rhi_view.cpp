@@ -206,7 +206,7 @@ StartProblem checkStart(GraphicsApi api)
 
 bool canStart(GraphicsApi api)
 {
-    return checkStart(api) == StartProblem::None;
+    return startProblem(probe(api)) == StartProblem::None;
 }
 
 QLabel* makeFailureNotice(GraphicsApi api, StartProblem problem, QWidget* parent)
