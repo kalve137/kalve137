@@ -29,9 +29,9 @@ camera::Vec3 toVec(const gp_Dir& direction)
 
 } // namespace
 
-CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView,
+CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView, pick::SceneRays& rays,
                                std::function<bool()> sceneIsEmpty, QObject* parent)
-    : QObject(parent), m_view(&view), m_newView(newView), m_sceneIsEmpty(std::move(sceneIsEmpty))
+    : QObject(parent), m_view(&view), m_newView(newView), m_rays(&rays), m_sceneIsEmpty(std::move(sceneIsEmpty))
 {
     if (m_newView == nullptr) {
         return;
@@ -43,7 +43,7 @@ CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::RhiView* ne
     m_animation->setEasingCurve(QEasingCurve::Linear);
     connect(m_animation, &QVariantAnimation::valueChanged, this,
             [this](const QVariant& value) { show(m_transition.at(value.toDouble() * m_transition.seconds())); });
-    m_navigation = new NewViewNavigation(*m_newView, *m_view, *this);
+    m_navigation = new NewViewNavigation(*m_newView, *m_rays, *this);
     connect(m_navigation, &NewViewNavigation::menuRequested, this, &CameraCommands::menuRequested);
     connect(m_newView, &render::RhiView::resized, this, &CameraCommands::syncViewport);
 }
@@ -175,6 +175,7 @@ bool CameraCommands::isPerspective() const
 
 void CameraCommands::setNavigation(const camera::Navigation& navigation)
 {
+    m_navigationSettings = navigation;
     m_view->setNavigation(navigation);
     m_animateTransitions = navigation.animateTransitions;
     if (m_navigation != nullptr) {

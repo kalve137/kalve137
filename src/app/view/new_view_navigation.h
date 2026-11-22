@@ -4,20 +4,13 @@
 #pragma once
 
 #include "camera/navigator.h"
-#include "pick/ray_scene.h"
-#include "snapshot/body.h"
+#include "pick/scene_rays.h"
 
 #include <QObject>
 #include <QPoint>
 #include <QPointF>
 
-#include <memory>
 #include <optional>
-#include <vector>
-
-namespace kalve137::viewer {
-class OcctViewWidget;
-}
 
 namespace kalve137::render {
 class RhiView;
@@ -29,26 +22,22 @@ class CameraCommands;
 
 class SnapshotNavigationScene : public camera::NavigationScene {
 public:
-    SnapshotNavigationScene(const render::RhiView& view, const viewer::OcctViewWidget& hiddenView);
+    SnapshotNavigationScene(const render::RhiView& view, pick::SceneRays& rays);
 
     std::optional<camera::Vec3> pick(const camera::Camera& camera, const camera::Viewport& viewport,
                                      const camera::Pixel& pixel, bool onRay) const override;
     camera::Vec3 gravityPoint(const camera::Camera& camera, const camera::Viewport& viewport) const override;
 
 private:
-    const pick::RayScene* rays() const;
-
     const render::RhiView* m_view;
-    const viewer::OcctViewWidget* m_hiddenView;
-    mutable std::vector<std::shared_ptr<const snapshot::Body>> m_bodies;
-    mutable std::unique_ptr<pick::RayScene> m_rays;
+    pick::SceneRays* m_rays;
 };
 
 class NewViewNavigation : public QObject {
     Q_OBJECT
 
 public:
-    NewViewNavigation(render::RhiView& view, const viewer::OcctViewWidget& hiddenView, CameraCommands& commands);
+    NewViewNavigation(render::RhiView& view, pick::SceneRays& rays, CameraCommands& commands);
 
     void setNavigation(const camera::Navigation& navigation);
 

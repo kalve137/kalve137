@@ -4,10 +4,11 @@
 #include "app/view/new_view_navigation.h"
 
 #include "app/view/camera_commands.h"
+#include "camera/gravity.h"
 #include "render/rhi/rhi_view.h"
-#include "viewer/occt_view_widget.h"
 
-#include <gp_Pnt.hxx>
+#include <memory>
+#include <vector>
 
 namespace kalve137::app {
 
@@ -33,15 +34,15 @@ unsigned toModifiers(Qt::KeyboardModifiers modifiers)
 
 } // namespace
 
-SnapshotNavigationScene::SnapshotNavigationScene(const render::RhiView& view, const viewer::OcctViewWidget& hiddenView)
-    : m_view(&view), m_hiddenView(&hiddenView)
+SnapshotNavigationScene::SnapshotNavigationScene(const render::RhiView& view, pick::SceneRays& rays)
+    : m_view(&view), m_rays(&rays)
 {}
 
 std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& camera,
                                                           const camera::Viewport& viewport, const camera::Pixel& pixel,
                                                           bool) const
 {
-    const pick::RayScene* scene = rays();
+    const std::shared_ptr<const pick::RayScene> scene = m_rays->rays(m_view->scene());
     if (scene == nullptr) {
         return std::nullopt;
     }
@@ -55,33 +56,20 @@ std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& 
     return ray.origin + direction * hit->distance;
 }
 
-camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera&, const camera::Viewport&) const
+camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera& camera, const camera::Viewport&) const
 {
-    const gp_Pnt point = m_hiddenView->gravityPoint();
-    return {point.X(), point.Y(), point.Z()};
-}
-
-const pick::RayScene* SnapshotNavigationScene::rays() const
-{
-    const std::vector<std::shared_ptr<const snapshot::Body>>& bodies = m_view->scene().bodies;
-    if (bodies.empty()) {
-        return nullptr;
-    }
-    if (m_rays == nullptr || bodies != m_bodies) {
-        std::vector<const snapshot::Mesh*> meshes;
-        meshes.reserve(bodies.size());
-        for (const std::shared_ptr<const snapshot::Body>& body : bodies) {
-            meshes.push_back(body->mesh.get());
+    std::vector<camera::Box> boxes;
+    for (const auto& body : m_view->scene().bodies) {
+        const snapshot::Mesh& mesh = *body->mesh;
+        if (!mesh.vertices.empty()) {
+            boxes.push_back({{mesh.low[0], mesh.low[1], mesh.low[2]}, {mesh.high[0], mesh.high[1], mesh.high[2]}});
         }
-        m_rays = std::make_unique<pick::RayScene>(meshes);
-        m_bodies = bodies;
     }
-    return m_rays.get();
+    return camera::gravityPoint(camera, boxes);
 }
 
-NewViewNavigation::NewViewNavigation(render::RhiView& view, const viewer::OcctViewWidget& hiddenView,
-                                     CameraCommands& commands)
-    : QObject(&commands), m_view(&view), m_commands(&commands), m_scene(view, hiddenView)
+NewViewNavigation::NewViewNavigation(render::RhiView& view, pick::SceneRays& rays, CameraCommands& commands)
+    : QObject(&commands), m_view(&view), m_commands(&commands), m_scene(view, rays)
 {
     connect(m_view, &render::RhiView::mousePressed, this, &NewViewNavigation::press);
     connect(m_view, &render::RhiView::mouseReleased, this,

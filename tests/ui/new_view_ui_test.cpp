@@ -3,6 +3,7 @@
 
 #include "ui_test.h"
 
+#include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
@@ -21,8 +22,11 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <gp_Pnt.hxx>
+
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
@@ -133,13 +137,20 @@ TEST_F(NewViewTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     EXPECT_NEAR(commands.camera().scale(), fitted, 1e-6 * fitted);
     expectFollowed(*ui, "home");
 
-    const app::SnapshotNavigationScene scene(*canvas, *ui->window().oldView());
+    auto* session = ui->window().findChild<app::DesignSession*>();
+    ASSERT_NE(session, nullptr);
+    const app::SnapshotNavigationScene scene(*canvas, session->rays());
     const camera::Viewport viewport = *commands.viewport();
     const std::optional<camera::Vec3> hit =
         scene.pick(commands.camera(), viewport, {viewport.width / 2, viewport.height / 2}, true);
     ASSERT_TRUE(hit) << "the ray through the middle hits the part";
     EXPECT_LT(camera::dot(*hit - commands.camera().center(), commands.camera().direction()), 0.0);
     EXPECT_FALSE(scene.pick(commands.camera(), viewport, {2, 2}, true)) << "the corner ray misses";
+    const std::size_t builds = session->rays().builds();
+    const gp_Pnt hiddenGravity = ui->window().oldView()->gravityPoint();
+    const camera::Vec3 gravity = scene.gravityPoint(commands.camera(), viewport);
+    EXPECT_LT(camera::distance(gravity, {hiddenGravity.X(), hiddenGravity.Y(), hiddenGravity.Z()}), 1e-6)
+        << "the snapshot gravity point matches the hidden view's";
 
     const QPointF middle(canvas->width() / 2.0, canvas->height() / 2.0);
     QWheelEvent wheel(middle, canvas->mapToGlobal(middle), QPoint(), QPoint(0, 2 * kWheelStep), Qt::NoButton,
@@ -153,6 +164,7 @@ TEST_F(NewViewTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     sendMouse(*canvas, QEvent::MouseButtonRelease, middle + QPointF(40, -25), Qt::MiddleButton, Qt::NoButton);
     EXPECT_GT(camera::distance(commands.camera().direction(), camera::normalized({-1.0, 1.0, -1.0})), 0.01);
     expectFollowed(*ui, "orbit");
+    EXPECT_EQ(session->rays().builds(), builds) << "the wheel and the orbit share the scene's one ray scene";
 
     ui->trigger("Fit All");
     waitForCamera(commands);

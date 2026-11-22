@@ -12,6 +12,7 @@
 #include "geometry/topology.h"
 
 #include "log/log.h"
+#include "pick/scene_rays.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
 #include "viewer/style.h"
@@ -238,7 +239,8 @@ std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick)
     return std::nullopt;
 }
 
-Scene::Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots) : m_view(view), m_snapshots(&snapshots)
+Scene::Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots, pick::SceneRays& rays)
+    : m_view(view), m_snapshots(&snapshots), m_rays(&rays)
 {
     const Handle(Prs3d_Drawer)& drawer = m_view->aisContext()->DefaultDrawer();
     drawer->SetTypeOfDeflection(Aspect_TOD_RELATIVE);
@@ -259,15 +261,15 @@ void Scene::updateBoxSelection()
         return;
     }
     m_view->setBoxSelection([this](const std::vector<Handle(SelectMgr_EntityOwner)>& owners) {
-        std::vector<std::shared_ptr<const snapshot::Body>> shown;
+        std::vector<std::shared_ptr<const snapshot::Mesh>> shown;
         std::vector<const snapshot::Mesh*> meshes;
         for (const core::Body& body : m_model.bodies) {
             if (!m_hiddenBodies.contains(body.key())) {
-                shown.push_back(m_snapshots->body(body));
-                meshes.push_back(shown.back()->mesh.get());
+                shown.push_back(m_snapshots->body(body)->mesh);
+                meshes.push_back(shown.back().get());
             }
         }
-        const geometry::ViewBlockers blockers(meshes);
+        const geometry::ViewBlockers blockers(m_rays->rays(shown), meshes);
         std::vector<TopoDS_Shape> shapes(owners.size());
         for (std::size_t i = 0; i < owners.size(); ++i) {
             const std::optional<Pick> pick = pickOf(owners[i]);

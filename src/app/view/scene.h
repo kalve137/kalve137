@@ -33,6 +33,10 @@ namespace kalve137::core {
 class SnapshotCache;
 }
 
+namespace kalve137::pick {
+class SceneRays;
+}
+
 namespace kalve137::viewer {
 class OcctViewWidget;
 }
@@ -90,7 +94,7 @@ std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick);
 
 class Scene {
 public:
-    Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots);
+    Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots, pick::SceneRays& rays);
     ~Scene();
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
@@ -145,6 +149,7 @@ private:
 
     viewer::OcctViewWidget* m_view;
     core::SnapshotCache* m_snapshots;
+    pick::SceneRays* m_rays;
     core::Document m_document;
     core::Model m_model;
     std::set<core::FeatureId> m_hidden;

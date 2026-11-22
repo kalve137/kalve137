@@ -8,6 +8,7 @@
 #include "app/view/camera_commands.h"
 #include "camera/camera.h"
 #include "camera/math.h"
+#include "camera/navigation.h"
 #include "core/recompute.h"
 #include "geometry/body_mesh.h"
 
@@ -23,6 +24,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMouseEvent>
+#include <QPointF>
 #include <QRegularExpression>
 #include <QSize>
 #include <QStatusBar>
@@ -34,9 +37,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <functional>
 #include <numbers>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace kalve137::app {
@@ -49,6 +54,7 @@ constexpr double kOrbitStep = 2.0 * std::numbers::pi / kOrbitFrames;
 constexpr int kReadyTimeoutMs = 30000;
 constexpr double kPercentile = 0.95;
 constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
+constexpr double kFirstPressStep = 20.0;
 
 std::optional<QSize> sizeNamed(const QString& text)
 {
@@ -109,6 +115,52 @@ struct Orbit {
     std::vector<double> cameraMs;
 };
 
+std::pair<Qt::MouseButton, Qt::KeyboardModifiers> orbitGesture(camera::NavigationPreset preset)
+{
+    for (const auto& [button, ours] :
+         {std::pair{Qt::MiddleButton, camera::MiddleButton}, std::pair{Qt::RightButton, camera::RightButton}}) {
+        for (const auto& [modifiers, flags] : {std::pair{Qt::KeyboardModifiers(), camera::NoModifier},
+                                               std::pair{Qt::KeyboardModifiers(Qt::ShiftModifier), camera::Shift}}) {
+            if (camera::gestureFor(preset, ours, flags) == camera::Gesture::Orbit) {
+                return {button, modifiers};
+            }
+        }
+    }
+    return {Qt::MiddleButton, Qt::NoModifier};
+}
+
+void sendMouse(QWidget& widget, QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,
+               Qt::KeyboardModifiers modifiers)
+{
+    QMouseEvent event(type, pos, widget.mapToGlobal(pos), button, buttons, modifiers);
+    QApplication::sendEvent(&widget, &event);
+}
+
+std::optional<double> firstPress(MainWindow& window)
+{
+    render::RhiView* view = window.newView();
+    if (view == nullptr) {
+        return std::nullopt;
+    }
+    CameraCommands& commands = *window.cameraCommands();
+    const camera::Navigation saved = commands.navigation();
+    camera::Navigation aroundCursor = saved;
+    aroundCursor.orbitAroundCursor = true;
+    commands.setNavigation(aroundCursor);
+    const auto [button, modifiers] = orbitGesture(saved.preset);
+    const QPointF middle(view->width() / 2.0, view->height() / 2.0);
+    const QPointF moved = middle + QPointF(kFirstPressStep, 0.0);
+    QElapsedTimer timer;
+    timer.start();
+    sendMouse(*view, QEvent::MouseButtonPress, middle, button, button, modifiers);
+    sendMouse(*view, QEvent::MouseMove, moved, Qt::NoButton, button, modifiers);
+    const std::optional<double> frame = view->benchFrame();
+    const double ms = elapsedMs(timer);
+    sendMouse(*view, QEvent::MouseButtonRelease, moved, button, Qt::NoButton, modifiers);
+    commands.setNavigation(saved);
+    return frame ? std::optional(ms) : std::nullopt;
+}
+
 Orbit orbit(MainWindow& window)
 {
     Orbit result;
@@ -155,6 +207,11 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         K137_ERROR(App, "The bench size must look like 2560x1440, got {}", size.toStdString());
         return 2;
     }
+    std::error_code missing;
+    if (!std::filesystem::is_regular_file(design, missing)) {
+        K137_ERROR(App, "The bench design {} does not exist", design.string());
+        return 2;
+    }
     MainWindow window(options);
     for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
         dock->hide();
@@ -193,6 +250,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const auto* session = window.findChild<DesignSession*>();
     const ColdBuild cold = buildColdSnapshots(session->model());
 
+    const std::optional<double> pressMs = firstPress(window);
     const Orbit timed = orbit(window);
     const std::vector<double>& frames = timed.frames;
     if (frames.size() != static_cast<std::size_t>(kOrbitFrames)) {
@@ -222,6 +280,9 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     if (!timed.cameraMs.empty()) {
         result.insert("camera_median_ms", percentile(timed.cameraMs, 0.5));
         result.insert("camera_p95_ms", percentile(timed.cameraMs, kPercentile));
+    }
+    if (pressMs) {
+        result.insert("first_press_ms", *pressMs);
     }
     QFile file(QString::fromStdU16String(out.u16string()));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(QJsonDocument(result).toJson()) < 0) {
