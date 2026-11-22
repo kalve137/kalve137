@@ -108,6 +108,12 @@ snapshot::Scene withVisibility(snapshot::Scene scene, const core::Model& model, 
     return scene;
 }
 
+snapshot::Color snapshotColor(const QColor& color)
+{
+    return {static_cast<float>(color.redF()), static_cast<float>(color.greenF()), static_cast<float>(color.blueF()),
+            static_cast<float>(color.alphaF())};
+}
+
 } // namespace
 
 MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWindow(parent)
@@ -176,6 +182,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
             refreshScene();
             m_cameraCommands->fit(CameraCommands::Move::Jump);
         });
+        connect(m_view, &viewer::OcctViewWidget::gridChanged, this, &MainWindow::syncNewViewGrid);
     } else {
         connect(m_view, &viewer::OcctViewWidget::ready, this, [this] {
             diagnostics::setGlInfo(m_view->glInfo());
@@ -950,10 +957,6 @@ void MainWindow::applyNewViewStyle()
     if (m_rhiView == nullptr) {
         return;
     }
-    const auto color = [](const QColor& color) {
-        return snapshot::Color{static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
-                               static_cast<float>(color.blueF()), static_cast<float>(color.alphaF())};
-    };
     const auto visual = [](VisualStyle style) {
         switch (style) {
         case VisualStyle::Shaded:
@@ -969,12 +972,41 @@ void MainWindow::applyNewViewStyle()
     };
     const theme::Palette& colors = theme::palette();
     m_rhiView->setViewportStyle({
-        .background = color(colors.viewport.canvas),
-        .body = color(colors.viewport.body),
-        .bodyEdge = color(colors.viewport.bodyEdge),
-        .wire = color(colors.viewport.wire),
+        .background = snapshotColor(colors.viewport.canvas),
+        .body = snapshotColor(colors.viewport.body),
+        .bodyEdge = snapshotColor(colors.viewport.bodyEdge),
+        .wire = snapshotColor(colors.viewport.wire),
         .visualStyle = visual(m_preferences.visualStyle),
         .pixelRatio = devicePixelRatioF(),
+    });
+    syncNewViewGrid();
+}
+
+void MainWindow::syncNewViewGrid()
+{
+    if (m_rhiView == nullptr) {
+        return;
+    }
+    const theme::Palette& colors = theme::palette();
+    std::optional<render::GridExtent> extent;
+    if (m_view->gridExtent()) {
+        extent = viewer::gridExtentOf(*m_view->gridExtent());
+    }
+    m_rhiView->setGrid({
+        .visible = m_view->isGridVisible(),
+        .adaptive = m_view->isGridAdaptive(),
+        .spacing = m_view->gridSpacing(),
+        .plane = viewer::gridPlaneOf(m_view->gridPlane()),
+        .extent = extent,
+        .colors =
+            {
+                .background = snapshotColor(colors.viewport.canvas),
+                .minor = snapshotColor(colors.viewport.gridMinor),
+                .major = snapshotColor(colors.viewport.gridMajor),
+                .axisX = snapshotColor(colors.viewport.axisX),
+                .axisY = snapshotColor(colors.viewport.axisY),
+                .axisZ = snapshotColor(colors.viewport.axisZ),
+            },
     });
 }
 

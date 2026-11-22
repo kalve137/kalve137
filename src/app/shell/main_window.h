@@ -137,6 +137,7 @@ private:
     void applyPreferences();
     void applyViewportTheme();
     void applyNewViewStyle();
+    void syncNewViewGrid();
     void lookAtSketch();
 
     static constexpr int kMessageTimeoutMs = 5000;

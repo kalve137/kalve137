@@ -106,9 +106,16 @@ private:
         Geometry selectedFaces;
         Geometry hoveredFaces;
     };
-    enum class Input { Lines, Positions, None };
+    struct GridGpu {
+        std::uint64_t revision = 0;
+        Geometry wash;
+        Geometry lines;
+        Owned<QRhiShaderResourceBindings> washBindings;
+        Owned<QRhiShaderResourceBindings> lineBindings;
+    };
+    enum class Input { Lines, Positions, OverlayLines, OverlayFill, None };
     enum class Depth { Off, LessOrEqual, Greater };
-    enum class Blend { Opaque, Mask, Constant };
+    enum class Blend { Opaque, Mask, Constant, Alpha };
     struct PipelineSpec {
         const char* vertex = nullptr;
         const char* fragment = nullptr;
@@ -136,10 +143,14 @@ private:
     Owned<QRhiGraphicsPipeline> pipelineFor(const PipelineSpec& spec, QRhiRenderPassDescriptor* pass, int samples,
                                             QRhiShaderResourceBindings* bindings) const;
     bool refreshHighlight(const HighlightDraw& highlight, QRhiResourceUpdateBatch* updates);
+    bool refreshGrid(const GridDraw& grid, QRhiResourceUpdateBatch* updates);
+    void drawGrid(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     bool upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
                 QRhiResourceUpdateBatch* updates);
-    void drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& lines,
-                   const QRhiViewport& viewport) const;
+    bool uploadInto(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
+                    QRhiResourceUpdateBatch* updates);
+    void drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
+                   const Geometry& lines, const QRhiViewport& viewport) const;
     void drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& triangles,
                        const QRhiViewport& viewport, float weight) const;
 
@@ -156,7 +167,10 @@ private:
     Owned<QRhiGraphicsPipeline> m_goldFill;
     std::array<Owned<QRhiGraphicsPipeline>, 2> m_hiddenFaces;
     Owned<QRhiGraphicsPipeline> m_hiddenEdges;
+    Owned<QRhiGraphicsPipeline> m_gridWash;
+    Owned<QRhiGraphicsPipeline> m_gridLines;
     HighlightGpu m_highlight;
+    GridGpu m_grid;
     bool m_hiddenPass = false;
     bool m_wireFill = false;
     bool m_postNeeded = false;

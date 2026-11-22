@@ -9,9 +9,12 @@
 #include "viewer/occt_view_widget.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QMouseEvent>
 #include <QTest>
+#include <QWidget>
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_InteractiveObject.hxx>
@@ -154,6 +157,34 @@ void savePair(const Shots& shots, const std::filesystem::path& folder, const std
 {
     shots.old.save(QString::fromStdU16String((folder / (stem + "-old.png")).u16string()));
     shots.fresh.save(QString::fromStdU16String((folder / (stem + "-new.png")).u16string()));
+}
+
+QPointF screenOf(const camera::Camera& camera, const camera::Viewport& viewport, const camera::Vec3& point)
+{
+    const camera::ScreenPoint at = camera.project(point, viewport);
+    return {at.x, at.y};
+}
+
+void send(QWidget& widget, QEvent::Type type, QPointF at, Qt::MouseButton button, Qt::MouseButtons buttons)
+{
+    QMouseEvent event(type, at, widget.mapToGlobal(at), button, buttons, {});
+    QApplication::sendEvent(&widget, &event);
+    QApplication::processEvents();
+    if (auto* old = qobject_cast<viewer::OcctViewWidget*>(&widget)) {
+        old->grabFramebuffer();
+    } else if (auto* fresh = qobject_cast<render::RhiView*>(&widget)) {
+        fresh->grabFramebuffer();
+    }
+}
+
+void act(QWidget& view, QPointF at, bool click)
+{
+    send(view, QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton);
+    send(view, QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton);
+    if (click) {
+        send(view, QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton);
+        send(view, QEvent::MouseButtonRelease, at, Qt::LeftButton, Qt::NoButton);
+    }
 }
 
 } // namespace kalve137::uitest

@@ -94,7 +94,15 @@ Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, 
     const camera::Vec3 right = camera::cross(shown.direction(), up);
     const camera::Vec3 eyePosition = shown.eye() - camera::Vec3{origin[0], origin[1], origin[2]};
     Frame frame;
-    frame.viewProjection = (shown.projection() * shown.viewRelativeTo({origin[0], origin[1], origin[2]})).toFloat();
+    const camera::Mat4 viewProjection = shown.projection() * shown.viewRelativeTo({origin[0], origin[1], origin[2]});
+    frame.viewProjection = viewProjection.toFloat();
+    for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+            frame.exactViewProjection.at(static_cast<std::size_t>(row) + (4 * static_cast<std::size_t>(column))) =
+                viewProjection.at(row, column);
+        }
+    }
+    frame.wideViewProjection = frame.viewProjection;
     frame.eye = toNormal(eye);
     frame.eyePosition = toNormal(eyePosition);
     frame.perspective = !shown.isOrthographic();
@@ -105,6 +113,65 @@ Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, 
     frame.height = viewport.height;
     frame.pixelRatio = viewport.pixelRatio;
     return frame;
+}
+
+std::optional<std::array<double, 3>> planeDepth(const std::array<double, 16>& viewProjection,
+                                                const std::array<float, 4>& plane)
+{
+    constexpr double kEdgeOn = 1e-9;
+    camera::Mat4 matrix;
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            matrix.at(row, column) =
+                viewProjection.at(static_cast<std::size_t>(row) + (4 * static_cast<std::size_t>(column)));
+        }
+    }
+    const std::optional<camera::Mat4> inverse = matrix.inverted();
+    if (!inverse) {
+        return std::nullopt;
+    }
+    std::array<double, 4> clip{};
+    for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+            clip.at(static_cast<std::size_t>(column)) +=
+                inverse->at(row, column) * static_cast<double>(plane.at(static_cast<std::size_t>(row)));
+        }
+    }
+    if (std::abs(clip[2]) <= kEdgeOn * (std::abs(clip[0]) + std::abs(clip[1]) + std::abs(clip[3]))) {
+        return std::nullopt;
+    }
+    return std::array<double, 3>{-clip[0] / clip[2], -clip[1] / clip[2], -clip[3] / clip[2]};
+}
+
+std::optional<camera::Box> unite(const std::optional<camera::Box>& a, const std::optional<camera::Box>& b)
+{
+    if (!a) {
+        return b;
+    }
+    if (!b) {
+        return a;
+    }
+    return camera::Box{{std::min(a->min.x, b->min.x), std::min(a->min.y, b->min.y), std::min(a->min.z, b->min.z)},
+                       {std::max(a->max.x, b->max.x), std::max(a->max.y, b->max.y), std::max(a->max.z, b->max.z)}};
+}
+
+void widenFrame(Frame& frame, camera::Camera camera, const camera::Viewport& viewport, const snapshot::Point& origin,
+                const std::optional<camera::Box>& reach)
+{
+    if (viewport.isValid()) {
+        camera.setAspect(viewport.aspect());
+    }
+    const camera::Mat4 body = camera.projection();
+    camera.fitDepth(reach);
+    const camera::Mat4 wide = camera.projection();
+    frame.wideViewProjection = (wide * camera.viewRelativeTo({origin[0], origin[1], origin[2]})).toFloat();
+    if (camera.isOrthographic()) {
+        const double scale = body.at(2, 2) / wide.at(2, 2);
+        frame.wideDepth = {scale, body.at(2, 3) - (scale * wide.at(2, 3))};
+    } else {
+        const double scale = body.at(2, 3) / wide.at(2, 3);
+        frame.wideDepth = {scale, (scale * wide.at(2, 2)) - body.at(2, 2)};
+    }
 }
 
 Normal viewAt(const Position& position, const Frame& frame)

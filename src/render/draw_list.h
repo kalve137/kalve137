@@ -32,6 +32,9 @@ struct Look {
 
 struct Frame {
     std::array<float, 16> viewProjection{};
+    std::array<double, 16> exactViewProjection{};
+    std::array<float, 16> wideViewProjection{};
+    std::array<double, 2> wideDepth{1.0, 0.0};
     Normal eye{0.0F, 0.0F, 1.0F};
     Position eyePosition{};
     bool perspective = false;
@@ -94,6 +97,34 @@ struct HighlightDraw {
     }
 };
 
+struct OverlayVertex {
+    Position position{};
+    VertexColor color{};
+};
+static_assert(sizeof(OverlayVertex) == 16);
+
+struct OverlayLine {
+    Position start{};
+    Position end{};
+    VertexColor startColor{};
+    VertexColor endColor{};
+    float width = 0.0F;
+};
+static_assert(sizeof(OverlayLine) == 36);
+
+struct GridDraw {
+    std::uint64_t revision = 0;
+    std::span<const OverlayVertex> wash;
+    std::span<const OverlayLine> lines;
+    Normal shift{};
+    std::array<float, 4> plane{};
+
+    bool empty() const { return wash.empty() && lines.empty(); }
+};
+
+std::optional<std::array<double, 3>> planeDepth(const std::array<double, 16>& viewProjection,
+                                                const std::array<float, 4>& plane);
+
 struct DrawList {
     Frame frame;
     bool lit = true;
@@ -106,6 +137,7 @@ struct DrawList {
     snapshot::Color edgeColor{};
     double edgeWidth = 0.0;
     HighlightDraw highlight;
+    GridDraw grid;
 };
 
 using Encoded = std::array<float, 3>;
@@ -133,6 +165,9 @@ camera::Camera fitToScene(camera::Camera camera, const snapshot::Scene& scene);
 
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,
                 const snapshot::Color& background, const Look& look = {});
+std::optional<camera::Box> unite(const std::optional<camera::Box>& a, const std::optional<camera::Box>& b);
+void widenFrame(Frame& frame, camera::Camera camera, const camera::Viewport& viewport, const snapshot::Point& origin,
+                const std::optional<camera::Box>& reach);
 Normal viewAt(const Position& position, const Frame& frame);
 Linear lit(const Normal& normal, const Normal& view, const Linear& color, const Frame& frame);
 float toLinear(float encoded);
