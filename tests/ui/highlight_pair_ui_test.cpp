@@ -76,12 +76,6 @@ const camera::Vec3 kEdgeTo{kBlockWidth / 4.0, -kBlockDepth / 2.0, kBlockHeight};
 const gp_Pnt kTopPoint{0.0, 0.0, kBlockHeight};
 const gp_Pnt kFrontPoint{0.0, -kBlockDepth / 2.0, kBlockHeight / 2.0};
 
-QPointF screenOf(const camera::Camera& camera, const camera::Viewport& viewport, const camera::Vec3& point)
-{
-    const camera::ScreenPoint at = camera.project(point, viewport);
-    return {at.x, at.y};
-}
-
 render::Encoded encodedOf(QRgb color)
 {
     return {static_cast<float>(qRed(color)) / 255.0F, static_cast<float>(qGreen(color)) / 255.0F,
@@ -108,28 +102,6 @@ core::Document paintedBlock(const geometry::Color& color)
     core::Document document = blockDocument();
     document.add(core::AppearanceFeature{{}, {kTopPoint, kFrontPoint}, color});
     return document;
-}
-
-void send(QWidget& widget, QEvent::Type type, QPointF at, Qt::MouseButton button, Qt::MouseButtons buttons)
-{
-    QMouseEvent event(type, at, widget.mapToGlobal(at), button, buttons, {});
-    QApplication::sendEvent(&widget, &event);
-    QApplication::processEvents();
-    if (auto* old = qobject_cast<viewer::OcctViewWidget*>(&widget)) {
-        old->grabFramebuffer();
-    } else if (auto* fresh = qobject_cast<render::RhiView*>(&widget)) {
-        fresh->grabFramebuffer();
-    }
-}
-
-void act(QWidget& view, QPointF at, bool click)
-{
-    send(view, QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton);
-    send(view, QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton);
-    if (click) {
-        send(view, QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton);
-        send(view, QEvent::MouseButtonRelease, at, Qt::LeftButton, Qt::NoButton);
-    }
 }
 
 QRgb faceColor(const QImage& image, QPointF at)

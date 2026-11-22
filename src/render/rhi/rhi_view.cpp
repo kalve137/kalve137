@@ -260,6 +260,15 @@ void RhiView::setViewportStyle(const ViewportStyle& style)
     updateChunks();
 }
 
+void RhiView::setGrid(const GridSettings& settings)
+{
+    if (settings == m_grid.settings()) {
+        return;
+    }
+    m_grid.setSettings(settings);
+    update();
+}
+
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
@@ -591,6 +600,14 @@ camera::Viewport RhiView::viewport() const
     return {static_cast<int>(std::lround(width() * ratio)), static_cast<int>(std::lround(height() * ratio)), ratio};
 }
 
+Frame RhiView::frame() const
+{
+    const camera::Viewport port = viewport();
+    Frame frame = makeFrame(m_camera, port, m_scene.origin, m_style.background);
+    widenFrame(frame, m_camera, port, m_scene.origin, unite(m_bounds, m_grid.bounds()));
+    return frame;
+}
+
 void RhiView::resizeEvent(QResizeEvent* event)
 {
     QRhiWidget::resizeEvent(event);
@@ -636,7 +653,10 @@ void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
     QRhiResourceUpdateBatch* updates = nullptr;
     if (!m_failed && m_bodies != nullptr) {
         updates = rhi()->nextResourceUpdateBatch();
-        const DrawList list = m_chunks.draw(makeFrame(m_camera, viewport(), m_scene.origin, background));
+        const camera::Viewport port = viewport();
+        m_grid.update(m_camera, port, m_scene.origin);
+        DrawList list = m_chunks.draw(frame());
+        list.grid = m_grid.draw(m_camera, port);
         if (!m_bodies->prepare(list, updates)) {
             fail();
         }

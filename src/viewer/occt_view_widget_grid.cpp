@@ -26,6 +26,7 @@ void OcctViewWidget::setGridVisible(bool visible)
         return;
     }
     m_gridVisible = visible;
+    emit gridChanged();
     if (!isReady()) {
         return;
     }
@@ -60,6 +61,7 @@ void OcctViewWidget::setGridSpacing(bool adaptive, double spacing)
     }
     m_gridAdaptive = adaptive;
     m_gridSpacing = spacing;
+    emit gridChanged();
     updateGrid(true);
 }
 
@@ -67,6 +69,7 @@ void OcctViewWidget::setGridPlane(const gp_Ax3& plane)
 {
     m_grid->setPlane(plane);
     m_gridWash->setPlane(plane);
+    emit gridChanged();
     updateGrid(true);
 }
 
@@ -74,6 +77,7 @@ void OcctViewWidget::setGridExtent(const std::optional<GridExtent>& extent)
 {
     const bool washChanged = extent.has_value() != m_gridExtent.has_value();
     m_gridExtent = extent;
+    emit gridChanged();
     if (washChanged && m_gridVisible && isReady()) {
         if (extent) {
             m_context->Erase(m_gridWash, false);

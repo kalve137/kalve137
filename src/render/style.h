@@ -27,6 +27,15 @@ inline constexpr double kHiddenDash = 6.0;
 inline constexpr double kHiddenGap = 4.0;
 inline constexpr float kWireFaceWeight = 0.15F;
 
+inline constexpr double kGridLineWidth = 1.0;
+inline constexpr double kGridAxisWidth = 1.5;
+inline constexpr float kGridWashAlpha = 0.45F;
+inline constexpr float kGridBiasSlope = kFaceBiasSlope + 1.0F;
+inline constexpr int kGridBiasUnits = kFaceBiasUnits + 1;
+inline constexpr float kGridWashBiasSlope = 2.0F;
+inline constexpr int kGridWashBiasUnits = 4;
+inline constexpr int kGridWashSegments = 96;
+
 struct ViewportStyle {
     snapshot::Color background;
     snapshot::Color body{0.64F, 0.68F, 0.73F};

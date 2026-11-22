@@ -102,6 +102,29 @@ bool dashedOff(int pixel, float dash, float gap)
     return std::fmod(static_cast<float>(pixel), dash + gap) >= dash;
 }
 
+Clip wideClip(const Frame& frame, const Position& position, const Normal& shift)
+{
+    const std::array<float, 16>& m = frame.wideViewProjection;
+    const double x = static_cast<double>(position[0]) + shift[0];
+    const double y = static_cast<double>(position[1]) + shift[1];
+    const double z = static_cast<double>(position[2]) + shift[2];
+    Clip clip{};
+    for (std::size_t r = 0; r < clip.size(); ++r) {
+        clip.at(r) = (static_cast<double>(m.at(r)) * x) + (static_cast<double>(m.at(r + 4)) * y) +
+                     (static_cast<double>(m.at(r + 8)) * z) + static_cast<double>(m.at(r + 12));
+    }
+    return clip;
+}
+
+Clip lerp(const Clip& from, const Clip& to, double t)
+{
+    Clip result{};
+    for (std::size_t r = 0; r < result.size(); ++r) {
+        result.at(r) = from.at(r) + ((to.at(r) - from.at(r)) * t);
+    }
+    return result;
+}
+
 } // namespace
 
 CpuBackend::CpuBackend(int threads) : m_pool(defaultThreads(threads)) {}
@@ -205,6 +228,7 @@ void CpuBackend::project(const DrawList& list)
             projectSegments(list, item.segments, item.edgePalette, m_edgePixels, 0);
         }
     }
+    projectGrid(list);
     if (highlight.hidden) {
         projectHighlight(list, highlight.selectedFaces, Pass::HiddenFace, kHiddenFaceWeight, list.edges ? 0.0F : -1.0F);
         projectLines(list, highlight.selectedEdges, m_highlightPixels, Pass::HiddenEdge);
@@ -247,7 +271,8 @@ void CpuBackend::projectHighlight(const DrawList& list, std::span<const Position
                                .weight = weight,
                                .cull = false,
                                .flat = true,
-                               .bias = bias,
+                               .biasSlope = bias * kFaceBiasSlope,
+                               .biasUnits = bias * static_cast<float>(kFaceBiasUnits),
                                .alongX = false,
                                .id = 0});
     }
@@ -269,7 +294,8 @@ void CpuBackend::projectLines(const DrawList& list, std::span<const Segment> seg
                  .weight = 0.0F,
                  .cull = false,
                  .flat = true,
-                 .bias = 0.0F,
+                 .biasSlope = 0.0F,
+                 .biasUnits = 0.0F,
                  .alongX = false,
                  .id = 0});
     }
@@ -329,7 +355,8 @@ void CpuBackend::projectFaces(const DrawList& list, const Chunk& item, std::uint
                                .weight = 0.0F,
                                .cull = cull,
                                .flat = !list.lit,
-                               .bias = list.edges ? 1.0F : 0.0F,
+                               .biasSlope = list.edges ? kFaceBiasSlope : 0.0F,
+                               .biasUnits = list.edges ? static_cast<float>(kFaceBiasUnits) : 0.0F,
                                .alongX = false,
                                .id = id | entry});
     }
@@ -370,7 +397,8 @@ void CpuBackend::projectSegments(const DrawList& list, std::span<const Segment> 
                  .weight = 0.0F,
                  .cull = false,
                  .flat = true,
-                 .bias = 0.0F,
+                 .biasSlope = 0.0F,
+                 .biasUnits = 0.0F,
                  .alongX = false,
                  .id = id | entry});
     }
@@ -415,6 +443,7 @@ bool CpuBackend::addQuad(const DrawList& list, const Segment& segment, double wi
                               .z = static_cast<float>(c[2]),
                               .normal = {},
                               .position = {},
+                              .tint = {},
                               .across = side * static_cast<float>(half),
                               .along = corner >= 2 ? span + static_cast<float>(half) : -static_cast<float>(half),
                               .span = span,
@@ -434,6 +463,137 @@ bool CpuBackend::addQuad(const DrawList& list, const Segment& segment, double wi
     m_triangles.push_back(lower);
     m_triangles.push_back(upper);
     return true;
+}
+
+void CpuBackend::projectGrid(const DrawList& list)
+{
+    const GridDraw& grid = list.grid;
+    const double width = static_cast<double>(m_width) * m_supersample;
+    const double height = static_cast<double>(m_height) * m_supersample;
+    const auto [scale, offset] = list.frame.wideDepth;
+    const auto projected = [&](const Clip& clip, const Linear& tint) {
+        return Projected{.x = fixed((clip[0] / clip[3] + 1.0) * 0.5 * width),
+                         .y = fixed((1.0 - clip[1] / clip[3]) * 0.5 * height),
+                         .z = static_cast<float>((scale * clip[2] / clip[3]) + offset),
+                         .normal = {},
+                         .position = {},
+                         .tint = tint,
+                         .across = 0.0F,
+                         .along = 0.0F,
+                         .span = 0.0F,
+                         .valid = true};
+    };
+    for (std::size_t i = 0; i + 2 < grid.wash.size(); i += 3) {
+        std::array<Clip, 4> polygon{};
+        std::size_t count = 0;
+        for (std::size_t k = 0; k < 3; ++k) {
+            const Clip from = wideClip(list.frame, grid.wash[i + k].position, {});
+            const Clip to = wideClip(list.frame, grid.wash[i + ((k + 1) % 3)].position, {});
+            const double near = from[2] + from[3];
+            const double next = to[2] + to[3];
+            if (near >= 0.0) {
+                polygon.at(count++) = from;
+            }
+            if ((near >= 0.0) != (next >= 0.0)) {
+                polygon.at(count++) = lerp(from, to, near / (near - next));
+            }
+        }
+        if (count < 3) {
+            continue;
+        }
+        const auto first = static_cast<std::uint32_t>(m_vertices.size());
+        for (std::size_t k = 0; k < count; ++k) {
+            m_vertices.push_back(projected(polygon.at(k), {}));
+        }
+        for (std::uint32_t k = 1; k + 1 < count; ++k) {
+            m_triangles.push_back({.a = first,
+                                   .b = first + k,
+                                   .c = first + k + 1,
+                                   .color = grid.wash[i].color,
+                                   .linear = {},
+                                   .pass = Pass::GridFill,
+                                   .hovered = false,
+                                   .selected = false,
+                                   .weight = 0.0F,
+                                   .cull = false,
+                                   .flat = true,
+                                   .biasSlope = kGridWashBiasSlope,
+                                   .biasUnits = static_cast<float>(kGridWashBiasUnits),
+                                   .alongX = false,
+                                   .id = 0});
+        }
+    }
+    const std::optional<std::array<double, 3>> onPlane = planeDepth(list.frame.exactViewProjection, grid.plane);
+    for (const OverlayLine& line : grid.lines) {
+        addGridLine(list, line, onPlane);
+    }
+}
+
+void CpuBackend::addGridLine(const DrawList& list, const OverlayLine& line,
+                             const std::optional<std::array<double, 3>>& onPlane)
+{
+    const double width = static_cast<double>(m_width) * m_supersample;
+    const double height = static_cast<double>(m_height) * m_supersample;
+    const auto [scale, offset] = list.frame.wideDepth;
+    Clip start = wideClip(list.frame, line.start, list.grid.shift);
+    Clip end = wideClip(list.frame, line.end, list.grid.shift);
+    const double nearStart = start[2] + start[3];
+    const double nearEnd = end[2] + end[3];
+    if (nearStart < 0.0 && nearEnd < 0.0) {
+        return;
+    }
+    if (nearStart < 0.0) {
+        start = lerp(start, end, nearStart / (nearStart - nearEnd));
+    } else if (nearEnd < 0.0) {
+        end = lerp(end, start, nearEnd / (nearEnd - nearStart));
+    }
+    const double widthPixels = static_cast<double>(line.width) * list.pixelRatio * m_supersample;
+    const auto first = static_cast<std::uint32_t>(m_vertices.size());
+    const Linear startTint = linearOf(line.startColor);
+    const Linear endTint = linearOf(line.endColor);
+    for (int corner = 0; corner < kEdgeCorners; ++corner) {
+        const std::optional<Clip> at = expandEdge(start, end, corner, widthPixels, width, height);
+        if (!at.has_value() || (*at)[3] <= 0.0) {
+            m_vertices.resize(first);
+            return;
+        }
+        const Clip& c = *at;
+        const double x = c[0] / c[3];
+        const double y = c[1] / c[3];
+        const double z =
+            onPlane ? ((*onPlane)[0] * x) + ((*onPlane)[1] * y) + (*onPlane)[2] : (scale * c[2] / c[3]) + offset;
+        m_vertices.push_back({.x = fixed((x + 1.0) * 0.5 * width),
+                              .y = fixed((1.0 - y) * 0.5 * height),
+                              .z = static_cast<float>(z),
+                              .normal = {},
+                              .position = {},
+                              .tint = corner >= 2 ? endTint : startTint,
+                              .across = 0.0F,
+                              .along = 0.0F,
+                              .span = 0.0F,
+                              .valid = true});
+    }
+    Triangle lower{.a = first,
+                   .b = first + 1,
+                   .c = first + 2,
+                   .color = line.startColor,
+                   .linear = {},
+                   .pass = Pass::GridLine,
+                   .hovered = false,
+                   .selected = false,
+                   .weight = 0.0F,
+                   .cull = false,
+                   .flat = false,
+                   .biasSlope = kGridBiasSlope,
+                   .biasUnits = static_cast<float>(kGridBiasUnits),
+                   .alongX = false,
+                   .id = 0};
+    Triangle upper = lower;
+    upper.a = first + 1;
+    upper.b = first + 3;
+    upper.c = first + 2;
+    m_triangles.push_back(lower);
+    m_triangles.push_back(upper);
 }
 
 void CpuBackend::bin()
@@ -592,12 +752,22 @@ void CpuBackend::shadeTile(int tile, int worker)
             return pack(mixed(16, triangle.color[0]), mixed(8, triangle.color[1]), mixed(0, triangle.color[2]));
         };
         float bias = 0.0F;
-        if (triangle.bias != 0.0F) {
+        if (triangle.biasSlope != 0.0F || triangle.biasUnits != 0.0F) {
             const float slopeX = std::abs((dz1 * static_cast<float>(stepX1)) + (dz2 * static_cast<float>(stepX2)));
             const float slopeY = std::abs((dz1 * static_cast<float>(stepY1)) + (dz2 * static_cast<float>(stepY2)));
-            bias = triangle.bias * ((kFaceBiasSlope * std::max(slopeX, slopeY) * static_cast<float>(supersample)) +
-                                    (static_cast<float>(kFaceBiasUnits) * kDepthUnit));
+            bias = (triangle.biasSlope * std::max(slopeX, slopeY) * static_cast<float>(supersample)) +
+                   (triangle.biasUnits * kDepthUnit);
         }
+        const Linear dt1 = difference(b.tint, a.tint, inverse);
+        const Linear dt2 = difference(c.tint, a.tint, inverse);
+        const auto alpha = static_cast<float>(triangle.color[3]) / kByte;
+        const auto blended = [&triangle, alpha](std::uint32_t under) {
+            const auto mixed = [&](unsigned shift, std::uint8_t over) {
+                return (static_cast<float>((under >> shift) & 0xFFU) * (1.0F - alpha)) +
+                       (static_cast<float>(over) * alpha);
+            };
+            return pack(mixed(16, triangle.color[0]), mixed(8, triangle.color[1]), mixed(0, triangle.color[2]));
+        };
         const float dAcross1 = (b.across - a.across) * inverse;
         const float dAcross2 = (c.across - a.across) * inverse;
         const float dAlong1 = (b.along - a.along) * inverse;
@@ -664,6 +834,17 @@ void CpuBackend::shadeTile(int tile, int worker)
                         const float along = a.along + (dAlong1 * f1) + (dAlong2 * f2);
                         mask[index] =
                             std::max(mask[index], haloStrength(across, along, a.span, corePixels, haloPixels));
+                    }
+                    break;
+                case Pass::GridFill:
+                    if (std::clamp(biased, -1.0F, 1.0F) <= depth[index]) {
+                        color[index] = blended(color[index]);
+                    }
+                    break;
+                case Pass::GridLine:
+                    if (std::clamp(biased, -1.0F, 1.0F) <= depth[index]) {
+                        const Linear tint = interpolated(a.tint, dt1, dt2, f1, f2);
+                        color[index] = kOpaque | (encoded(tint[0]) << 16) | (encoded(tint[1]) << 8) | encoded(tint[2]);
                     }
                     break;
                 case Pass::HiddenFace:

@@ -7,8 +7,10 @@
 #include "render/pick_id.h"
 #include "render/thread_pool.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -41,12 +43,13 @@ private:
         float z = 0.0F;
         Normal normal{};
         Position position{};
+        Linear tint{};
         float across = 0.0F;
         float along = 0.0F;
         float span = 0.0F;
         bool valid = false;
     };
-    enum class Pass : std::uint8_t { Face, GoldFill, MaskFill, Halo, Edge, HiddenFace, HiddenEdge };
+    enum class Pass : std::uint8_t { Face, GoldFill, MaskFill, Halo, Edge, GridFill, GridLine, HiddenFace, HiddenEdge };
     struct Triangle {
         std::uint32_t a = 0;
         std::uint32_t b = 0;
@@ -59,7 +62,8 @@ private:
         float weight = 0.0F;
         bool cull = false;
         bool flat = false;
-        float bias = 0.0F;
+        float biasSlope = 0.0F;
+        float biasUnits = 0.0F;
         bool alongX = false;
         std::uint32_t id = 0;
     };
@@ -84,6 +88,9 @@ private:
     void projectHighlight(const DrawList& list, std::span<const Position> faces, Pass pass, float weight, float bias);
     void projectLines(const DrawList& list, std::span<const Segment> segments, double widthPixels, Pass pass);
     bool addQuad(const DrawList& list, const Segment& segment, double widthPixels, const Triangle& quad);
+    void projectGrid(const DrawList& list);
+    void addGridLine(const DrawList& list, const OverlayLine& line,
+                     const std::optional<std::array<double, 3>>& onPlane);
     void bin();
     void shadeTile(int tile, int worker);
     void resolveTile(int tile, int worker, Image& image) const;

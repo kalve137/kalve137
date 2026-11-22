@@ -22,6 +22,8 @@ struct GridPlane {
     camera::Vec3 x{1.0, 0.0, 0.0};
     camera::Vec3 y{0.0, 1.0, 0.0};
     camera::Vec3 normal{0.0, 0.0, 1.0};
+
+    bool operator==(const GridPlane&) const = default;
 };
 
 struct GridPoint {
@@ -32,6 +34,8 @@ struct GridPoint {
 struct GridExtent {
     camera::Vec3 center;
     double radius = 0.0;
+
+    bool operator==(const GridExtent&) const = default;
 };
 
 struct GridLayout {

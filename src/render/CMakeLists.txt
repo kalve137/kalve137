@@ -17,6 +17,8 @@ add_library(kalve137_render STATIC
     graphics_api.h
     grid.cpp
     grid.h
+    grid_overlay.cpp
+    grid_overlay.h
     pick_id.cpp
     pick_id.h
     positions.h

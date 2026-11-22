@@ -6,6 +6,7 @@
 #include "camera/camera.h"
 #include "render/chunk_set.h"
 #include "render/graphics_api.h"
+#include "render/grid_overlay.h"
 #include "render/pick_id.h"
 #include "render/style.h"
 #include "snapshot/body.h"
@@ -62,6 +63,8 @@ public:
 
     void setViewportStyle(const ViewportStyle& style);
     const ViewportStyle& viewportStyle() const { return m_style; }
+    void setGrid(const GridSettings& settings);
+    const GridOverlay& grid() const { return m_grid; }
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
     const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
@@ -70,6 +73,7 @@ public:
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
     camera::Viewport viewport() const;
+    Frame frame() const;
 
     bool isReady() const { return m_ready; }
     bool hasFailed() const { return m_failed; }
@@ -125,6 +129,7 @@ private:
     snapshot::Scene m_scene;
     std::optional<camera::Box> m_bounds;
     camera::Camera m_camera;
+    GridOverlay m_grid;
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
     std::unique_ptr<IdTargets> m_ids;

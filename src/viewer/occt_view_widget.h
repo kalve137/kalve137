@@ -71,6 +71,10 @@ public:
     void setGridLabels(bool labels);
     void setGridSpacing(bool adaptive, double spacing);
     double gridStep() const;
+    bool isGridVisible() const { return m_gridVisible; }
+    bool isGridAdaptive() const { return m_gridAdaptive; }
+    double gridSpacing() const { return m_gridSpacing; }
+    const std::optional<GridExtent>& gridExtent() const { return m_gridExtent; }
     void lookAt(const gp_Ax3& plane);
     bool facesStandardView() const;
     void turnView(ViewTurn way);
@@ -127,6 +131,7 @@ public:
 
 signals:
     void ready();
+    void gridChanged();
     void selectionChanged();
     void hoverChanged();
     void capturedPress(QPointF pos, Qt::KeyboardModifiers modifiers);

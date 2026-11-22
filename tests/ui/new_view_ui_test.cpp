@@ -55,6 +55,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -143,8 +144,8 @@ render::Image cpuOf(const render::RhiView& canvas)
     render::ChunkSet chunks;
     chunks.update(canvas.scene(), canvas.viewportStyle());
     chunks.setHighlight(canvas.chunks().highlight());
-    const render::DrawList list = chunks.draw(render::makeFrame(
-        canvas.camera(), canvas.viewport(), canvas.scene().origin, canvas.viewportStyle().background));
+    render::DrawList list = chunks.draw(canvas.frame());
+    list.grid = canvas.grid().draw(canvas.camera(), canvas.viewport());
     render::CpuBackend backend;
     render::Image cpu;
     backend.draw(list, 2, cpu);
@@ -178,6 +179,23 @@ QImage grabbed(render::RhiView& canvas)
     return canvas.grabFramebuffer().convertToFormat(QImage::Format_ARGB32);
 }
 
+class GridHidden {
+public:
+    explicit GridHidden(render::RhiView& canvas) : m_canvas(canvas), m_original(canvas.grid().settings())
+    {
+        render::GridSettings hidden = m_original;
+        hidden.visible = false;
+        m_canvas.setGrid(hidden);
+    }
+    GridHidden(const GridHidden&) = delete;
+    GridHidden& operator=(const GridHidden&) = delete;
+    ~GridHidden() { m_canvas.setGrid(m_original); }
+
+private:
+    render::RhiView& m_canvas;
+    render::GridSettings m_original;
+};
+
 void expectShown(render::RhiView& canvas, const QImage& before, const std::string& step)
 {
     const QImage gpu = grabbed(canvas);
@@ -200,6 +218,7 @@ TEST_F(NewViewTest, ClearsToTheViewportColor)
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
+    const GridHidden gridOff(*canvas);
     const QImage image = canvas->grabFramebuffer();
     ASSERT_FALSE(image.isNull());
     const QColor expected = app::theme::palette().viewport.canvas;
@@ -455,6 +474,7 @@ TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
+    const GridHidden gridOff(*canvas);
     const snapshot::Point origin{1000.0, -1000.0, 0.0};
     const auto box = render::test::shared(
         render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
@@ -500,12 +520,127 @@ TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
     canvas->setViewportStyle(original);
 }
 
+std::shared_ptr<const snapshot::Body> plateAt(const snapshot::Point& center, double size)
+{
+    snapshot::Mesh mesh = *render::test::grid(center, size, 6);
+    const double half = size / 2.0;
+    std::vector<snapshot::Point> rim;
+    for (const auto& [u, v] : {std::pair{-1.0, -1.0}, std::pair{1.0, -1.0}, std::pair{1.0, 1.0}, std::pair{-1.0, 1.0},
+                               std::pair{-1.0, -1.0}}) {
+        rim.push_back({center[0] + (u * half), center[1] + (v * half), center[2]});
+    }
+    mesh.edges.push_back({.id = mesh.edgeCount++, .points = rim});
+    return render::test::shared(render::test::bodyOf(std::make_shared<const snapshot::Mesh>(std::move(mesh))));
+}
+
+std::size_t insideChanges(const QImage& plain, const QImage& gridded)
+{
+    constexpr int kRim = 3;
+    const QRgb background = plain.pixel(0, 0);
+    const auto nearBackground = [&](int x, int y) {
+        for (int ny = std::max(0, y - kRim); ny <= std::min(plain.height() - 1, y + kRim); ++ny) {
+            for (int nx = std::max(0, x - kRim); nx <= std::min(plain.width() - 1, x + kRim); ++nx) {
+                if (plain.pixel(nx, ny) == background) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    std::size_t count = 0;
+    for (int y = 0; y < plain.height(); ++y) {
+        for (int x = 0; x < plain.width(); ++x) {
+            if (!sameColor(plain.pixelColor(x, y), gridded.pixelColor(x, y)) && !nearBackground(x, y)) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+void expectGridLikeTheCpuBackend(render::RhiView& canvas, const render::GridSettings& shown, const std::string& api,
+                                 UiDriver& ui)
+{
+    const auto lookFrom = [](double x, double y, double z, double scale) {
+        camera::Camera camera;
+        EXPECT_TRUE(camera.setEyeAndCenter({1000.0 + x, -1000.0 + y, z}, {1000.0, -1000.0, 0.0}));
+        EXPECT_TRUE(camera.setUp({0.0, 0.0, 1.0}));
+        EXPECT_TRUE(camera.setScale(scale));
+        return camera;
+    };
+    const std::vector<std::pair<std::string, camera::Camera>> views{
+        {"above", lookFrom(300.0, -200.0, 250.0, 90.0)},
+        {"below", lookFrom(300.0, -200.0, -250.0, 90.0)},
+        {"low orbit", lookFrom(300.0, -400.0, 20.0, 90.0)},
+    };
+    for (const camera::Projection projection : {camera::Projection::Orthographic, camera::Projection::Perspective}) {
+        for (const auto& [name, view] : views) {
+            camera::Camera camera = view;
+            camera.setProjectionType(projection);
+            EXPECT_TRUE(camera.setScale(view.scale()));
+            canvas.setCamera(camera);
+            const std::string where = std::format("{} {} {}", api, name, static_cast<int>(projection));
+            render::GridSettings hidden = shown;
+            hidden.visible = false;
+            canvas.setGrid(hidden);
+            const QImage plain = grabbed(canvas);
+            canvas.setGrid(shown);
+            const QImage gpu = grabbed(canvas);
+            const render::Image cpu = cpuOf(canvas);
+            const Comparison comparison = compare(gpu, cpu);
+            ASSERT_TRUE(comparison.sameSize) << where;
+            const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+            EXPECT_GT(differing(plain, gpu), pixels / 50) << where << ": the grid shows";
+            EXPECT_LT(comparison.different, pixels / 100)
+                << where << ": " << comparison.different << " pixels differ by more than " << kBackendTolerance;
+            if (name != "below") {
+                EXPECT_EQ(insideChanges(plain, gpu), 0U) << where << ": the grid never shows inside a body";
+            }
+            ui.save("grid " + where);
+        }
+    }
+}
+
+TEST_F(NewViewTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({1015.0, -1010.0, 0.0}, {1035.0, -990.0, 20.0}), {}, 1));
+    const auto plate = plateAt({990.0, -1000.0, 0.0}, 30.0);
+    const snapshot::Scene scene{.bodies = {plate, box}, .origin = origin, .hidden = {}};
+    canvas->setScene(scene);
+    const render::GridSettings original = canvas->grid().settings();
+    render::GridSettings shown = original;
+    shown.visible = true;
+    shown.extent.reset();
+    expectGridLikeTheCpuBackend(*canvas, shown, "main", *ui);
+    canvas->setGrid(original);
+
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
+        }
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        view.setScene(scene);
+        expectGridLikeTheCpuBackend(view, shown, std::string(render::graphicsApiName(api)), *ui);
+    }
+}
+
 TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
 {
     render::RhiView* canvas = ui->newView();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
+    const GridHidden gridOff(*canvas);
     const snapshot::Point center{500.0, 200.0, 50.0};
     const auto box = render::test::shared(
         render::test::bodyOf(render::test::box({center[0] - 10.0, center[1] - 10.0, center[2] - 10.0},
