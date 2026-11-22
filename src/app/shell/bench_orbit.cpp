@@ -9,8 +9,13 @@
 #include "camera/camera.h"
 #include "camera/math.h"
 #include "camera/navigation.h"
+#include "core/document.h"
+#include "core/feature.h"
 #include "core/recompute.h"
+#include "core/snapshot_cache.h"
 #include "geometry/body_mesh.h"
+#include "geometry/face_colors.h"
+#include "geometry/modeling.h"
 
 #include "log/log.h"
 #include "platform/platform.h"
@@ -33,9 +38,14 @@
 #include <QToolBar>
 
 #include <BRepBuilderAPI_Copy.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
+#include <gp_Pnt.hxx>
+#include <gp_Vec.hxx>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -43,7 +53,9 @@
 #include <functional>
 #include <numbers>
 #include <optional>
+#include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace kalve137::app {
@@ -59,6 +71,11 @@ constexpr int kOrbitTimeoutMs = 120000;
 constexpr double kPercentile = 0.95;
 constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
 constexpr double kFirstPressStep = 20.0;
+constexpr int kChangeWarmup = 2;
+constexpr int kChangeRepeats = 20;
+constexpr double kBenchMoveStep = 10.0;
+constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
+                                  geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 
 std::optional<QSize> sizeNamed(const QString& text)
 {
@@ -251,22 +268,23 @@ Orbit orbit(MainWindow& window)
     return result;
 }
 
-} // namespace
-
-int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
-                  const QString& size)
+std::optional<QSize> checkedRequest(const std::filesystem::path& design, const QString& size)
 {
     const std::optional<QSize> requested = sizeNamed(size);
     if (!requested) {
         K137_ERROR(App, "The bench size must look like 2560x1440, got {}", size.toStdString());
-        return 2;
+        return std::nullopt;
     }
     std::error_code missing;
     if (!std::filesystem::is_regular_file(design, missing)) {
         K137_ERROR(App, "The bench design {} does not exist", design.string());
-        return 2;
+        return std::nullopt;
     }
-    MainWindow window(options);
+    return requested;
+}
+
+bool showForBench(MainWindow& window, bool newView, QSize requested)
+{
     for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
         dock->hide();
     }
@@ -276,25 +294,215 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     window.statusBar()->hide();
     window.setAttribute(Qt::WA_DontShowOnScreen);
     window.show();
-    const bool newView = options.view == ViewKind::New;
     if (newView && window.newView() == nullptr) {
         K137_ERROR(App, "The bench view did not start");
-        return 1;
+        return false;
     }
     const bool ready = waitFor([&] {
         return newView ? window.newView()->isReady() || window.newView()->hasFailed() : window.oldView()->isReady();
     });
     if (!ready || (newView && window.newView()->hasFailed())) {
         K137_ERROR(App, "The bench view did not start");
+        return false;
+    }
+    QWidget* canvas = window.centralWidget();
+    const double ratio = window.devicePixelRatioF();
+    const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
+                        static_cast<int>(std::lround(requested.height() / ratio)));
+    window.resize(logical + window.size() - canvas->size());
+    QApplication::processEvents();
+    return true;
+}
+
+QJsonObject benchHeader(MainWindow& window, bool newView, const std::filesystem::path& design, const QString& size)
+{
+    const QSize actual = window.centralWidget()->size() * window.devicePixelRatioF();
+    return {
+        {"view", newView ? "new" : "old"},
+        {"backend", newView ? window.newView()->backendName() : QStringLiteral("OpenGL")},
+        {"device", newView ? window.newView()->deviceName() : window.oldView()->deviceName()},
+        {"samples", newView ? window.newView()->sampleCount() : window.oldView()->sampleCount()},
+        {"qt", QString::fromLatin1(qVersion())},
+        {"design", QString::fromStdU16String(design.parent_path().filename().u16string())},
+        {"requested", size},
+        {"actual", QStringLiteral("%1x%2").arg(actual.width()).arg(actual.height())},
+    };
+}
+
+int writeResult(const QJsonObject& result, const std::filesystem::path& out)
+{
+    QFile file(QString::fromStdU16String(out.u16string()));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(QJsonDocument(result).toJson()) < 0) {
+        K137_ERROR(App, "Cannot write the bench result to {}", out.string());
+        return 1;
+    }
+    return 0;
+}
+
+std::size_t trianglesOf(core::SnapshotCache& snapshots, const core::Body& body)
+{
+    return snapshots.body(body)->mesh->triangles.size();
+}
+
+std::optional<QJsonObject> timeChange(DesignSession& session, render::RhiView& view,
+                                      const std::function<void(int)>& change, bool recomputes)
+{
+    std::vector<double> totals;
+    std::vector<double> recomputeMs;
+    std::vector<double> sceneMs;
+    std::vector<double> updateMs;
+    std::vector<double> eventsMs;
+    std::vector<double> frameMs;
+    std::vector<double> settledMs;
+    for (int i = 0; i < kChangeWarmup + kChangeRepeats; ++i) {
+        QElapsedTimer timer;
+        timer.start();
+        change(i);
+        const double changed = elapsedMs(timer);
+        QApplication::processEvents();
+        const double events = elapsedMs(timer) - changed;
+        const std::optional<double> frame = view.benchFrame();
+        const double total = elapsedMs(timer);
+        const std::optional<double> settled = view.benchFrame();
+        if (!frame || !settled) {
+            return std::nullopt;
+        }
+        if (i < kChangeWarmup) {
+            continue;
+        }
+        const double recompute = recomputes ? session.lastRecomputeMs() : 0.0;
+        totals.push_back(total);
+        recomputeMs.push_back(recompute);
+        sceneMs.push_back(changed - recompute - view.lastUpdateMs());
+        updateMs.push_back(view.lastUpdateMs());
+        eventsMs.push_back(events);
+        frameMs.push_back(*frame);
+        settledMs.push_back(*settled);
+    }
+    return QJsonObject{
+        {"median_ms", percentile(totals, 0.5)},         {"p95_ms", percentile(totals, kPercentile)},
+        {"recompute_ms", percentile(recomputeMs, 0.5)}, {"scene_ms", percentile(sceneMs, 0.5)},
+        {"view_update_ms", percentile(updateMs, 0.5)},  {"events_ms", percentile(eventsMs, 0.5)},
+        {"frame_ms", percentile(frameMs, 0.5)},         {"settled_frame_ms", percentile(settledMs, 0.5)},
+    };
+}
+
+} // namespace
+
+int runBenchChange(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                   const QString& size)
+{
+    const std::optional<QSize> requested = checkedRequest(design, size);
+    if (!requested) {
+        return 2;
+    }
+    if (options.view != ViewKind::New) {
+        K137_ERROR(App, "The change bench runs on the new view only");
+        return 2;
+    }
+    MainWindow window(options);
+    if (!showForBench(window, true, *requested)) {
+        return 1;
+    }
+    window.openDesignAt(design);
+    QApplication::processEvents();
+    auto* session = window.findChild<DesignSession*>();
+    render::RhiView& view = *window.newView();
+    if (session->model().bodies.empty()) {
+        K137_ERROR(App, "The bench design {} has no bodies", design.string());
         return 1;
     }
 
-    QWidget* canvas = window.centralWidget();
-    const double ratio = window.devicePixelRatioF();
-    const QSize logical(static_cast<int>(std::lround(requested->width() / ratio)),
-                        static_cast<int>(std::lround(requested->height() / ratio)));
-    window.resize(logical + window.size() - canvas->size());
-    QApplication::processEvents();
+    std::size_t triangles = 0;
+    const core::Body* largest = nullptr;
+    for (const core::Body& body : session->model().bodies) {
+        const std::size_t count = trianglesOf(session->snapshots(), body);
+        triangles += count;
+        if (largest == nullptr || count > trianglesOf(session->snapshots(), *largest)) {
+            largest = &body;
+        }
+    }
+    const core::BodyKey key = largest->key();
+    const std::size_t largestTriangles = trianglesOf(session->snapshots(), *largest);
+    const std::uint32_t largestFaces = session->snapshots().body(*largest)->mesh->faceCount;
+    const TopExp_Explorer firstFace(largest->shape, TopAbs_FACE);
+    const gp_Pnt facePoint = geometry::facePoint(TopoDS::Face(firstFace.Current()));
+
+    const auto added = [session](const QString& label, core::FeatureData data) {
+        core::FeatureId id = 0;
+        session->edit(label, [&](core::Document& document) { id = document.add(std::move(data)); });
+        return id;
+    };
+    const auto recolor = [&](const QString& label, core::AppearanceFeature appearance) {
+        const core::FeatureId id = added(label, std::move(appearance));
+        return std::function<void(int)>([session, label, id](int i) {
+            session->edit(label, [&](core::Document& document) {
+                std::get<core::AppearanceFeature>(document.find(id)->data).color = kBenchColors.at((i + 1) % 2);
+            });
+        });
+    };
+    const auto move = [&]() {
+        core::MoveFeature data;
+        data.bodies = {key};
+        data.translation = gp_Vec(kBenchMoveStep, 0.0, 0.0);
+        const core::FeatureId id = added(QStringLiteral("Bench move"), data);
+        return std::function<void(int)>([session, id](int i) {
+            session->edit(QStringLiteral("Bench move"), [&](core::Document& document) {
+                const double distance = kBenchMoveStep * (1 + ((i + 1) % 2));
+                std::get<core::MoveFeature>(document.find(id)->data).translation = gp_Vec(distance, 0.0, 0.0);
+            });
+        });
+    };
+    const std::array<std::tuple<const char*, std::function<std::function<void(int)>()>, bool>, 4> plan{{
+        {"hide", [&] { return std::function<void(int)>([&](int i) { session->setBodyVisible(key, i % 2 == 1); }); },
+         false},
+        {"recolor_body",
+         [&] {
+             return recolor(QStringLiteral("Bench body color"),
+                            {.bodies = {key}, .faces = {}, .color = kBenchColors[0], .clear = false});
+         },
+         true},
+        {"move_largest", move, true},
+        {"recolor_face",
+         [&] {
+             return recolor(QStringLiteral("Bench face color"),
+                            {.bodies = {}, .faces = {facePoint}, .color = kBenchColors[0], .clear = false});
+         },
+         true},
+    }};
+
+    QJsonObject changes;
+    for (const auto& [name, prepare, recomputes] : plan) {
+        const std::optional<QJsonObject> timed = timeChange(*session, view, prepare(), recomputes);
+        if (!timed) {
+            K137_ERROR(App, "The change bench could not draw a frame after {}", name);
+            return 1;
+        }
+        changes.insert(QLatin1String(name), *timed);
+    }
+
+    QJsonObject result = benchHeader(window, true, design, size);
+    result.insert("repeats", kChangeRepeats);
+    result.insert("bodies", static_cast<int>(session->model().bodies.size()));
+    result.insert("triangles", static_cast<qint64>(triangles));
+    result.insert("largest_body_triangles", static_cast<qint64>(largestTriangles));
+    result.insert("largest_body_faces", static_cast<qint64>(largestFaces));
+    result.insert("changes", changes);
+    return writeResult(result, out);
+}
+
+int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                  const QString& size)
+{
+    const std::optional<QSize> requested = checkedRequest(design, size);
+    if (!requested) {
+        return 2;
+    }
+    MainWindow window(options);
+    const bool newView = options.view == ViewKind::New;
+    if (!showForBench(window, newView, *requested)) {
+        return 1;
+    }
 
     QElapsedTimer timer;
     timer.start();
@@ -313,16 +521,8 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
                    kOrbitFrames);
         return 1;
     }
-    const QSize actual = canvas->size() * ratio;
-    QJsonObject result{
-        {"view", newView ? "new" : "old"},
-        {"backend", newView ? window.newView()->backendName() : QStringLiteral("OpenGL")},
-        {"device", newView ? window.newView()->deviceName() : window.oldView()->deviceName()},
-        {"samples", newView ? window.newView()->sampleCount() : window.oldView()->sampleCount()},
-        {"qt", QString::fromLatin1(qVersion())},
-        {"design", QString::fromStdU16String(design.parent_path().filename().u16string())},
-        {"requested", size},
-        {"actual", QStringLiteral("%1x%2").arg(actual.width()).arg(actual.height())},
+    QJsonObject result = benchHeader(window, newView, design, size);
+    const QJsonObject timing{
         {"frames", kOrbitFrames},
         {"median_ms", percentile(frames, 0.5)},
         {"p95_ms", percentile(frames, kPercentile)},
@@ -338,6 +538,9 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         {"triangles", static_cast<qint64>(cold.triangles)},
         {"max_body_faces", static_cast<qint64>(cold.maxBodyFaces)},
     };
+    for (auto it = timing.begin(); it != timing.end(); ++it) {
+        result.insert(it.key(), it.value());
+    }
     if (const render::RhiView* view = window.newView()) {
         result.insert("chunks", static_cast<qint64>(view->chunks().chunkCount()));
         result.insert("draws", static_cast<qint64>(view->chunks().draw({}).chunks.size()));
@@ -349,12 +552,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     if (pressMs) {
         result.insert("first_press_ms", *pressMs);
     }
-    QFile file(QString::fromStdU16String(out.u16string()));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(QJsonDocument(result).toJson()) < 0) {
-        K137_ERROR(App, "Cannot write the bench result to {}", out.string());
-        return 1;
-    }
-    return 0;
+    return writeResult(result, out);
 }
 
 } // namespace kalve137::app

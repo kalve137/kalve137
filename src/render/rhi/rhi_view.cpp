@@ -230,14 +230,21 @@ void RhiView::setViewportStyle(const ViewportStyle& style)
         return;
     }
     m_style = style;
-    m_chunks.update(m_scene, m_style);
-    update();
+    updateChunks();
 }
 
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
+    updateChunks();
+}
+
+void RhiView::updateChunks()
+{
+    QElapsedTimer timer;
+    timer.start();
     m_chunks.update(m_scene, m_style);
+    m_updateMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
     update();
 }
 

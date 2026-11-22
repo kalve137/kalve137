@@ -66,6 +66,7 @@ public:
     const ChunkSet& chunks() const { return m_chunks; }
     const RhiBackend* backend() const { return m_bodies.get(); }
     std::optional<double> benchFrame();
+    double lastUpdateMs() const { return m_updateMs; }
 
 signals:
     void ready();
@@ -88,6 +89,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
+    void updateChunks();
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
     QRhiTexture* resolvedTexture() const;
     void fail();
@@ -102,6 +104,7 @@ private:
     QString m_backend;
     QString m_device;
     QLabel* m_message = nullptr;
+    double m_updateMs = 0.0;
     bool m_ready = false;
     bool m_failed = false;
 };
