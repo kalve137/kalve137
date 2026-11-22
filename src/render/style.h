@@ -14,6 +14,7 @@ struct ViewportStyle {
     snapshot::Color body{0.64F, 0.68F, 0.73F};
     VisualStyle visualStyle = VisualStyle::ShadedWithEdges;
     double pixelRatio = 1.0;
+    bool cullClosed = true;
 
     bool operator==(const ViewportStyle&) const = default;
 };

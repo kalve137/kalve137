@@ -29,6 +29,7 @@ struct Body {
 struct Scene {
     std::vector<std::shared_ptr<const Body>> bodies;
     Point origin{};
+    std::vector<std::shared_ptr<const Body>> hidden;
 };
 
 } // namespace kalve137::snapshot

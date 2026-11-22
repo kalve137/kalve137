@@ -45,11 +45,13 @@ inline std::shared_ptr<const snapshot::Mesh> torus(const snapshot::Point& center
         }
     }
     mesh.faceCount = 1;
+    mesh.closed = true;
     snapshot::setBounds(mesh);
     return std::make_shared<const snapshot::Mesh>(std::move(mesh));
 }
 
-inline std::shared_ptr<const snapshot::Mesh> box(const snapshot::Point& low, const snapshot::Point& high)
+inline std::shared_ptr<const snapshot::Mesh> box(const snapshot::Point& low, const snapshot::Point& high,
+                                                 bool closed = true)
 {
     snapshot::Mesh mesh;
     for (std::uint32_t face = 0; face < 6; ++face) {
@@ -69,11 +71,17 @@ inline std::shared_ptr<const snapshot::Mesh> box(const snapshot::Point& low, con
             mesh.vertices.push_back(point);
             mesh.normals.push_back(normal);
         }
-        mesh.triangles.push_back({base, base + 1, base + 2});
-        mesh.triangles.push_back({base, base + 2, base + 3});
+        if (upper) {
+            mesh.triangles.push_back({base, base + 1, base + 2});
+            mesh.triangles.push_back({base, base + 2, base + 3});
+        } else {
+            mesh.triangles.push_back({base, base + 2, base + 1});
+            mesh.triangles.push_back({base, base + 3, base + 2});
+        }
         mesh.faces.insert(mesh.faces.end(), {face, face});
     }
     mesh.faceCount = 6;
+    mesh.closed = closed;
     snapshot::setBounds(mesh);
     return std::make_shared<const snapshot::Mesh>(std::move(mesh));
 }
@@ -112,9 +120,15 @@ inline std::shared_ptr<const snapshot::Mesh> grid(const snapshot::Point& center,
     return std::make_shared<const snapshot::Mesh>(std::move(mesh));
 }
 
-inline snapshot::Body bodyOf(const std::shared_ptr<const snapshot::Mesh>& mesh, snapshot::Appearance appearance = {})
+inline snapshot::Body bodyOf(const std::shared_ptr<const snapshot::Mesh>& mesh, snapshot::Appearance appearance = {},
+                             int part = 0)
 {
-    return {.feature = 1, .part = 0, .mesh = mesh, .appearance = std::move(appearance)};
+    return {.feature = 1, .part = part, .mesh = mesh, .appearance = std::move(appearance)};
+}
+
+inline std::shared_ptr<const snapshot::Body> shared(snapshot::Body body)
+{
+    return std::make_shared<const snapshot::Body>(std::move(body));
 }
 
 } // namespace kalve137::render::test

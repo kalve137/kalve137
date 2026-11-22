@@ -99,6 +99,8 @@ snapshot::Scene SnapshotCache::scene(const Model& model, const Visible& visible)
         keys.insert(body.key());
         if (!visible || visible(body.key())) {
             scene.bodies.push_back(all.back());
+        } else {
+            scene.hidden.push_back(all.back());
         }
     }
     std::erase_if(m_entries, [&](const auto& entry) { return !keys.contains(entry.first); });

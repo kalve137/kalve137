@@ -4,14 +4,14 @@
 find_package(Threads REQUIRED)
 
 add_library(kalve137_render STATIC
+    chunk_set.cpp
+    chunk_set.h
     cpu_backend.cpp
     cpu_backend.h
     draw_list.cpp
     draw_list.h
     graphics_api.h
     positions.h
-    scene_cache.cpp
-    scene_cache.h
     style.h
     thread_pool.cpp
     thread_pool.h

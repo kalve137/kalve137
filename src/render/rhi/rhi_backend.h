@@ -20,7 +20,9 @@ class QRhiGraphicsPipeline;
 class QRhiRenderPassDescriptor;
 class QRhiResource;
 class QRhiResourceUpdateBatch;
+class QRhiSampler;
 class QRhiShaderResourceBindings;
+class QRhiTexture;
 
 namespace kalve137::render {
 
@@ -36,7 +38,9 @@ public:
     bool setTarget(QRhiRenderPassDescriptor* pass, int samples);
     bool prepare(const DrawList& list, QRhiResourceUpdateBatch* updates);
     void draw(QRhiCommandBuffer* buffer, QSize size) const;
-    std::size_t bufferCount() const { return m_buffers.size(); }
+    std::size_t chunkCount() const { return m_chunks.size(); }
+    std::uint64_t meshUploads() const { return m_meshUploads; }
+    std::uint64_t paletteUploads() const { return m_paletteUploads; }
 
 private:
     struct Release {
@@ -46,32 +50,38 @@ private:
     using Owned = std::unique_ptr<T, Release>;
 
     struct Gpu {
-        Owned<QRhiBuffer> buffer;
+        std::uint64_t meshRevision = 0;
+        std::uint64_t paletteRevision = 0;
+        Owned<QRhiBuffer> vertices;
+        Owned<QRhiBuffer> indices;
+        Owned<QRhiTexture> palette;
+        Owned<QRhiShaderResourceBindings> bindings;
+        std::uint32_t indexCount = 0;
         bool used = false;
     };
     struct Call {
-        QRhiBuffer* positions = nullptr;
-        QRhiBuffer* normals = nullptr;
-        QRhiBuffer* colors = nullptr;
-        QRhiBuffer* indices = nullptr;
-        std::uint32_t indexCount = 0;
-        bool lit = true;
+        const Gpu* gpu = nullptr;
+        bool cull = false;
     };
 
-    enum class Slot : std::uint8_t { Positions, Normals, Colors, Indices };
-
-    QRhiBuffer* upload(std::uint64_t id, Slot slot, const void* data, std::size_t bytes,
-                       QRhiResourceUpdateBatch* updates);
-    bool createUniforms();
+    bool createShared();
+    Owned<QRhiShaderResourceBindings> bindingsFor(QRhiTexture* palette) const;
+    Owned<QRhiGraphicsPipeline> pipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull) const;
+    bool refresh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
+    bool refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
+    bool refreshPalette(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
 
     QRhi* m_rhi;
-    Owned<QRhiBuffer> m_litUniforms;
-    Owned<QRhiBuffer> m_unlitUniforms;
-    Owned<QRhiShaderResourceBindings> m_litBindings;
-    Owned<QRhiShaderResourceBindings> m_unlitBindings;
-    Owned<QRhiGraphicsPipeline> m_pipeline;
-    std::unordered_map<std::uint64_t, Gpu> m_buffers;
+    Owned<QRhiBuffer> m_uniforms;
+    Owned<QRhiSampler> m_sampler;
+    Owned<QRhiTexture> m_layoutTexture;
+    Owned<QRhiShaderResourceBindings> m_layout;
+    Owned<QRhiGraphicsPipeline> m_culled;
+    Owned<QRhiGraphicsPipeline> m_unculled;
+    std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
+    std::uint64_t m_meshUploads = 0;
+    std::uint64_t m_paletteUploads = 0;
 };
 
 } // namespace kalve137::render

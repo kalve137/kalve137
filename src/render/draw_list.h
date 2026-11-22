@@ -41,26 +41,33 @@ struct Frame {
     double pixelRatio = 1.0;
 };
 
-enum class ItemKind { Faces, Edges, Points };
-
-template <typename T>
-struct Stream {
-    std::uint64_t id = 0;
-    std::span<const T> data;
+struct Vertex {
+    Position position{};
+    std::array<std::uint8_t, 4> packed{};
 };
+static_assert(sizeof(Vertex) == 16);
 
-struct Batch {
-    ItemKind kind = ItemKind::Faces;
-    bool lit = true;
-    Stream<Position> positions;
-    Stream<Normal> normals;
-    Stream<snapshot::Triangle> triangles;
-    Stream<VertexColor> colors;
+using Entry = std::array<std::uint8_t, 4>;
+inline constexpr std::uint8_t kEntryVisible = 1;
+inline constexpr std::uint32_t kPaletteWidth = 256;
+inline constexpr std::uint32_t kPaletteEntries = 1U << 16;
+
+struct Chunk {
+    std::uint64_t id = 0;
+    std::uint64_t meshRevision = 0;
+    std::uint64_t paletteRevision = 0;
+    bool closed = false;
+    std::span<const Vertex> vertices;
+    std::span<const std::uint32_t> indices;
+    std::span<const Entry> palette;
 };
 
 struct DrawList {
     Frame frame;
-    std::vector<Batch> batches;
+    bool lit = true;
+    bool cullClosed = true;
+    double pixelRatio = 1.0;
+    std::vector<Chunk> chunks;
 };
 
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,
@@ -71,5 +78,9 @@ float toLinear(float encoded);
 float toSrgb(float linear);
 Linear linearOf(const VertexColor& color);
 VertexColor vertexColor(const snapshot::Color& color);
+std::array<std::uint8_t, 2> encodeNormal(const Normal& normal);
+Normal decodeNormal(std::uint8_t x, std::uint8_t y);
+Vertex packVertex(const Position& position, const Normal& normal, std::uint32_t entry);
+std::uint32_t entryOf(const Vertex& vertex);
 
 } // namespace kalve137::render

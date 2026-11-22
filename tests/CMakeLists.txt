@@ -37,6 +37,7 @@ add_executable(kalve137_tests
     render/draw_list_test.cpp
     render/positions_test.cpp
     render/shaders_test.cpp
+    render/start_problem_test.cpp
     render/test_meshes.h
     sketch/build_test.cpp
     sketch/dimension_test.cpp

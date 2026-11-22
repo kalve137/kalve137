@@ -4,8 +4,8 @@
 #pragma once
 
 #include "camera/camera.h"
+#include "render/chunk_set.h"
 #include "render/graphics_api.h"
-#include "render/scene_cache.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
@@ -24,8 +24,21 @@ namespace kalve137::render {
 
 class RhiBackend;
 
+struct DeviceProbe {
+    bool created = false;
+    bool texelFetch = false;
+    bool openGl = false;
+    bool openGlEs = false;
+    int major = 0;
+    int minor = 0;
+};
+
+enum class StartProblem { None, NoDevice, TooOld };
+
+StartProblem startProblem(const DeviceProbe& probe);
+StartProblem checkStart(GraphicsApi api);
 bool canStart(GraphicsApi api);
-QLabel* makeFailureNotice(GraphicsApi api, QWidget* parent);
+QLabel* makeFailureNotice(GraphicsApi api, StartProblem problem, QWidget* parent);
 
 class RhiView : public QRhiWidget {
     Q_OBJECT
@@ -50,6 +63,8 @@ public:
     bool hasFailed() const { return m_failed; }
     QString backendName() const { return m_backend; }
     QString deviceName() const { return m_device; }
+    const ChunkSet& chunks() const { return m_chunks; }
+    const RhiBackend* backend() const { return m_bodies.get(); }
     std::optional<double> benchFrame();
 
 signals:
@@ -82,7 +97,7 @@ private:
     ViewportStyle m_style;
     snapshot::Scene m_scene;
     camera::Camera m_camera;
-    SceneCache m_cache;
+    ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
     QString m_backend;
     QString m_device;

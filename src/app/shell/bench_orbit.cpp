@@ -15,6 +15,7 @@
 #include "log/log.h"
 #include "platform/platform.h"
 #include "render/rhi/rhi_view.h"
+#include "snapshot/mesh.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QApplication>
@@ -37,6 +38,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <numbers>
@@ -93,6 +95,7 @@ double percentile(std::vector<double> values, double share)
 struct ColdBuild {
     double ms = 0.0;
     std::size_t triangles = 0;
+    std::uint32_t maxBodyFaces = 0;
 };
 
 ColdBuild buildColdSnapshots(const core::Model& model)
@@ -106,7 +109,9 @@ ColdBuild buildColdSnapshots(const core::Model& model)
     QElapsedTimer timer;
     timer.start();
     for (const TopoDS_Shape& shape : shapes) {
-        build.triangles += geometry::meshBody(shape).triangles.size();
+        const snapshot::Mesh mesh = geometry::meshBody(shape);
+        build.triangles += mesh.triangles.size();
+        build.maxBodyFaces = std::max(build.maxBodyFaces, mesh.faceCount);
     }
     build.ms = elapsedMs(timer);
     return build;
@@ -331,7 +336,12 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         {"snapshot_cold_ms", cold.ms},
         {"bodies", static_cast<int>(session->model().bodies.size())},
         {"triangles", static_cast<qint64>(cold.triangles)},
+        {"max_body_faces", static_cast<qint64>(cold.maxBodyFaces)},
     };
+    if (const render::RhiView* view = window.newView()) {
+        result.insert("chunks", static_cast<qint64>(view->chunks().chunkCount()));
+        result.insert("draws", static_cast<qint64>(view->chunks().draw({}).chunks.size()));
+    }
     if (!timed.cameraMs.empty()) {
         result.insert("camera_median_ms", percentile(timed.cameraMs, 0.5));
         result.insert("camera_p95_ms", percentile(timed.cameraMs, kPercentile));

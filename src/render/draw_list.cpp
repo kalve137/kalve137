@@ -121,4 +121,44 @@ VertexColor vertexColor(const snapshot::Color& color)
     return {toByte(color.red), toByte(color.green), toByte(color.blue), toByte(color.alpha)};
 }
 
+std::array<std::uint8_t, 2> encodeNormal(const Normal& normal)
+{
+    const float sum = std::abs(normal[0]) + std::abs(normal[1]) + std::abs(normal[2]);
+    if (sum <= 0.0F) {
+        return {toByte(0.5F), toByte(0.5F)};
+    }
+    float x = normal[0] / sum;
+    float y = normal[1] / sum;
+    if (normal[2] < 0.0F) {
+        const float foldedX = (1.0F - std::abs(y)) * (x >= 0.0F ? 1.0F : -1.0F);
+        const float foldedY = (1.0F - std::abs(x)) * (y >= 0.0F ? 1.0F : -1.0F);
+        x = foldedX;
+        y = foldedY;
+    }
+    return {toByte((x * 0.5F) + 0.5F), toByte((y * 0.5F) + 0.5F)};
+}
+
+Normal decodeNormal(std::uint8_t x, std::uint8_t y)
+{
+    Normal normal{(static_cast<float>(x) / kByte * 2.0F) - 1.0F, (static_cast<float>(y) / kByte * 2.0F) - 1.0F, 0.0F};
+    normal[2] = 1.0F - std::abs(normal[0]) - std::abs(normal[1]);
+    const float fold = std::max(-normal[2], 0.0F);
+    normal[0] += normal[0] >= 0.0F ? -fold : fold;
+    normal[1] += normal[1] >= 0.0F ? -fold : fold;
+    return normalized(normal);
+}
+
+Vertex packVertex(const Position& position, const Normal& normal, std::uint32_t entry)
+{
+    const std::array<std::uint8_t, 2> encoded = encodeNormal(normal);
+    return {.position = position,
+            .packed = {encoded[0], encoded[1], static_cast<std::uint8_t>(entry & 0xFFU),
+                       static_cast<std::uint8_t>((entry >> 8) & 0xFFU)}};
+}
+
+std::uint32_t entryOf(const Vertex& vertex)
+{
+    return static_cast<std::uint32_t>(vertex.packed[2]) | (static_cast<std::uint32_t>(vertex.packed[3]) << 8);
+}
+
 } // namespace kalve137::render

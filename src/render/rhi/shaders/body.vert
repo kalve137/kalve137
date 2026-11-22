@@ -4,8 +4,7 @@
 #version 440
 
 layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec4 color;
+layout(location = 1) in vec4 normalAndEntry;
 
 layout(location = 0) out vec3 linearColor;
 layout(location = 1) out vec3 surfaceNormal;
@@ -21,6 +20,8 @@ layout(std140, binding = 0) uniform Frame {
     vec4 options;
 };
 
+layout(binding = 1) uniform sampler2D palette;
+
 vec3 toLinear(vec3 encoded)
 {
     vec3 low = encoded / 12.92;
@@ -28,10 +29,26 @@ vec3 toLinear(vec3 encoded)
     return mix(low, high, step(vec3(0.04045), encoded));
 }
 
+vec3 decodeNormal(vec2 encoded)
+{
+    vec2 folded = encoded * 2.0 - 1.0;
+    vec3 normal = vec3(folded, 1.0 - abs(folded.x) - abs(folded.y));
+    float fold = max(-normal.z, 0.0);
+    normal.x += normal.x >= 0.0 ? -fold : fold;
+    normal.y += normal.y >= 0.0 ? -fold : fold;
+    return normalize(normal);
+}
+
 void main()
 {
-    linearColor = toLinear(color.rgb);
-    surfaceNormal = normal;
+    int entry = int(round(normalAndEntry.z * 255.0)) + int(round(normalAndEntry.w * 255.0)) * 256;
+    vec4 value = texelFetch(palette, ivec2(entry % 256, entry / 256), 0);
+    linearColor = toLinear(value.rgb);
+    surfaceNormal = decodeNormal(normalAndEntry.xy);
     surfacePosition = position;
+    if ((int(round(value.a * 255.0)) & 1) == 0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
     gl_Position = viewProjection * vec4(position, 1.0);
 }
