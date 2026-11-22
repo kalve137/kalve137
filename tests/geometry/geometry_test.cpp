@@ -11,9 +11,21 @@
 #include <gtest/gtest.h>
 
 #include <BRepTools_History.hxx>
+#include <BRep_Builder.hxx>
+#include <DESTEP_Parameters.hxx>
+#include <IFSelect_ReturnStatus.hxx>
+#include <STEPCAFControl_Writer.hxx>
+#include <TCollection_ExtendedString.hxx>
+#include <TDF_Label.hxx>
+#include <TDataStd_Name.hxx>
+#include <TDocStd_Document.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
+#include <XCAFApp_Application.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
 
 #include <algorithm>
 #include <filesystem>
@@ -23,6 +35,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -280,6 +293,80 @@ TEST(Exchange, StepKeepsAssemblyPaths)
     EXPECT_NEAR(areaCentroid(find("Pin")->shape).X(), 50.0, 1e-6);
     ASSERT_NE(find("Loose"), parts.end());
     EXPECT_TRUE(find("Loose")->path.empty());
+    std::filesystem::remove_all(folder);
+}
+
+void writeOneProduct(const std::filesystem::path& file, const std::string& product,
+                     const std::vector<std::pair<std::string, TopoDS_Shape>>& bodies)
+{
+    const Handle(TDocStd_Document) document = new TDocStd_Document("MDTV-XCAF");
+    XCAFApp_Application::GetApplication()->InitDocument(document);
+    const Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(document->Main());
+    BRep_Builder builder;
+    TopoDS_Compound all;
+    builder.MakeCompound(all);
+    for (const auto& [name, body] : bodies) {
+        builder.Add(all, body);
+    }
+    const TDF_Label label = shapes->AddShape(all, false);
+    TDataStd_Name::Set(label, TCollection_ExtendedString(product.c_str(), true));
+    for (const auto& [name, body] : bodies) {
+        if (!name.empty()) {
+            TDataStd_Name::Set(shapes->AddSubShape(label, body), TCollection_ExtendedString(name.c_str(), true));
+        }
+    }
+    DESTEP_Parameters parameters;
+    parameters.InitFromStatic();
+    parameters.WriteSubshapeNames = true;
+    STEPCAFControl_Writer writer;
+    writer.SetNameMode(true);
+    ASSERT_TRUE(writer.Transfer(document, parameters, STEPControl_AsIs));
+    ASSERT_EQ(writer.Write(file.string().c_str()), IFSelect_RetDone);
+}
+
+TEST(Exchange, StepProductWithSeveralBodiesBecomesAFolderOfNamedBodies)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-product";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "supply.step", "Supply",
+                    {{"Body1", makeBox(10.0, 10.0, 10.0)}, {"Body2", makeCylinder(gp_Pnt(50.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "supply.step");
+    ASSERT_EQ(parts.size(), 2u);
+    const auto find = [&](const std::string& name) { return std::ranges::find(parts, name, &StepPart::name); };
+    ASSERT_NE(find("Body1"), parts.end());
+    ASSERT_NE(find("Body2"), parts.end());
+    EXPECT_EQ(find("Body1")->path, std::vector<std::string>{"Supply"});
+    EXPECT_EQ(find("Body2")->path, std::vector<std::string>{"Supply"});
+    EXPECT_NEAR(areaCentroid(find("Body2")->shape).X(), 50.0, 1e-6);
+    std::filesystem::remove_all(folder);
+}
+
+TEST(Exchange, StepBodiesWithoutNamesAreNumberedAfterTheirProduct)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-unnamed";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "front.step", "Front",
+                    {{"", makeBox(10.0, 10.0, 10.0)}, {"", makeCylinder(gp_Pnt(50.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "front.step");
+    ASSERT_EQ(parts.size(), 2u);
+    EXPECT_EQ(parts[0].name, "Front 1");
+    EXPECT_EQ(parts[1].name, "Front 2");
+    EXPECT_EQ(parts[0].path, std::vector<std::string>{"Front"});
+    std::filesystem::remove_all(folder);
+}
+
+TEST(Exchange, StepProductWithOneBodyKeepsItsName)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-single";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "pin.step", "Pin", {{"Body1", makeCylinder(gp_Pnt(0.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "pin.step");
+    ASSERT_EQ(parts.size(), 1u);
+    EXPECT_EQ(parts[0].name, "Pin");
+    EXPECT_TRUE(parts[0].path.empty());
     std::filesystem::remove_all(folder);
 }
 
