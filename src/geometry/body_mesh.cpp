@@ -140,6 +140,7 @@ snapshot::Mesh meshBody(const TopoDS_Shape& shape)
     addFaces(faces, mesh, baseOf);
     addEdges(shape, faces, baseOf, mesh);
     addPoints(shape, mesh);
+    snapshot::setBounds(mesh);
     return mesh;
 }
 

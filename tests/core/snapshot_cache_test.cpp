@@ -9,6 +9,9 @@
 
 #include <gtest/gtest.h>
 
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopoDS.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
@@ -52,8 +55,48 @@ TEST(SnapshotCache, BuildsOneBodyPerModelBody)
     const snapshot::Scene scene = cache.scene(recompute(importPair().document));
     ASSERT_EQ(scene.bodies.size(), 2U);
     EXPECT_EQ(cache.size(), 2U);
-    EXPECT_EQ(scene.bodies[0]->mesh.faceCount, 6U);
-    EXPECT_EQ(scene.bodies[1]->mesh.faceCount, 3U);
+    EXPECT_EQ(scene.bodies[0]->mesh->faceCount, 6U);
+    EXPECT_EQ(scene.bodies[1]->mesh->faceCount, 3U);
+    EXPECT_EQ(scene.bodies[0]->mesh->low, (snapshot::Point{0.0, 0.0, 0.0}));
+    EXPECT_EQ(scene.bodies[0]->mesh->high, (snapshot::Point{10.0, 10.0, 10.0}));
+}
+
+TEST(SnapshotCache, AColorEditKeepsTheMesh)
+{
+    Model model = recompute(importPair().document);
+    SnapshotCache cache;
+    const snapshot::Scene before = cache.scene(model);
+    model.bodies[0].color = geometry::Color{1.0, 0.0, 0.0};
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(model.bodies[0].shape, TopAbs_FACE, faces);
+    model.bodies[0].faceColors.set(TopoDS::Face(faces(3)), geometry::Color{0.0, 0.0, 1.0});
+    const snapshot::Scene after = cache.scene(model);
+    ASSERT_EQ(after.bodies.size(), 2U);
+    EXPECT_NE(after.bodies[0], before.bodies[0]);
+    EXPECT_EQ(after.bodies[0]->mesh, before.bodies[0]->mesh);
+    EXPECT_EQ(after.bodies[1], before.bodies[1]);
+    const snapshot::Appearance& appearance = after.bodies[0]->appearance;
+    EXPECT_EQ(appearance.color, (snapshot::Color{1.0F, 0.0F, 0.0F}));
+    ASSERT_EQ(appearance.faces.size(), 6U);
+    EXPECT_EQ(appearance.faces[2], (snapshot::Color{0.0F, 0.0F, 1.0F}));
+    EXPECT_FALSE(appearance.faces[0].has_value());
+    EXPECT_EQ(cache.scene(model).bodies[0], after.bodies[0]);
+}
+
+TEST(SnapshotCache, HiddenBodiesLeaveTheSceneButKeepTheOrigin)
+{
+    Pair pair;
+    pair.box = pair.document.add(ImportFeature{"box.step", {{"Box", geometry::makeBox(10.0, 10.0, 10.0)}}});
+    pair.pin = pair.document.add(
+        ImportFeature{"far.step", {{"Far", geometry::makeCylinder(gp_Pnt(5'000.0, 0.0, 0.0), 2.0, 10.0)}}});
+    const Model model = recompute(pair.document);
+    SnapshotCache cache;
+    const snapshot::Scene all = cache.scene(model);
+    const snapshot::Scene shown = cache.scene(model, [&](BodyKey key) { return key.feature != pair.pin; });
+    ASSERT_EQ(shown.bodies.size(), 1U);
+    EXPECT_EQ(shown.bodies[0], all.bodies[0]);
+    EXPECT_EQ(shown.origin, all.origin);
+    EXPECT_EQ(cache.size(), 2U);
 }
 
 TEST(SnapshotCache, AnEditToOneBodyLeavesTheOthersUntouched)
@@ -80,7 +123,7 @@ TEST(SnapshotCache, AnUndoneEditGivesTheEarlierSnapshot)
     const snapshot::Scene undone = cache.scene(recompute(earlier));
     ASSERT_EQ(undone.bodies.size(), before.bodies.size());
     for (std::size_t i = 0; i < undone.bodies.size(); ++i) {
-        EXPECT_TRUE(sameMesh(undone.bodies[i]->mesh, before.bodies[i]->mesh));
+        EXPECT_TRUE(sameMesh(*undone.bodies[i]->mesh, *before.bodies[i]->mesh));
     }
 }
 

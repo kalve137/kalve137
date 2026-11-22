@@ -65,8 +65,8 @@ TEST_F(DesignSessionTest, UndoGivesThePreEditSnapshot)
     const snapshot::Scene undone = snapshots();
     ASSERT_EQ(undone.bodies.size(), before.bodies.size());
     for (std::size_t i = 0; i < undone.bodies.size(); ++i) {
-        EXPECT_EQ(undone.bodies[i]->mesh.vertices, before.bodies[i]->mesh.vertices);
-        EXPECT_EQ(undone.bodies[i]->mesh.triangles, before.bodies[i]->mesh.triangles);
+        EXPECT_EQ(undone.bodies[i]->mesh->vertices, before.bodies[i]->mesh->vertices);
+        EXPECT_EQ(undone.bodies[i]->mesh->triangles, before.bodies[i]->mesh->triangles);
     }
 }
 

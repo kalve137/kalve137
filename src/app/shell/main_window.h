@@ -11,6 +11,7 @@
 #include "core/feature.h"
 #include "core/project.h"
 #include "core/shape_store.h"
+#include "core/snapshot_cache.h"
 
 #include <QMainWindow>
 
@@ -159,6 +160,7 @@ private:
 
     std::optional<core::Project> m_project;
     core::ShapeStore m_shapes;
+    core::SnapshotCache m_contextSnapshots;
     bool m_pickingPlane = false;
     core::FeatureId m_timelineHighlight = 0;
 
