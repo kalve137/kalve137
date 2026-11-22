@@ -41,6 +41,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -75,6 +76,8 @@ constexpr int kPlaneSearchStep = 8;
 constexpr int kPlaneSearchDirections = 24;
 constexpr double kParallelTolerance = 1e-6;
 constexpr int kAccentTolerance = 24;
+constexpr int kReferenceOpenGlMajor = 3;
+constexpr int kReferenceOpenGlMinor = 2;
 constexpr std::string_view kDisplayProfileCategory = "qt.gui.icc";
 
 struct Problems {
@@ -401,6 +404,18 @@ bool paintsAccent(QWidget& button)
     return std::abs(fill.red() - accent.red()) + std::abs(fill.green() - accent.green()) +
                std::abs(fill.blue() - accent.blue()) <
            kAccentTolerance;
+}
+
+bool drawsReferenceColors(const viewer::OcctViewWidget& oldView)
+{
+    static const QRegularExpression version(QStringLiteral("GLversion: (\\d+)\\.(\\d+)"));
+    const QRegularExpressionMatch found = version.match(oldView.glInfo());
+    if (!found.hasMatch()) {
+        return true;
+    }
+    const int major = found.captured(1).toInt();
+    const int minor = found.captured(2).toInt();
+    return major > kReferenceOpenGlMajor || (major == kReferenceOpenGlMajor && minor >= kReferenceOpenGlMinor);
 }
 
 UiDriver::UiDriver() : UiDriver(app::startupFromEnvironment()) {}

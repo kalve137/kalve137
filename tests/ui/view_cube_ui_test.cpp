@@ -141,6 +141,9 @@ int holesIn(const QImage& image, QRgb fill)
 
 void expectReadableCube(UiDriver& ui, const app::theme::Palette& palette, const std::string& theme)
 {
+    if (!drawsReferenceColors(ui.view())) {
+        GTEST_SKIP() << "The old view's cube colors need OpenGL 3.2";
+    }
     ui.trigger("Open Sample");
     ui.move(ui.centerOf(&ui.view()));
     const CubeShot rest = shootCube(ui, theme);
