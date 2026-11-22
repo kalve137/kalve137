@@ -9,16 +9,9 @@
 #include <gp_Vec.hxx>
 
 #include <cmath>
+#include <optional>
 
 namespace kalve137::viewer {
-
-namespace {
-
-constexpr double kMinGridCellPixels = 12.0;
-constexpr double kGridRadiusFactor = 2.5;
-constexpr double kGridDepthPixels = 1.0;
-
-} // namespace
 
 void OcctViewWidget::setGridStyle(const GridStyle& style)
 {
@@ -100,18 +93,25 @@ void OcctViewWidget::updateGrid(bool force)
     const gp_Dir normal = m_grid->plane().Direction();
     const double away = normal.Dot(m_view->Camera()->Direction()) < 0.0 ? -1.0 : 1.0;
     gp_Trsf behind;
-    behind.SetTranslation(gp_Vec(normal) * (away * kGridDepthPixels * worldPerLogicalPixel));
+    behind.SetTranslation(gp_Vec(normal) * (away * render::kGridDepthPixels * worldPerLogicalPixel));
     if (!behind.TranslationPart().IsEqual(m_grid->LocalTransformation().TranslationPart(), 0.0)) {
         m_context->SetLocation(m_grid, behind);
     }
-    const double step = viewer::gridStep(m_gridAdaptive, m_gridSpacing, worldPerLogicalPixel * kMinGridCellPixels);
-    const double viewRadius = 0.5 * std::hypot(width(), height()) * worldPerLogicalPixel * kGridRadiusFactor;
-    const GridLayout wanted = layoutGrid(m_grid->plane(), step, m_view->Camera()->Center(), viewRadius, m_gridExtent);
-    if (!force && !isGridStale(m_grid->layout(), wanted)) {
+    const double step =
+        render::gridStep(m_gridAdaptive, m_gridSpacing, worldPerLogicalPixel * render::kGridMinCellPixels);
+    const double viewRadius = 0.5 * std::hypot(width(), height()) * worldPerLogicalPixel * render::kGridRadiusFactor;
+    const gp_Pnt center = m_view->Camera()->Center();
+    std::optional<render::GridExtent> extent;
+    if (m_gridExtent) {
+        extent = gridExtentOf(*m_gridExtent);
+    }
+    const render::GridLayout wanted = render::layoutGrid(gridPlaneOf(m_grid->plane()), step,
+                                                         {center.X(), center.Y(), center.Z()}, viewRadius, extent);
+    if (!force && !render::isGridStale(m_grid->layout(), wanted)) {
         return;
     }
-    m_grid->setLayout(wanted.step, wanted.center, wanted.radius);
-    m_gridWash->setLayout(wanted.step, wanted.center, wanted.radius);
+    m_grid->setLayout(wanted);
+    m_gridWash->setLayout(wanted);
     m_context->Redisplay(m_grid, false);
     m_context->Redisplay(m_gridWash, false);
     m_view->Invalidate();
