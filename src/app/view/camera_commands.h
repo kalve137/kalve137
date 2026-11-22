@@ -57,7 +57,6 @@ public:
     const camera::Camera& camera() const { return m_camera; }
     std::optional<camera::Viewport> viewport() const;
     void syncViewport();
-    void sceneChanged();
     void navigate(const std::function<bool(camera::Camera&, const camera::Viewport&)>& step);
 
 signals:
@@ -68,7 +67,7 @@ private:
     void fitTo(camera::Camera& camera);
     void fitOldView();
     void show(camera::Camera camera);
-    const std::optional<camera::Box>& sceneBounds();
+    const std::optional<camera::Box>& sceneBounds() const;
     bool isReady() const;
 
     viewer::OcctViewWidget* m_view;
@@ -81,7 +80,6 @@ private:
     camera::Camera m_camera;
     camera::Transition m_transition;
     std::optional<camera::Camera> m_savedView;
-    std::optional<std::optional<camera::Box>> m_sceneBounds;
 };
 
 } // namespace kalve137::app

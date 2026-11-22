@@ -94,6 +94,25 @@ TEST(DrawList, PacksNormalsAndEntriesIntoSixteenBytes)
     EXPECT_GT(worst, std::cos(1.5 * std::numbers::pi / 180.0)) << "a packed normal turns by less than 1.5 degrees";
 }
 
+TEST(DrawList, SceneBoundsHoldTheDrawnBodiesOnly)
+{
+    EXPECT_FALSE(sceneBounds(snapshot::Scene{}).has_value());
+    const auto first = test::shared(test::bodyOf(test::box({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));
+    const auto second = test::shared(test::bodyOf(test::box({20.0, -5.0, 3.0}, {25.0, 5.0, 40.0}), {}, 1));
+    const auto hidden = test::shared(test::bodyOf(test::box({-500.0, 0.0, 0.0}, {-400.0, 1.0, 1.0}), {}, 2));
+    const snapshot::Scene scene{.bodies = {first, second}, .origin = {}, .hidden = {hidden}};
+    EXPECT_EQ(bodyBounds(scene).size(), 2U);
+    const std::optional<camera::Box> bounds = sceneBounds(scene);
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_EQ(bounds->min.x, 0.0);
+    EXPECT_EQ(bounds->min.y, -5.0);
+    EXPECT_EQ(bounds->min.z, 0.0);
+    EXPECT_EQ(bounds->max.x, 25.0);
+    EXPECT_EQ(bounds->max.y, 10.0);
+    EXPECT_EQ(bounds->max.z, 40.0);
+    EXPECT_FALSE(sceneBounds(snapshot::Scene{.bodies = {}, .origin = {}, .hidden = {hidden}}).has_value());
+}
+
 TEST(ChunkSet, ShadedPaintsTheThemeColorThenTheBodyColorThenFaceColors)
 {
     snapshot::Appearance faces{.color = kRed, .faces = {}};

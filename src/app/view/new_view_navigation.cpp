@@ -5,10 +5,10 @@
 
 #include "app/view/camera_commands.h"
 #include "camera/gravity.h"
+#include "render/draw_list.h"
 #include "render/rhi/rhi_view.h"
 
 #include <memory>
-#include <vector>
 
 namespace kalve137::app {
 
@@ -51,14 +51,7 @@ std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& 
 
 camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera& camera, const camera::Viewport&) const
 {
-    std::vector<camera::Box> boxes;
-    for (const auto& body : m_view->scene().bodies) {
-        const snapshot::Mesh& mesh = *body->mesh;
-        if (!mesh.vertices.empty()) {
-            boxes.push_back({{mesh.low[0], mesh.low[1], mesh.low[2]}, {mesh.high[0], mesh.high[1], mesh.high[2]}});
-        }
-    }
-    return camera::gravityPoint(camera, boxes);
+    return camera::gravityPoint(camera, render::bodyBounds(m_view->scene()));
 }
 
 NewViewNavigation::NewViewNavigation(render::RhiView& view, CameraCommands& commands)

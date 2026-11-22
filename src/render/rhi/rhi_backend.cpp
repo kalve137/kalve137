@@ -494,6 +494,10 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     std::vector<IdCall> edges;
     std::vector<IdCall> points;
     const std::size_t places = std::min<std::size_t>(list.chunks.size(), kPickChunks);
+    if (places < list.chunks.size() && !std::exchange(m_toldPickLimit, true)) {
+        K137_WARN(Viewer, "The new view picks in its first {} chunks only and the scene has {}", kPickChunks,
+                  list.chunks.size());
+    }
     for (std::size_t place = 0; place < places; ++place) {
         const Chunk& chunk = list.chunks[place];
         m_idChunks.push_back(chunk.id);

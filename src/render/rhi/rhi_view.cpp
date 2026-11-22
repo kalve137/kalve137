@@ -263,6 +263,8 @@ void RhiView::setViewportStyle(const ViewportStyle& style)
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
+    m_bounds = render::sceneBounds(m_scene);
+    m_camera.fitDepth(m_bounds);
     updateChunks();
     emit sceneChanged();
 }
@@ -565,6 +567,7 @@ void RhiView::releaseResources()
 void RhiView::setCamera(const camera::Camera& camera)
 {
     m_camera = camera;
+    m_camera.fitDepth(m_bounds);
     m_idsFresh = false;
     update();
 }

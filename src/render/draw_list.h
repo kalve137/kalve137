@@ -6,10 +6,12 @@
 #include "camera/camera.h"
 #include "render/positions.h"
 #include "render/style.h"
+#include "snapshot/body.h"
 #include "snapshot/mesh.h"
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -94,6 +96,10 @@ struct DrawList {
 
 Segment packSegment(const Position& start, const Position& end, std::uint32_t entry);
 std::uint32_t entryOf(const Segment& segment);
+
+std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene);
+std::optional<camera::Box> sceneBounds(const snapshot::Scene& scene);
+camera::Camera fitToScene(camera::Camera camera, const snapshot::Scene& scene);
 
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,
                 const snapshot::Color& background, const Look& look = {});
