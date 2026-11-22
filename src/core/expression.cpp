@@ -4,9 +4,10 @@
 #include "core/expression.h"
 
 #include <cctype>
-#include <charconv>
 #include <cmath>
+#include <locale>
 #include <numbers>
+#include <sstream>
 #include <string>
 
 namespace kalve137::core {
@@ -185,8 +186,9 @@ private:
             ++m_pos;
         }
         double value = 0.0;
-        const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-        if (error != std::errc() || end != digits.data() + digits.size()) {
+        std::istringstream stream(digits);
+        stream.imbue(std::locale::classic());
+        if (!(stream >> value) || stream.peek() != std::istringstream::traits_type::eof()) {
             return std::nullopt;
         }
         return value;
