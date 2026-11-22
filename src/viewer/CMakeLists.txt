@@ -6,12 +6,15 @@ add_library(kalve137_viewer STATIC
     box_band.cpp
     camera_guard.h
     camera_guard.cpp
+    camera_sync.h
+    camera_sync.cpp
     grid.h
     grid.cpp
     navigation.h
     occt_view_widget.h
     occt_view_widget.cpp
     occt_view_widget_box.cpp
+    occt_view_widget_camera.cpp
     occt_view_widget_grid.cpp
     style.h
     view_cube.h
@@ -22,6 +25,7 @@ add_library(kalve137_viewer STATIC
 target_include_directories(kalve137_viewer PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(kalve137_viewer
     PUBLIC
+        kalve137_camera
         Qt6::OpenGLWidgets
         Qt6::Widgets
         TKV3d

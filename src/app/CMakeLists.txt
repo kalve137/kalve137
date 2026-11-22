@@ -95,8 +95,12 @@ add_library(kalve137_app STATIC
     theme/theme.h
     theme/theme_tokens.cpp
     theme/theme_tokens.h
+    view/camera_commands.cpp
+    view/camera_commands.h
     view/grid_settings.cpp
     view/grid_settings.h
+    view/new_view_navigation.cpp
+    view/new_view_navigation.h
     view/scene.cpp
     view/scene.h
     view/scene_construction.cpp
@@ -134,6 +138,7 @@ target_link_libraries(kalve137_app PUBLIC
     kalve137_platform
     kalve137_log
     kalve137_core
+    kalve137_pick
     kalve137_render_rhi
     kalve137_viewer
     occt_qt

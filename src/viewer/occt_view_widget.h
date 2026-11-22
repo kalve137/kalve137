@@ -13,6 +13,7 @@
 #include <QString>
 #include <Standard_WarningsRestore.hxx>
 
+#include "camera/camera.h"
 #include "viewer/box_band.h"
 #include "viewer/grid.h"
 #include "viewer/navigation.h"
@@ -104,6 +105,13 @@ public:
     QPointF toScreen(const gp_Pnt& point) const;
     gp_Dir towardViewer(const gp_Pnt& point) const;
 
+    void setSyncedCamera(const camera::Camera& camera, const camera::Viewport& viewport);
+    std::optional<camera::Viewport> viewport() const;
+    camera::Camera currentCamera() const;
+    std::optional<gp_Pnt> pickPoint(const camera::Pixel& pixel, bool onRay);
+    gp_Pnt gravityPoint() const;
+    std::optional<camera::Box> sceneBounds() const;
+
     bool isReady() const { return !m_view.IsNull() && !m_view->Window().IsNull(); }
     bool isAnimating() const;
     const Handle(AIS_InteractiveContext)& aisContext() const { return m_context; }
@@ -160,6 +168,9 @@ private:
     bool startBox(const QMouseEvent* event);
     bool dragBox(const QMouseEvent* event);
     bool finishBox(const QMouseEvent* event);
+    std::optional<gp_Pnt> pickOnPlaneWithoutWindow(const QPointF& pos, const gp_Ax3& plane) const;
+    double worldPerPixelWithoutWindow() const;
+    QPointF toScreenWithoutWindow(const gp_Pnt& point) const;
     void handleViewRedraw(const Handle(AIS_InteractiveContext)& context, const Handle(V3d_View)& view) override;
     Handle(V3d_Viewer) m_viewer;
     Handle(V3d_View) m_view;
@@ -193,6 +204,7 @@ private:
     bool m_selectedByBox = false;
     bool m_frameTiming = false;
     std::optional<double> m_lastFrameMs;
+    std::optional<camera::Viewport> m_syncedViewport;
 };
 
 } // namespace kalve137::viewer

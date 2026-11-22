@@ -3,24 +3,12 @@
 
 #pragma once
 
+#include "camera/navigation.h"
+
 namespace kalve137::viewer {
 
-enum class NavigationPreset {
-    MiddleOrbitsCtrlPans,
-    MiddlePansShiftOrbits,
-    MiddleOrbitsShiftPans,
-    RightOrbitsCtrlPans,
-};
-
-struct Navigation {
-    NavigationPreset preset = NavigationPreset::MiddleOrbitsCtrlPans;
-    bool reverseZoom = false;
-    bool zoomToCursor = true;
-    bool orbitAroundCursor = false;
-    bool constrainedOrbit = false;
-    bool animateTransitions = true;
-};
-
-enum class StandardView { Front, Back, Left, Right, Top, Bottom };
+using camera::Navigation;
+using camera::NavigationPreset;
+using camera::StandardView;
 
 } // namespace kalve137::viewer

@@ -9,8 +9,10 @@
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QMetaObject>
+#include <QMouseEvent>
 #include <QOffscreenSurface>
 #include <QResizeEvent>
+#include <QWheelEvent>
 #include <QtGui/qtguiglobal.h>
 #include <rhi/qrhi.h>
 #if QT_CONFIG(vulkan) && __has_include(<vulkan/vulkan.h>)
@@ -18,6 +20,7 @@
 #include <QVulkanInstance>
 #endif
 
+#include <cmath>
 #include <memory>
 #include <string_view>
 
@@ -26,6 +29,8 @@ namespace kalve137::render {
 namespace {
 
 using Api = QRhiWidget::Api;
+
+constexpr double kWheelNotch = 120.0;
 
 Api widgetApi(GraphicsApi api)
 {
@@ -205,10 +210,47 @@ void RhiView::render(QRhiCommandBuffer* buffer)
 
 void RhiView::releaseResources() {}
 
+void RhiView::setCamera(const camera::Camera& camera)
+{
+    m_camera = camera;
+    update();
+}
+
+camera::Viewport RhiView::viewport() const
+{
+    const double ratio = devicePixelRatioF();
+    return {static_cast<int>(std::lround(width() * ratio)), static_cast<int>(std::lround(height() * ratio)), ratio};
+}
+
 void RhiView::resizeEvent(QResizeEvent* event)
 {
     QRhiWidget::resizeEvent(event);
     placeMessage();
+    emit resized();
+}
+
+void RhiView::mousePressEvent(QMouseEvent* event)
+{
+    event->accept();
+    emit mousePressed(event->position(), event->button(), event->buttons(), event->modifiers());
+}
+
+void RhiView::mouseReleaseEvent(QMouseEvent* event)
+{
+    event->accept();
+    emit mouseReleased(event->position(), event->button(), event->buttons(), event->modifiers());
+}
+
+void RhiView::mouseMoveEvent(QMouseEvent* event)
+{
+    event->accept();
+    emit mouseMoved(event->position(), event->buttons(), event->modifiers());
+}
+
+void RhiView::wheelEvent(QWheelEvent* event)
+{
+    event->accept();
+    emit wheelTurned(event->position(), event->angleDelta().y() / kWheelNotch);
 }
 
 void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)

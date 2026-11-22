@@ -5,6 +5,9 @@
 
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
+#include "app/view/camera_commands.h"
+#include "camera/camera.h"
+#include "camera/math.h"
 #include "core/recompute.h"
 #include "geometry/body_mesh.h"
 
@@ -101,17 +104,32 @@ ColdBuild buildColdSnapshots(const core::Model& model)
     return build;
 }
 
-std::vector<double> orbit(MainWindow& window)
-{
+struct Orbit {
     std::vector<double> frames;
+    std::vector<double> cameraMs;
+};
+
+Orbit orbit(MainWindow& window)
+{
+    Orbit result;
     if (render::RhiView* view = window.newView()) {
+        CameraCommands& commands = *window.cameraCommands();
+        const auto turn = [](camera::Camera& camera, const camera::Viewport&) {
+            camera.transform(camera::Motion::rotationAbout(camera.center(), camera.up(), kOrbitStep));
+            return true;
+        };
         for (int i = 0; i < kWarmupFrames + kOrbitFrames; ++i) {
+            QElapsedTimer timer;
+            timer.start();
+            commands.navigate(turn);
+            const double cameraMs = elapsedMs(timer);
             const std::optional<double> ms = view->benchFrame();
             if (ms && i >= kWarmupFrames) {
-                frames.push_back(*ms);
+                result.frames.push_back(cameraMs + *ms);
+                result.cameraMs.push_back(cameraMs);
             }
         }
-        return frames;
+        return result;
     }
     viewer::OcctViewWidget* view = window.oldView();
     view->setFrameTiming(true);
@@ -120,11 +138,11 @@ std::vector<double> orbit(MainWindow& window)
         view->repaint();
         const std::optional<double> ms = view->lastFrameMs();
         if (ms && i >= kWarmupFrames) {
-            frames.push_back(*ms);
+            result.frames.push_back(*ms);
         }
     }
     view->setFrameTiming(false);
-    return frames;
+    return result;
 }
 
 } // namespace
@@ -175,7 +193,8 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const auto* session = window.findChild<DesignSession*>();
     const ColdBuild cold = buildColdSnapshots(session->model());
 
-    const std::vector<double> frames = orbit(window);
+    const Orbit timed = orbit(window);
+    const std::vector<double>& frames = timed.frames;
     if (frames.size() != static_cast<std::size_t>(kOrbitFrames)) {
         K137_ERROR(App, "The bench timed {} of {} frames", frames.size(), kOrbitFrames);
         return 1;
@@ -200,6 +219,10 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         {"bodies", static_cast<int>(session->model().bodies.size())},
         {"triangles", static_cast<qint64>(cold.triangles)},
     };
+    if (!timed.cameraMs.empty()) {
+        result.insert("camera_median_ms", percentile(timed.cameraMs, 0.5));
+        result.insert("camera_p95_ms", percentile(timed.cameraMs, kPercentile));
+    }
     QFile file(QString::fromStdU16String(out.u16string()));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(QJsonDocument(result).toJson()) < 0) {
         K137_ERROR(App, "Cannot write the bench result to {}", out.string());

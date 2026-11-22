@@ -13,6 +13,7 @@
 #include "app/shell/modal_scrim.h"
 #include "app/shell/version_dialog.h"
 #include "app/theme/theme.h"
+#include "app/view/camera_commands.h"
 
 #include "core/history.h"
 #include "core/serialization.h"
@@ -237,8 +238,7 @@ void MainWindow::offerRecovery()
     if (clicked == recover) {
         leaveModes();
         m_session->recover(std::move(recovery->document), recovery->source);
-        m_view->homeView();
-        fitView();
+        m_cameraCommands->home(CameraCommands::Move::Jump);
         statusBar()->showMessage(tr("Recovered %1, save to keep it").arg(name), kMessageTimeoutMs);
     }
     if (clicked == recover || clicked == discard) {
@@ -354,8 +354,7 @@ void MainWindow::newDesign()
     }
     leaveModes();
     m_session->reset(core::Document{}, {});
-    m_view->homeView();
-    fitView();
+    m_cameraCommands->home(CameraCommands::Move::Jump);
 }
 
 void MainWindow::openDesign()
@@ -394,8 +393,7 @@ void MainWindow::openDesignAt(const std::filesystem::path& path)
         }
     }
     m_session->reset(std::move(document), path);
-    m_view->homeView();
-    fitView();
+    m_cameraCommands->home(CameraCommands::Move::Jump);
 }
 
 void MainWindow::openSample()
@@ -417,8 +415,7 @@ void MainWindow::openSample()
     }
     leaveModes();
     m_session->reset(std::move(document), {});
-    m_view->homeView();
-    fitView();
+    m_cameraCommands->home(CameraCommands::Move::Jump);
 }
 
 void MainWindow::newProject()
@@ -569,7 +566,7 @@ void MainWindow::importStep()
         const BusyCursor busy;
         m_session->edit(tr("Import %1").arg(name),
                         [&](core::Document& document) { document.add(importFeature(path, std::move(parts))); });
-        fitView();
+        m_cameraCommands->fit(CameraCommands::Move::Jump);
     }
     statusBar()->showMessage(tr("Imported %1").arg(toQString(path.filename())), kMessageTimeoutMs);
     const auto logFirstFrame = [workerMs, timer, file = path.filename().string()] {

@@ -528,7 +528,7 @@ void OcctViewWidget::setLeftButtonCaptured(bool captured)
 std::optional<gp_Pnt> OcctViewWidget::pickOnPlane(const QPointF& pos, const gp_Ax3& plane) const
 {
     if (!isReady()) {
-        return std::nullopt;
+        return pickOnPlaneWithoutWindow(pos, plane);
     }
     const Vec2d point(pos.x(), pos.y());
     const Vec2i pixel(m_view->Window()->ConvertPointToBacking(point) + Vec2d(0.5));
@@ -563,7 +563,7 @@ void OcctViewWidget::detectAt(const QPointF& pos)
 double OcctViewWidget::worldPerPixel() const
 {
     if (!isReady()) {
-        return 1.0;
+        return worldPerPixelWithoutWindow();
     }
     return m_view->Convert(1) * m_view->Window()->DevicePixelRatio();
 }
@@ -571,7 +571,7 @@ double OcctViewWidget::worldPerPixel() const
 QPointF OcctViewWidget::toScreen(const gp_Pnt& point) const
 {
     if (!isReady()) {
-        return {};
+        return toScreenWithoutWindow(point);
     }
     int x = 0;
     int y = 0;

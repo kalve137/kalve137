@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include "camera/camera.h"
 #include "render/graphics_api.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
+#include <QPointF>
 #include <QRhiWidget>
 #include <QString>
 
@@ -31,6 +33,9 @@ public:
     const ViewportStyle& viewportStyle() const { return m_style; }
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
+    void setCamera(const camera::Camera& camera);
+    const camera::Camera& camera() const { return m_camera; }
+    camera::Viewport viewport() const;
 
     bool isReady() const { return m_ready; }
     bool hasFailed() const { return m_failed; }
@@ -40,12 +45,23 @@ public:
 
 signals:
     void ready();
+    void resized();
+    void mousePressed(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
+                      Qt::KeyboardModifiers modifiers);
+    void mouseReleased(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
+                       Qt::KeyboardModifiers modifiers);
+    void mouseMoved(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
+    void wheelTurned(QPointF position, double notches);
 
 protected:
     void initialize(QRhiCommandBuffer* buffer) override;
     void render(QRhiCommandBuffer* buffer) override;
     void releaseResources() override;
     void resizeEvent(QResizeEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
@@ -55,6 +71,7 @@ private:
     GraphicsApi m_api;
     ViewportStyle m_style;
     snapshot::Scene m_scene;
+    camera::Camera m_camera;
     QString m_backend;
     QString m_device;
     QLabel* m_message = nullptr;

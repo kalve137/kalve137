@@ -23,6 +23,7 @@
 #include "app/theme/fonts.h"
 #include "app/theme/icons.h"
 #include "app/theme/theme.h"
+#include "app/view/camera_commands.h"
 #include "app/view/grid_settings.h"
 #include "app/view/scene.h"
 #include "app/view/view_controls.h"
@@ -103,6 +104,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
 
     m_scene = std::make_unique<Scene>(m_view, m_session->snapshots());
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
+    m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
 
     createActions();
     createDocks();
@@ -136,15 +138,16 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
     if (m_rhiView != nullptr) {
         connect(m_rhiView, &render::RhiView::ready, this, [this] {
             refreshScene();
-            fitView();
+            m_cameraCommands->fit(CameraCommands::Move::Jump);
         });
     } else {
         connect(m_view, &viewer::OcctViewWidget::ready, this, [this] {
             diagnostics::setGlInfo(m_view->glInfo());
             refreshScene();
-            fitView();
+            m_cameraCommands->fit(CameraCommands::Move::Jump);
         });
     }
+    connect(m_cameraCommands, &CameraCommands::menuRequested, this, &MainWindow::showMarkingMenu);
     connect(m_view, &viewer::OcctViewWidget::selectionChanged, this, &MainWindow::onViewSelection);
     connect(m_view, &viewer::OcctViewWidget::hoverChanged, this, &MainWindow::onViewHover);
     connect(m_view, &viewer::OcctViewWidget::menuRequested, this, &MainWindow::showMarkingMenu);
@@ -165,6 +168,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         updateStatus();
     });
     connect(m_sketchEditor, &SketchEditor::stateChanged, this, &MainWindow::updateStatus);
+    connect(m_sketchEditor, &SketchEditor::stateChanged, m_cameraCommands, &CameraCommands::sceneChanged);
     connect(m_sketchEditor, &SketchEditor::message, this,
             [this](const QString& text) { statusBar()->showMessage(text, kMessageTimeoutMs); });
     connect(m_sketchEditor, &SketchEditor::finished, this, &MainWindow::finishSketch);
@@ -317,20 +321,11 @@ void MainWindow::createActions()
     });
 
     m_viewControls = new ViewControls(m_preferences, m_showOrigin, this);
-    connect(m_viewControls, &ViewControls::homeRequested, this, [this] {
-        m_view->animateCamera([this] {
-            m_view->homeView();
-            fitView();
-        });
-    });
-    connect(m_viewControls, &ViewControls::standardViewRequested, this, [this](viewer::StandardView view) {
-        m_view->animateCamera([this, view] {
-            m_view->standardView(view);
-            fitView();
-        });
-    });
+    connect(m_viewControls, &ViewControls::homeRequested, this,
+            [this] { m_cameraCommands->home(CameraCommands::Move::Animate); });
+    connect(m_viewControls, &ViewControls::standardViewRequested, m_cameraCommands, &CameraCommands::standardView);
     connect(m_viewControls, &ViewControls::fitRequested, this,
-            [this] { m_view->animateCamera([this] { fitView(); }); });
+            [this] { m_cameraCommands->fit(CameraCommands::Move::Animate); });
     connect(m_viewControls, &ViewControls::lookAtRequested, this, &MainWindow::lookAtSketch);
     connect(m_viewControls, &ViewControls::gridSettingsRequested, this, &MainWindow::showGridSettings);
     connect(m_viewControls, &ViewControls::preferencesEdited, this, [this] {
@@ -767,6 +762,7 @@ void MainWindow::updateStatus()
 
 void MainWindow::refreshScene()
 {
+    m_cameraCommands->sceneChanged();
     if (m_featurePanel->isActive()) {
         m_featurePanel->refreshPreview();
         return;
@@ -805,6 +801,7 @@ bool MainWindow::event(QEvent* event)
     }
     if (event->type() == QEvent::DevicePixelRatioChange && m_rhiView != nullptr) {
         applyViewportTheme();
+        m_cameraCommands->syncViewport();
     }
     return QMainWindow::event(event);
 }
@@ -848,11 +845,7 @@ void MainWindow::showGridSettings()
 void MainWindow::lookAtSketch()
 {
     if (m_session->document().find(m_sketchEditor->sketchId()) != nullptr) {
-        const gp_Ax3 plane = m_session->sketchPlane(m_sketchEditor->sketchId());
-        m_view->animateCamera([this, &plane] {
-            m_view->lookAt(plane);
-            fitView();
-        });
+        m_cameraCommands->lookAt(m_session->sketchPlane(m_sketchEditor->sketchId()));
     }
 }
 
@@ -899,12 +892,8 @@ void MainWindow::applyPreferences()
 {
     theme::setScheme(m_preferences.colorScheme);
     diagnostics::applyLevels(m_preferences.logLevels);
-    m_view->setNavigation(m_preferences.navigation);
-    const bool projectionChanged = m_view->isPerspective() != m_preferences.perspective;
-    m_view->setPerspective(m_preferences.perspective);
-    if (projectionChanged && m_view->isReady()) {
-        fitView();
-    }
+    m_cameraCommands->setNavigation(m_preferences.navigation);
+    m_cameraCommands->setPerspective(m_preferences.perspective);
     m_view->setGridVisible(m_preferences.showGrid);
     m_view->setGridSpacing(m_preferences.gridAdaptive, m_preferences.gridSpacing);
     if (m_sketchEditor->isActive()) {

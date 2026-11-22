@@ -10,6 +10,11 @@ add_executable(kalve137_tests
     app/design_session_test.cpp
     app/startup_options_test.cpp
     app/theme_test.cpp
+    camera/camera_test.cpp
+    camera/jitter_test.cpp
+    camera/navigator_test.cpp
+    camera/occt_compare.h
+    camera/views_test.cpp
     core/core_test.cpp
     core/expression_test.cpp
     core/feature_test.cpp
@@ -41,6 +46,7 @@ add_executable(kalve137_tests
 target_compile_definitions(kalve137_tests PRIVATE KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_link_libraries(kalve137_tests PRIVATE
     kalve137_app
+    kalve137_camera
     kalve137_core
     kalve137_geometry
     kalve137_log
@@ -58,6 +64,7 @@ gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
+    ui/camera_ui_test.cpp
     ui/constraint_ui_test.cpp
     ui/crash_trace.cpp
     ui/crash_trace.h
@@ -82,6 +89,7 @@ add_executable(kalve137_uitests
     ui/ui_test.h
     ui/view_cube_ui_test.cpp
     ui/workflow_ui_test.cpp
+    viewer/camera_sync_test.cpp
 )
 set_target_properties(kalve137_uitests PROPERTIES AUTOUIC OFF)
 target_compile_definitions(kalve137_uitests PRIVATE KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

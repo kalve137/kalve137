@@ -25,3 +25,15 @@ Kalve 137 is free software under GPL-3.0-or-later. It is built on the components
 ## LGPL libraries
 
 Qt, Open CASCADE Technology and PlaneGCS are linked dynamically. You may replace their DLLs in the install folder with your own builds of a compatible version. Their source code is available from the links above, and the PlaneGCS sources used here are in this repository under `third_party/planegcs`.
+
+## Code adapted from Open CASCADE Technology
+
+The new viewport's camera moves exactly like the 3D view built on Open CASCADE Technology 8.0.1, so parts of the files below are translated from its source. That code stays under LGPL-2.1-only with the Open CASCADE exception 1.0 and is carried under GPL-3.0-or-later as section 3 of the LGPL allows. Each file names both in its SPDX header.
+
+| File | Follows |
+| --- | --- |
+| `src/camera/camera.h`, `src/camera/camera.cpp` | `Graphic3d_Camera` (defaults, setters, view dimensions, FitMinMax, ZFitAll) and the pixel conversion of `V3d_View` |
+| `src/camera/navigator.cpp` | `AIS_ViewController` (orbit, pan, zoom and their constants) |
+| `src/camera/transition.cpp` | The camera interpolation in `Graphic3d_Camera.cxx` and `gp_Quaternion::SetMatrix` |
+| `src/camera/views.cpp` | `V3d_View::SetProj` |
+| `src/viewer/occt_view_widget_camera.cpp` | `V3d_View::GravityPoint`, `V3d_View::ConvertWithProj` and `V3d_View::Convert` |
