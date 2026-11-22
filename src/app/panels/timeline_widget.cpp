@@ -10,6 +10,7 @@
 #include "viewer/style.h"
 
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QHelpEvent>
 #include <QInputDialog>
 #include <QMenu>
@@ -270,6 +271,22 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event)
     }
     const bool overMarker = std::abs(x - markerX(m_session.document().marker())) <= kMarkerGrab;
     setCursor(overMarker ? Qt::SizeHorCursor : Qt::ArrowCursor);
+    const auto index = chipAt(event->position().toPoint());
+    setHovered(index && !overMarker ? m_chips[*index].id : 0);
+}
+
+void TimelineWidget::leaveEvent(QEvent* event)
+{
+    setHovered(0);
+    QWidget::leaveEvent(event);
+}
+
+void TimelineWidget::setHovered(core::FeatureId id)
+{
+    if (id != m_hovered) {
+        m_hovered = id;
+        emit highlightRequested(id);
+    }
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event)
@@ -301,8 +318,14 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event)
     const QString name = QString::fromStdString(feature->name);
     const std::size_t position = *index;
 
+    const core::FeatureId sketch = core::profileSketchOf(feature->data);
+
     QMenu menu(this);
     QAction* edit = menu.addAction(tr("Edit"));
+    QAction* editSketch = nullptr;
+    if (sketch != 0 && m_session.document().find(sketch) != nullptr) {
+        editSketch = menu.addAction(tr("Edit Profile Sketch"));
+    }
     QAction* rename = menu.addAction(tr("Rename..."));
     QAction* suppress = menu.addAction(feature->suppressed ? tr("Unsuppress") : tr("Suppress"));
     menu.addSeparator();
@@ -311,11 +334,20 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event)
     QAction* rollEnd = menu.addAction(tr("Roll To End"));
     rollEnd->setEnabled(m_session.document().marker() < m_chips.size());
     menu.addSeparator();
+    QAction* find = menu.addAction(tr("Find in Browser"));
+    menu.addSeparator();
     QAction* remove = menu.addAction(tr("Delete"));
 
+    setHovered(id);
     QAction* chosen = menu.exec(event->globalPos());
+    const auto under = chipAt(mapFromGlobal(QCursor::pos()));
+    setHovered(under ? m_chips[*under].id : 0);
     if (chosen == edit) {
         emit editRequested(id);
+    } else if (chosen != nullptr && chosen == editSketch) {
+        emit editRequested(sketch);
+    } else if (chosen == find) {
+        emit findRequested(id);
     } else if (chosen == rename) {
         bool ok = false;
         const QString text =

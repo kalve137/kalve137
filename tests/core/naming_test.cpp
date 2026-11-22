@@ -208,6 +208,25 @@ TEST(Naming, FacesAndEdgesKnowTheFeatureThatMadeThem)
     EXPECT_EQ(featureOfName(""), 0);
 }
 
+TEST(Naming, BodiesOfFindWhatEachFeatureShaped)
+{
+    Block b = block();
+    const FeatureId fillet = b.doc.add(FilletFeature{{FilletSet{{edgeAt(recompute(b.doc), gp_Pnt(30, 0, 10))}, 2.0}}});
+    const FeatureId other =
+        addExtrude(b.doc, addRectangle(b.doc, 100, 0, 120, 20), {110, 10}, 10.0, Operation::NewBody);
+    const FeatureId slot = addExtrude(b.doc, addRectangle(b.doc, 40, 5, 110, 15), {50, 10}, 10.0, Operation::Cut);
+    const Model model = recompute(b.doc);
+    ASSERT_EQ(model.status.at(slot).health, FeatureHealth::Ok) << model.status.at(slot).message;
+    const BodyKey padBody{b.pad, 0};
+    const BodyKey otherBody{other, 0};
+
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(b.pad)), std::vector{padBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(fillet)), std::vector{padBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(other)), std::vector{otherBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(slot)), (std::vector{padBody, otherBody}));
+    EXPECT_TRUE(bodiesOf(model, *b.doc.find(b.sketch)).empty());
+}
+
 TEST(Naming, ChamferFollowsTopEdge)
 {
     Block b = block();

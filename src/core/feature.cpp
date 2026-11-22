@@ -281,4 +281,26 @@ std::string_view typeName(const FeatureData& data)
                       data);
 }
 
+FeatureId profileSketchOf(const FeatureData& data)
+{
+    return std::visit(Overloaded{
+                          [](const SketchFeature&) -> FeatureId { return 0; },
+                          [](const ExtrudeFeature& f) { return f.profiles.sketch; },
+                          [](const RevolveFeature& f) { return f.profiles.sketch; },
+                          [](const FilletFeature&) -> FeatureId { return 0; },
+                          [](const ChamferFeature&) -> FeatureId { return 0; },
+                          [](const ShellFeature&) -> FeatureId { return 0; },
+                          [](const PatternFeature&) -> FeatureId { return 0; },
+                          [](const ImportFeature&) -> FeatureId { return 0; },
+                          [](const PlaneFeature&) -> FeatureId { return 0; },
+                          [](const OffsetFaceFeature&) -> FeatureId { return 0; },
+                          [](const HoleFeature& f) { return f.sketch; },
+                          [](const MoveFeature&) -> FeatureId { return 0; },
+                          [](const AxisFeature&) -> FeatureId { return 0; },
+                          [](const PointFeature&) -> FeatureId { return 0; },
+                          [](const AppearanceFeature&) -> FeatureId { return 0; },
+                      },
+                      data);
+}
+
 } // namespace kalve137::core

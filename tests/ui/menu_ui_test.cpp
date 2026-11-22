@@ -4,16 +4,24 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/panels/browser_panel.h"
+#include "app/shell/main_window.h"
+#include "viewer/occt_view_widget.h"
+
 #include <QAction>
+#include <QColor>
+#include <QTreeWidget>
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <variant>
 
 namespace kalve137::uitest {
 namespace {
 
 constexpr double kTolerance = 1e-3;
+constexpr int kColorShift = 30;
 constexpr core::FeatureId kExtrude = 2;
 const gp_Pnt kTopFace(5, 3, kBlockHeight);
 
@@ -105,6 +113,41 @@ TEST_F(MenuTest, TimelineEditsTheExtrude)
     ASSERT_TRUE(ui->state()["featurePanel"]) << ui->state().dump(2);
     ui->fill("Distance", "20");
     EXPECT_NEAR(volume(*ui), kBlockWidth * kBlockDepth * 20.0, kTolerance) << ui->state().dump(2);
+}
+
+TEST_F(MenuTest, TimelineEditsTheProfileSketch)
+{
+    ui->contextMenu(ui->timelineChip(kExtrude), "Edit Profile Sketch");
+    EXPECT_EQ(ui->state()["sketch"], 1) << ui->state().dump(2);
+    ui->trigger("Finish Sketch");
+    EXPECT_NEAR(volume(*ui), kBlockVolume, kTolerance) << ui->state().dump(2);
+}
+
+TEST_F(MenuTest, TimelineFindsTheBodyInTheBrowser)
+{
+    ui->contextMenu(ui->timelineChip(kExtrude), "Find in Browser");
+    const auto* browser = ui->window().findChild<app::BrowserPanel*>();
+    ASSERT_NE(browser, nullptr);
+    EXPECT_TRUE(browser->isVisible());
+    const QList<QTreeWidgetItem*> selected = browser->selectedItems();
+    ASSERT_EQ(selected.size(), 1);
+    EXPECT_EQ(selected.front()->text(0), QStringLiteral("Body1"));
+    ui->save("found");
+}
+
+TEST_F(MenuTest, TimelineHoverHighlightsTheBody)
+{
+    const auto shift = [](const QColor& a, const QColor& b) {
+        return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
+    };
+    const QPoint top = ui->view().mapTo(&ui->window(), ui->at(kTopFace).toPoint());
+    const QColor plain = ui->shot().pixelColor(top);
+    ui->move(ui->timelineChip(kExtrude));
+    const QColor lit = ui->shot().pixelColor(top);
+    ui->save("hovered");
+    EXPECT_GT(shift(lit, plain), kColorShift) << plain.name().toStdString() << " " << lit.name().toStdString();
+    ui->move(ui->timelineChip(1));
+    EXPECT_LT(shift(ui->shot().pixelColor(top), plain), kColorShift) << "The sketch shapes no body";
 }
 
 TEST_F(MenuTest, BrowserHidesAndShowsABody)

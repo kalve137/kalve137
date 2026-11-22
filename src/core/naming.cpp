@@ -25,6 +25,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <variant>
 
 namespace kalve137::core {
 
@@ -134,6 +135,36 @@ FeatureId featureOfEdge(const Body& body, const TopoDS_Edge& edge)
         latest = std::max(latest, featureOfName(name));
     }
     return latest;
+}
+
+bool namesFeature(const Body& body, FeatureId id)
+{
+    for (TopExp_Explorer it(body.shape, TopAbs_FACE); it.More(); it.Next()) {
+        const std::vector<std::string>* names = body.faceNames.find(it.Current());
+        if (names != nullptr &&
+            std::ranges::any_of(*names, [id](const std::string& name) { return featureOfName(name) == id; })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<BodyKey> bodiesOf(const Model& model, const Feature& feature)
+{
+    const std::vector<BodyKey>* listed = nullptr;
+    if (const auto* move = std::get_if<MoveFeature>(&feature.data); move != nullptr && !move->copy) {
+        listed = &move->bodies;
+    } else if (const auto* appearance = std::get_if<AppearanceFeature>(&feature.data)) {
+        listed = &appearance->bodies;
+    }
+    std::vector<BodyKey> keys;
+    for (const Body& body : model.bodies) {
+        if (body.id == feature.id || (listed != nullptr && std::ranges::find(*listed, body.key()) != listed->end()) ||
+            namesFeature(body, feature.id)) {
+            keys.push_back(body.key());
+        }
+    }
+    return keys;
 }
 
 TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point)
