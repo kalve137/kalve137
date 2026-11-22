@@ -54,6 +54,7 @@ protected:
         return m_scratch;
     }
 
+public:
     std::unique_ptr<UiDriver> ui;
 
 private:
