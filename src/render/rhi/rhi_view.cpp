@@ -440,6 +440,24 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     return IdPick{.item = *item, .hit = *hit};
 }
 
+camera::Vec3 RhiView::pointOf(int x, int y, float depth) const
+{
+    const camera::Viewport port = viewport();
+    camera::Camera shown = m_camera;
+    shown.setAspect(port.aspect());
+    return shown.unproject({((x + 0.5) / port.width * 2.0) - 1.0, 1.0 - ((y + 0.5) / port.height * 2.0),
+                            (static_cast<double>(depth) * 2.0) - 1.0});
+}
+
+std::optional<camera::Vec3> RhiView::surfaceAt(int x, int y)
+{
+    const std::optional<IdImage> image = readIds(QRect(x, y, 1, 1));
+    if (!image || image->ids.empty() || image->ids[0] == 0) {
+        return std::nullopt;
+    }
+    return pointOf(x, y, image->depths[0]);
+}
+
 std::optional<double> RhiView::benchFrame()
 {
     QRhiTexture* resolved = resolvedTexture();
@@ -488,6 +506,10 @@ void RhiView::render(QRhiCommandBuffer* buffer)
         m_ready = true;
         QMetaObject::invokeMethod(this, &RhiView::ready, Qt::QueuedConnection);
     }
+    if (!m_idsWarm && !m_scene.bodies.empty()) {
+        m_idsWarm = true;
+        QMetaObject::invokeMethod(this, [this] { readIds(QRect(0, 0, 1, 1), m_idStyle); }, Qt::QueuedConnection);
+    }
 }
 
 void RhiView::releaseResources()
@@ -495,6 +517,7 @@ void RhiView::releaseResources()
     m_ids.reset();
     m_bodies.reset();
     m_idsFresh = false;
+    m_idsWarm = false;
 }
 
 void RhiView::setCamera(const camera::Camera& camera)

@@ -25,10 +25,6 @@ namespace kalve137::render {
 class RhiView;
 }
 
-namespace kalve137::pick {
-class SceneRays;
-}
-
 namespace kalve137::app {
 
 class NewViewNavigation;
@@ -41,8 +37,8 @@ public:
 
     static constexpr double kEmptySceneHalfSize = 60.0;
 
-    CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView, pick::SceneRays& rays,
-                   std::function<bool()> sceneIsEmpty, QObject* parent);
+    CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView, std::function<bool()> sceneIsEmpty,
+                   QObject* parent);
 
     void home(Move move);
     void standardView(camera::StandardView view);
@@ -77,7 +73,6 @@ private:
 
     viewer::OcctViewWidget* m_view;
     render::RhiView* m_newView;
-    pick::SceneRays* m_rays;
     std::function<bool()> m_sceneIsEmpty;
     NewViewNavigation* m_navigation = nullptr;
     camera::Navigation m_navigationSettings;

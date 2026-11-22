@@ -78,6 +78,8 @@ public:
     double lastUpdateMs() const { return m_updateMs; }
     std::optional<IdImage> readIds(const QRect& deviceRect, const IdStyle& style = {});
     std::optional<IdPick> pickAt(QPointF position, const PickKinds& kinds, const IdStyle& style = {});
+    camera::Vec3 pointOf(int x, int y, float depth) const;
+    std::optional<camera::Vec3> surfaceAt(int x, int y);
     std::uint64_t idPasses() const { return m_idPasses; }
 
 signals:
@@ -123,6 +125,7 @@ private:
     IdStyle m_idStyle;
     bool m_idsFresh = false;
     bool m_idsFailed = false;
+    bool m_idsWarm = false;
     std::uint64_t m_idPasses = 0;
     QString m_backend;
     QString m_device;

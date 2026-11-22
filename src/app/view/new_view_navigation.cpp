@@ -34,26 +34,19 @@ unsigned toModifiers(Qt::KeyboardModifiers modifiers)
 
 } // namespace
 
-SnapshotNavigationScene::SnapshotNavigationScene(const render::RhiView& view, pick::SceneRays& rays)
-    : m_view(&view), m_rays(&rays)
-{}
+SnapshotNavigationScene::SnapshotNavigationScene(render::RhiView& view) : m_view(&view) {}
 
 std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& camera,
                                                           const camera::Viewport& viewport, const camera::Pixel& pixel,
-                                                          bool) const
+                                                          bool onRay) const
 {
-    const pick::VisibleRays rays = m_rays->rays(m_view->scene());
-    if (rays.scene == nullptr) {
-        return std::nullopt;
+    const std::optional<camera::Vec3> surface = m_view->surfaceAt(pixel.x, pixel.y);
+    if (!surface || !onRay) {
+        return surface;
     }
     const camera::Ray ray = camera.ray(pixel, viewport);
     const camera::Vec3 direction = camera::normalized(ray.direction);
-    const std::optional<pick::Hit> hit =
-        rays.first({ray.origin.x, ray.origin.y, ray.origin.z}, {direction.x, direction.y, direction.z});
-    if (!hit) {
-        return std::nullopt;
-    }
-    return ray.origin + direction * hit->distance;
+    return ray.origin + direction * camera::dot(*surface - ray.origin, direction);
 }
 
 camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera& camera, const camera::Viewport&) const
@@ -68,8 +61,8 @@ camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera& camera,
     return camera::gravityPoint(camera, boxes);
 }
 
-NewViewNavigation::NewViewNavigation(render::RhiView& view, pick::SceneRays& rays, CameraCommands& commands)
-    : QObject(&commands), m_view(&view), m_commands(&commands), m_scene(view, rays)
+NewViewNavigation::NewViewNavigation(render::RhiView& view, CameraCommands& commands)
+    : QObject(&commands), m_view(&view), m_commands(&commands), m_scene(view)
 {
     connect(m_view, &render::RhiView::mousePressed, this, &NewViewNavigation::press);
     connect(m_view, &render::RhiView::mouseReleased, this,

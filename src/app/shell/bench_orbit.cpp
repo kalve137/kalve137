@@ -31,9 +31,11 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMenuBar>
 #include <QMouseEvent>
 #include <QPointF>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QSize>
 #include <QStatusBar>
 #include <QToolBar>
@@ -228,6 +230,8 @@ std::optional<double> firstPress(MainWindow& window)
     const auto [button, modifiers] = orbitGesture(saved.preset);
     const QPointF middle(view->width() / 2.0, view->height() / 2.0);
     const QPointF moved = middle + QPointF(kFirstPressStep, 0.0);
+    QApplication::processEvents();
+    view->benchFrame();
     QElapsedTimer timer;
     timer.start();
     sendMouse(*view, QEvent::MouseButtonPress, middle, button, button, modifiers);
@@ -298,8 +302,17 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
         bar->hide();
     }
     window.statusBar()->hide();
-    window.setAttribute(Qt::WA_DontShowOnScreen);
-    window.show();
+    window.menuBar()->hide();
+    const QScreen* screen = window.screen();
+    const bool onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
+    if (!onScreen) {
+        window.setAttribute(Qt::WA_DontShowOnScreen);
+        window.show();
+    } else if (screen != nullptr && screen->size() * screen->devicePixelRatio() == requested) {
+        window.showFullScreen();
+    } else {
+        window.show();
+    }
     if (newView && window.newView() == nullptr) {
         K137_ERROR(App, "The bench view did not start");
         return false;
@@ -313,9 +326,13 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
     }
     QWidget* canvas = window.centralWidget();
     const double ratio = window.devicePixelRatioF();
-    const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
-                        static_cast<int>(std::lround(requested.height() / ratio)));
-    window.resize(logical + window.size() - canvas->size());
+    if (window.isFullScreen()) {
+        waitFor([&] { return canvas->size() * ratio == requested; });
+    } else {
+        const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
+                            static_cast<int>(std::lround(requested.height() / ratio)));
+        window.resize(logical + window.size() - canvas->size());
+    }
     QApplication::processEvents();
     return true;
 }
@@ -323,7 +340,12 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
 QJsonObject benchHeader(MainWindow& window, bool newView, const std::filesystem::path& design, const QString& size)
 {
     const QSize actual = window.centralWidget()->size() * window.devicePixelRatioF();
+    const QScreen* screen = window.screen();
+    const QSize shown = screen != nullptr ? screen->size() * screen->devicePixelRatio() : QSize();
     return {
+        {"on_screen", !window.testAttribute(Qt::WA_DontShowOnScreen)},
+        {"full_screen", window.isFullScreen()},
+        {"screen", QStringLiteral("%1x%2").arg(shown.width()).arg(shown.height())},
         {"view", newView ? "new" : "old"},
         {"backend", newView ? window.newView()->backendName() : QStringLiteral("OpenGL")},
         {"device", newView ? window.newView()->deviceName() : window.oldView()->deviceName()},

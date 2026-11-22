@@ -78,13 +78,8 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
             break;
         }
     }
-    const camera::Viewport port = m_view->viewport();
-    if (hit->hit.depth < 1.0F && port.isValid()) {
-        camera::Camera shown = m_view->camera();
-        shown.setAspect(port.aspect());
-        const camera::Vec3 at = shown.unproject(camera::Vec3{((hit->hit.x + 0.5) / port.width * 2.0) - 1.0,
-                                                             1.0 - ((hit->hit.y + 0.5) / port.height * 2.0),
-                                                             (static_cast<double>(hit->hit.depth) * 2.0) - 1.0});
+    if (hit->hit.depth < 1.0F) {
+        const camera::Vec3 at = m_view->pointOf(hit->hit.x, hit->hit.y, hit->hit.depth);
         found.point = gp_Pnt(at.x, at.y, at.z);
     }
     return found;

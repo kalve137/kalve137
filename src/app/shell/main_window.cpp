@@ -139,8 +139,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         m_picks = picker;
     }
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
-    m_cameraCommands =
-        new CameraCommands(*m_view, m_rhiView, m_session->rays(), [this] { return sceneIsEmpty(); }, this);
+    m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
 
     createActions();
     createDocks();
@@ -819,10 +818,7 @@ void MainWindow::refreshScene()
     }
     m_scene->setHighlightedBodies(std::move(highlighted));
     const auto visible = [this](core::BodyKey key) { return m_session->isBodyVisible(key); };
-    const auto showSnapshot = [this](const snapshot::Scene& scene) {
-        m_session->rays().prepare(scene);
-        m_rhiView->setScene(scene);
-    };
+    const auto showSnapshot = [this](const snapshot::Scene& scene) { m_rhiView->setScene(scene); };
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
     if (index >= 0 && std::cmp_less(index + 1, document.marker())) {
         core::Document context = document;
