@@ -6,46 +6,12 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include <atomic>
-#include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <ctime>
-#include <exception>
-
 namespace kalve137::platform {
-
-namespace {
-
-CrashOptions g_crash;
-std::atomic_flag g_crashing = ATOMIC_FLAG_INIT;
-
-[[noreturn]] void handleCrash()
-{
-    if (!g_crashing.test_and_set() && g_crash.onCrash) {
-        std::error_code ec;
-        std::filesystem::create_directories(g_crash.folder, ec);
-        char stamp[32];
-        const std::time_t now = std::time(nullptr);
-        std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&now));
-        g_crash.onCrash(g_crash.folder / (g_crash.prefix + "-" + stamp));
-    }
-    std::_Exit(EXIT_FAILURE);
-}
-
-void onSignal(int)
-{
-    handleCrash();
-}
-
-} // namespace
 
 std::string_view name()
 {
     return "Linux";
 }
-
-void writeDebugger(std::string_view) {}
 
 std::uint64_t totalMemory()
 {
@@ -59,22 +25,6 @@ std::uint64_t peakMemory()
     constexpr std::uint64_t kBytesPerKilobyte = 1024;
     rusage usage{};
     return getrusage(RUSAGE_SELF, &usage) == 0 ? static_cast<std::uint64_t>(usage.ru_maxrss) * kBytesPerKilobyte : 0;
-}
-
-void installCrashHandler(CrashOptions options)
-{
-    g_crash = std::move(options);
-    for (int signal : {SIGSEGV, SIGABRT, SIGFPE, SIGILL, SIGBUS}) {
-        std::signal(signal, onSignal);
-    }
-    std::set_terminate([] { handleCrash(); });
-}
-
-void crashForTesting()
-{
-    volatile int* null = nullptr;
-    *null = 0x137;
-    std::abort();
 }
 
 } // namespace kalve137::platform
