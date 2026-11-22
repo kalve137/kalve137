@@ -225,6 +225,7 @@ using FeatureData = std::variant<SketchFeature, ExtrudeFeature, RevolveFeature, 
                                  HoleFeature, MoveFeature, AxisFeature, PointFeature, AppearanceFeature>;
 
 std::string_view typeName(const FeatureData& data);
+FeatureId profileSketchOf(const FeatureData& data);
 
 struct Feature {
     FeatureId id = 0;

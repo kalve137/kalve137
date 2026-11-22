@@ -148,6 +148,7 @@ private:
     std::optional<core::Project> m_project;
     core::ShapeStore m_shapes;
     bool m_pickingPlane = false;
+    core::FeatureId m_timelineHighlight = 0;
 
     QAction* m_undo = nullptr;
     QAction* m_redo = nullptr;

@@ -26,6 +26,8 @@ std::string namePrefix(FeatureId id);
 FeatureId featureOfName(const std::string& name);
 FeatureId featureOfFace(const Body& body, const TopoDS_Face& face);
 FeatureId featureOfEdge(const Body& body, const TopoDS_Edge& edge);
+bool namesFeature(const Body& body, FeatureId id);
+std::vector<BodyKey> bodiesOf(const Model& model, const Feature& feature);
 
 TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point);
 TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point);

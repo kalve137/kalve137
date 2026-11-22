@@ -19,6 +19,8 @@ class BrowserPanel : public QTreeWidget {
 public:
     explicit BrowserPanel(DesignSession& session, QWidget* parent = nullptr);
 
+    bool reveal(core::FeatureId id);
+
 signals:
     void editRequested(core::FeatureId id);
     void appearanceRequested(const std::vector<core::BodyKey>& bodies);

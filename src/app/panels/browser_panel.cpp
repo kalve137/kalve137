@@ -7,6 +7,8 @@
 #include "app/theme/icons.h"
 #include "app/theme/theme.h"
 
+#include "core/naming.h"
+
 #include <QHeaderView>
 #include <QMenu>
 #include <QTreeWidgetItemIterator>
@@ -167,6 +169,50 @@ void BrowserPanel::rebuild()
         component->setExpanded(component->childCount() <= kMaxExpandedChildren);
     }
     m_rebuilding = false;
+}
+
+bool BrowserPanel::reveal(core::FeatureId id)
+{
+    const core::Feature* feature = m_session.document().find(id);
+    if (feature == nullptr) {
+        return false;
+    }
+    const std::vector<core::BodyKey> bodies = core::bodiesOf(m_session.model(), *feature);
+    clearSelection();
+    QTreeWidgetItem* first = nullptr;
+    for (QTreeWidgetItemIterator it(this); *it != nullptr; ++it) {
+        QTreeWidgetItem* item = *it;
+        bool match = false;
+        switch (static_cast<ItemKind>(item->data(0, kKindRole).toInt())) {
+        case ItemKind::Group:
+        case ItemKind::Origin:
+        case ItemKind::Component:
+            break;
+        case ItemKind::Body:
+            match = std::ranges::find(bodies, bodyKeyOf(item)) != bodies.end();
+            break;
+        case ItemKind::Sketch:
+        case ItemKind::Construction:
+            match = item->data(0, kIdRole).toInt() == id;
+            break;
+        }
+        if (!match) {
+            continue;
+        }
+        for (QTreeWidgetItem* parent = item->parent(); parent != nullptr; parent = parent->parent()) {
+            parent->setExpanded(true);
+        }
+        item->setSelected(true);
+        if (first == nullptr) {
+            first = item;
+        }
+    }
+    if (first == nullptr) {
+        return false;
+    }
+    setCurrentItem(first, 0, QItemSelectionModel::NoUpdate);
+    scrollToItem(first);
+    return true;
 }
 
 Qt::CheckState BrowserPanel::syncComponent(QTreeWidgetItem* component)

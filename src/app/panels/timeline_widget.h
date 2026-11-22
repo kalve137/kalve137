@@ -30,6 +30,8 @@ public:
 
 signals:
     void editRequested(core::FeatureId id);
+    void findRequested(core::FeatureId id);
+    void highlightRequested(core::FeatureId id);
 
 protected:
     bool event(QEvent* event) override;
@@ -39,6 +41,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     struct Chip {
@@ -51,6 +54,7 @@ private:
     std::size_t gapAt(int x) const;
     int markerX(std::size_t marker) const;
     void setMarker(std::size_t marker);
+    void setHovered(core::FeatureId id);
 
     DesignSession& m_session;
     std::vector<Chip> m_chips;
@@ -58,6 +62,7 @@ private:
     bool m_dragging = false;
     std::size_t m_dragMarker = 0;
     core::FeatureId m_editing = 0;
+    core::FeatureId m_hovered = 0;
 };
 
 } // namespace kalve137::app

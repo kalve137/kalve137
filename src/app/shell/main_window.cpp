@@ -28,6 +28,7 @@
 #include "app/view/view_controls.h"
 #include "app/view/view_cube_arrows.h"
 #include "app/view/view_overlay.h"
+#include "core/naming.h"
 #include "core/recompute.h"
 
 #include "platform/platform.h"
@@ -623,6 +624,20 @@ void MainWindow::createDocks()
     timelineDock->setTitleBarWidget(new QWidget(timelineDock));
     addDockWidget(Qt::BottomDockWidgetArea, timelineDock);
     connect(m_timeline, &TimelineWidget::editRequested, this, &MainWindow::editFeature);
+    connect(m_timeline, &TimelineWidget::highlightRequested, this, [this](core::FeatureId id) {
+        m_timelineHighlight = id;
+        if (!m_featurePanel->isActive() && !m_sketchEditor->isActive()) {
+            refreshScene();
+        }
+    });
+    connect(m_timeline, &TimelineWidget::findRequested, this, [this, browserDock](core::FeatureId id) {
+        browserDock->raise();
+        if (!m_browser->reveal(id)) {
+            const core::Feature* feature = m_session->document().find(id);
+            const QString name = feature != nullptr ? QString::fromStdString(feature->name) : QString();
+            statusBar()->showMessage(tr("Nothing in the Browser comes from %1").arg(name), kMessageTimeoutMs);
+        }
+    });
 }
 
 void MainWindow::createOverlays()
@@ -740,6 +755,16 @@ void MainWindow::refreshScene()
     m_scene->setEditingSketch(sketch);
     m_timeline->setEditing(sketch);
     const core::Document& document = m_session->document();
+    std::vector<TopoDS_Shape> highlighted;
+    const core::Feature* hovered = sketch == 0 ? document.find(m_timelineHighlight) : nullptr;
+    if (hovered != nullptr) {
+        for (const core::BodyKey& key : core::bodiesOf(m_session->model(), *hovered)) {
+            if (m_session->isBodyVisible(key)) {
+                highlighted.push_back(m_session->model().body(key)->shape);
+            }
+        }
+    }
+    m_scene->setHighlightedBodies(std::move(highlighted));
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
     if (index >= 0 && std::cmp_less(index + 1, document.marker())) {
         core::Document context = document;
