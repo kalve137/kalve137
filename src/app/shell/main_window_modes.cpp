@@ -6,6 +6,7 @@
 #include "app/feature/feature_panel.h"
 #include "app/feature/measure_panel.h"
 #include "app/session/design_session.h"
+#include "app/view/camera_commands.h"
 #include "app/view/scene.h"
 #include "core/naming.h"
 #include "geometry/modeling.h"
@@ -30,7 +31,6 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr double kEmptySceneHalfSize = 60.0;
 constexpr double kPreviewGridScale = 2.0;
 
 viewer::GridExtent previewGridExtent(const core::Model& model)
@@ -40,7 +40,7 @@ viewer::GridExtent previewGridExtent(const core::Model& model)
         BRepBndLib::Add(body.shape, box);
     }
     if (box.IsVoid()) {
-        return {gp::Origin(), kEmptySceneHalfSize * kPreviewGridScale};
+        return {gp::Origin(), CameraCommands::kEmptySceneHalfSize * kPreviewGridScale};
     }
     const gp_Pnt low = box.CornerMin();
     const gp_Pnt high = box.CornerMax();
@@ -116,7 +116,7 @@ void MainWindow::stopPickingPlane()
 
 void MainWindow::leaveModes()
 {
-    m_view->dropSavedView();
+    m_cameraCommands->dropSavedView();
     m_featurePanel->cancel();
     stopPickingPlane();
     finishSketch();
@@ -153,35 +153,28 @@ void MainWindow::beginSketch(core::FeatureId id)
     m_view->setGridPlane(plane);
     m_view->setGridLabels(m_preferences.sketchGridLabels);
     if (m_preferences.lookAtSketch) {
-        if (!alreadySketching || !m_view->hasSavedView()) {
-            m_view->saveView();
+        if (!alreadySketching || !m_cameraCommands->hasSavedView()) {
+            m_cameraCommands->saveView();
         }
-        m_view->animateCamera([this, &plane] {
-            m_view->lookAt(plane);
-            fitView();
-        });
+        m_cameraCommands->lookAt(plane);
     }
     updateActions();
     updateStatus();
 }
 
-void MainWindow::fitView()
+bool MainWindow::sceneIsEmpty() const
 {
     const bool hasSketchGeometry = std::ranges::any_of(m_session->document().features(), [](const core::Feature& f) {
         const auto* sketchData = std::get_if<core::SketchFeature>(&f.data);
         return sketchData != nullptr && !sketchData->sketch.curves().empty();
     });
-    if (m_session->model().bodies.empty() && !hasSketchGeometry) {
-        m_view->fitAround(kEmptySceneHalfSize);
-    } else {
-        m_view->fitAll();
-    }
+    return m_session->model().bodies.empty() && !hasSketchGeometry;
 }
 
 void MainWindow::finishSketch()
 {
     if (m_sketchEditor->isActive()) {
-        m_view->restoreSavedView();
+        m_cameraCommands->restoreSavedView();
     }
     m_sketchEditor->end();
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));

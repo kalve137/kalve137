@@ -110,6 +110,9 @@ void recordLog(std::string_view line)
         return;
     }
     const std::string_view level = line.substr(kLevelColumn);
+    if (line.find("duplicate messages..") != std::string_view::npos) {
+        return;
+    }
     if (level.starts_with("warning") || level.starts_with("error") || level.starts_with("critical")) {
         std::string text(line);
         while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {

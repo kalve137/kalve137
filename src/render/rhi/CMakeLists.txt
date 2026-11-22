@@ -8,6 +8,7 @@ add_library(kalve137_render_rhi STATIC
 target_include_directories(kalve137_render_rhi PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(kalve137_render_rhi
     PUBLIC
+        kalve137_camera
         kalve137_render
         Qt6::Widgets
     PRIVATE

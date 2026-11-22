@@ -40,6 +40,7 @@ namespace kalve137::app {
 
 class Autosave;
 class BrowserPanel;
+class CameraCommands;
 class CommandSearch;
 class DesignSession;
 class FeaturePanel;
@@ -60,6 +61,7 @@ public:
     void openDesignAt(const std::filesystem::path& path);
     viewer::OcctViewWidget* oldView() const { return m_view; }
     render::RhiView* newView() const { return m_rhiView; }
+    CameraCommands* cameraCommands() const { return m_cameraCommands; }
 
 protected:
     bool event(QEvent* event) override;
@@ -81,7 +83,7 @@ private:
     void leaveModes();
     void createSketchOn(const gp_Ax3& plane, const std::string& planeName, core::FeatureId planeFeature = 0,
                         std::optional<core::TopoRef> face = std::nullopt);
-    void fitView();
+    bool sceneIsEmpty() const;
     void beginSketch(core::FeatureId id);
     void finishSketch();
     void editFeature(core::FeatureId id);
@@ -136,6 +138,7 @@ private:
     viewer::OcctViewWidget* m_view = nullptr;
     render::RhiView* m_rhiView = nullptr;
     std::unique_ptr<viewer::OcctViewWidget> m_hiddenView;
+    CameraCommands* m_cameraCommands = nullptr;
     std::unique_ptr<Scene> m_scene;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
