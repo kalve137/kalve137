@@ -3,11 +3,13 @@
 
 #include "app/session/step_import.h"
 
+#include "geometry/body_mesh.h"
 #include "geometry/meshing.h"
 
 #include <QString>
 
 #include <format>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -30,19 +32,21 @@ core::ImportFeature importFeature(const std::filesystem::path& path, std::vector
     return {QString::fromStdU16String(path.filename().u16string()).toStdString(), std::move(parts)};
 }
 
-std::vector<geometry::StepPart> readStepForImport(const std::filesystem::path& path,
-                                                  const geometry::ProgressCallback& progress)
+ImportedStep readStepForImport(const std::filesystem::path& path, const geometry::ProgressCallback& progress)
 {
     const auto report = [&](double done) { return !progress || progress(done); };
-    std::vector<geometry::StepPart> parts =
-        geometry::readStepParts(path, [&](double done) { return report(done * kReadShare); });
-    for (std::size_t i = 0; i < parts.size(); ++i) {
-        if (!report(kReadShare + (1.0 - kReadShare) * static_cast<double>(i) / static_cast<double>(parts.size()))) {
+    ImportedStep imported{.parts =
+                              geometry::readStepParts(path, [&](double done) { return report(done * kReadShare); })};
+    const std::size_t count = imported.parts.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!report(kReadShare + (1.0 - kReadShare) * static_cast<double>(i) / static_cast<double>(count))) {
             throw geometry::ImportCanceled();
         }
-        geometry::ensureMesh(parts[i].shape);
+        const TopoDS_Shape& shape = imported.parts[i].shape;
+        geometry::ensureMesh(shape);
+        imported.meshes.push_back(std::make_shared<const snapshot::Mesh>(geometry::meshBody(shape)));
     }
-    return parts;
+    return imported;
 }
 
 } // namespace kalve137::app

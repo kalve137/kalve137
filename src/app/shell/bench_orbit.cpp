@@ -4,6 +4,7 @@
 #include "app/shell/bench_orbit.h"
 
 #include "app/session/design_session.h"
+#include "app/session/step_import.h"
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
 #include "camera/camera.h"
@@ -488,6 +489,54 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
     result.insert("largest_body_triangles", static_cast<qint64>(largestTriangles));
     result.insert("largest_body_faces", static_cast<qint64>(largestFaces));
     result.insert("changes", changes);
+    return writeResult(result, out);
+}
+
+int runBenchImport(const StartupOptions& options, const std::filesystem::path& step, const std::filesystem::path& out,
+                   const QString& size)
+{
+    const std::optional<QSize> requested = checkedRequest(step, size);
+    if (!requested) {
+        return 2;
+    }
+    if (options.view != ViewKind::New) {
+        K137_ERROR(App, "The import bench runs on the new view only");
+        return 2;
+    }
+    MainWindow window(options);
+    if (!showForBench(window, true, *requested)) {
+        return 1;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    ImportedStep imported = readStepForImport(step);
+    const double readMs = elapsedMs(timer);
+    const auto seeded = static_cast<int>(imported.meshes.size());
+    timer.restart();
+    window.addImport(step, std::move(imported));
+    const double addMs = elapsedMs(timer);
+    QApplication::processEvents();
+    if (!window.newView()->benchFrame()) {
+        K137_ERROR(App, "The import bench could not draw a frame after the import");
+        return 1;
+    }
+    const double firstFrameMs = elapsedMs(timer);
+
+    auto* session = window.findChild<DesignSession*>();
+    std::size_t triangles = 0;
+    for (const core::Body& body : session->model().bodies) {
+        triangles += trianglesOf(session->snapshots(), body);
+    }
+    QJsonObject result = benchHeader(window, true, step, size);
+    result.insert("design", QString::fromStdU16String(step.stem().u16string()));
+    result.insert("read_ms", readMs);
+    result.insert("add_ms", addMs);
+    result.insert("recompute_ms", session->lastRecomputeMs());
+    result.insert("first_frame_ms", firstFrameMs);
+    result.insert("seeded", seeded);
+    result.insert("bodies", static_cast<int>(session->model().bodies.size()));
+    result.insert("triangles", static_cast<qint64>(triangles));
     return writeResult(result, out);
 }
 

@@ -81,6 +81,9 @@ std::shared_ptr<const snapshot::Body> SnapshotCache::body(const Body& body)
         mesh = found->second.body->mesh;
     }
     if (mesh == nullptr) {
+        mesh = seedFor(body.shape);
+    }
+    if (mesh == nullptr) {
         mesh = std::make_shared<const snapshot::Mesh>(geometry::meshBody(body.shape));
     }
     auto built = std::make_shared<const snapshot::Body>(snapshot::Body{
@@ -104,8 +107,20 @@ snapshot::Scene SnapshotCache::scene(const Model& model, const Visible& visible)
         }
     }
     std::erase_if(m_entries, [&](const auto& entry) { return !keys.contains(entry.first); });
+    m_seeds.clear();
     scene.origin = originOf(all);
     return scene;
+}
+
+void SnapshotCache::seed(const TopoDS_Shape& shape, std::shared_ptr<const snapshot::Mesh> mesh)
+{
+    m_seeds.push_back({.shape = shape, .mesh = std::move(mesh)});
+}
+
+std::shared_ptr<const snapshot::Mesh> SnapshotCache::seedFor(const TopoDS_Shape& shape)
+{
+    const auto found = std::ranges::find_if(m_seeds, [&](const Seed& seed) { return seed.shape.IsEqual(shape); });
+    return found != m_seeds.end() ? found->mesh : nullptr;
 }
 
 } // namespace kalve137::core
