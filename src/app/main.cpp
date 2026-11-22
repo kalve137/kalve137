@@ -19,7 +19,6 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSet>
-#include <QStandardPaths>
 #include <QStringList>
 #include <QSvgRenderer>
 #include <QTimer>
@@ -113,10 +112,8 @@ int main(int argc, char** argv)
     QApplication::setApplicationName("Kalve 137");
     QApplication::setOrganizationName(headless ? kalve137::app::kSmokeOrganization : "Kalve 137");
     QApplication::setApplicationVersion(KALVE137_VERSION);
-    if (smoke) {
+    if (headless) {
         kalve137::app::prepareSmoke();
-    } else if (headless) {
-        QStandardPaths::setTestModeEnabled(true);
     }
     kalve137::app::diagnostics::startLogging();
     kalve137::app::diagnostics::installCrashHandler();

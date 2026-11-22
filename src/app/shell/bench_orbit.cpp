@@ -48,10 +48,12 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr int kWarmupFrames = 10;
+constexpr int kColdSkipFrames = 10;
 constexpr int kOrbitFrames = 120;
 constexpr double kOrbitStep = 2.0 * std::numbers::pi / kOrbitFrames;
+constexpr double kWarmupMs = 500.0;
 constexpr int kReadyTimeoutMs = 30000;
+constexpr int kOrbitTimeoutMs = 120000;
 constexpr double kPercentile = 0.95;
 constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
 constexpr double kFirstPressStep = 20.0;
@@ -110,10 +112,58 @@ ColdBuild buildColdSnapshots(const core::Model& model)
     return build;
 }
 
+struct FrameTime {
+    double startMs = 0.0;
+    double ms = 0.0;
+    std::optional<double> cameraMs;
+};
+
 struct Orbit {
+    std::vector<double> cold;
     std::vector<double> frames;
     std::vector<double> cameraMs;
+    int warmupFrames = 0;
 };
+
+Orbit timeOrbit(const std::function<std::optional<FrameTime>()>& step)
+{
+    std::vector<FrameTime> times;
+    std::optional<std::size_t> warm;
+    const auto frames = static_cast<std::size_t>(kOrbitFrames);
+    const auto done = [&] {
+        return warm && times.size() >= kColdSkipFrames + frames && times.size() - *warm >= frames;
+    };
+    QElapsedTimer clock;
+    clock.start();
+    const QDeadlineTimer deadline(kOrbitTimeoutMs);
+    while (!done() && !deadline.hasExpired()) {
+        const double startMs = elapsedMs(clock);
+        std::optional<FrameTime> time = step();
+        if (!time) {
+            continue;
+        }
+        time->startMs = startMs;
+        if (!warm && startMs >= kWarmupMs) {
+            warm = times.size();
+        }
+        times.push_back(*time);
+    }
+    Orbit result;
+    for (std::size_t i = kColdSkipFrames; i < times.size() && result.cold.size() < kOrbitFrames; ++i) {
+        result.cold.push_back(times[i].ms);
+    }
+    if (!warm) {
+        return result;
+    }
+    result.warmupFrames = static_cast<int>(*warm);
+    for (std::size_t i = *warm; i < times.size() && result.frames.size() < kOrbitFrames; ++i) {
+        result.frames.push_back(times[i].ms);
+        if (times[i].cameraMs) {
+            result.cameraMs.push_back(*times[i].cameraMs);
+        }
+    }
+    return result;
+}
 
 std::pair<Qt::MouseButton, Qt::KeyboardModifiers> orbitGesture(camera::NavigationPreset preset)
 {
@@ -163,36 +213,35 @@ std::optional<double> firstPress(MainWindow& window)
 
 Orbit orbit(MainWindow& window)
 {
-    Orbit result;
     if (render::RhiView* view = window.newView()) {
         CameraCommands& commands = *window.cameraCommands();
         const auto turn = [](camera::Camera& camera, const camera::Viewport&) {
             camera.transform(camera::Motion::rotationAbout(camera.center(), camera.up(), kOrbitStep));
             return true;
         };
-        for (int i = 0; i < kWarmupFrames + kOrbitFrames; ++i) {
+        return timeOrbit([&]() -> std::optional<FrameTime> {
             QElapsedTimer timer;
             timer.start();
             commands.navigate(turn);
             const double cameraMs = elapsedMs(timer);
             const std::optional<double> ms = view->benchFrame();
-            if (ms && i >= kWarmupFrames) {
-                result.frames.push_back(cameraMs + *ms);
-                result.cameraMs.push_back(cameraMs);
+            if (!ms) {
+                return std::nullopt;
             }
-        }
-        return result;
+            return FrameTime{.startMs = 0.0, .ms = cameraMs + *ms, .cameraMs = cameraMs};
+        });
     }
     viewer::OcctViewWidget* view = window.oldView();
     view->setFrameTiming(true);
-    for (int i = 0; i < kWarmupFrames + kOrbitFrames; ++i) {
+    Orbit result = timeOrbit([&]() -> std::optional<FrameTime> {
         view->orbitBy(kOrbitStep);
         view->repaint();
         const std::optional<double> ms = view->lastFrameMs();
-        if (ms && i >= kWarmupFrames) {
-            result.frames.push_back(*ms);
+        if (!ms) {
+            return std::nullopt;
         }
-    }
+        return FrameTime{.startMs = 0.0, .ms = *ms, .cameraMs = std::nullopt};
+    });
     view->setFrameTiming(false);
     return result;
 }
@@ -253,8 +302,10 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const std::optional<double> pressMs = firstPress(window);
     const Orbit timed = orbit(window);
     const std::vector<double>& frames = timed.frames;
-    if (frames.size() != static_cast<std::size_t>(kOrbitFrames)) {
-        K137_ERROR(App, "The bench timed {} of {} frames", frames.size(), kOrbitFrames);
+    if (frames.size() != static_cast<std::size_t>(kOrbitFrames) ||
+        timed.cold.size() != static_cast<std::size_t>(kOrbitFrames)) {
+        K137_ERROR(App, "The bench timed {} warm and {} cold of {} frames", frames.size(), timed.cold.size(),
+                   kOrbitFrames);
         return 1;
     }
     const QSize actual = canvas->size() * ratio;
@@ -271,6 +322,10 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
         {"median_ms", percentile(frames, 0.5)},
         {"p95_ms", percentile(frames, kPercentile)},
         {"max_ms", std::ranges::max(frames)},
+        {"cold_median_ms", percentile(timed.cold, 0.5)},
+        {"cold_p95_ms", percentile(timed.cold, kPercentile)},
+        {"warmup_ms", kWarmupMs},
+        {"warmup_frames", timed.warmupFrames},
         {"peak_memory_mb", static_cast<double>(platform::peakMemory()) / kBytesPerMegabyte},
         {"load_ms", loadMs},
         {"snapshot_cold_ms", cold.ms},
