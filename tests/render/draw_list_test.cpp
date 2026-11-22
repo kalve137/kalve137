@@ -126,7 +126,8 @@ TEST(ChunkSet, VisibleEdgesFillsBodiesWithTheCanvasUnlit)
 {
     ChunkSet chunks;
     const auto body = boxBody(0, {}, {.color = kRed, .faces = {}});
-    const DrawList list = drawn(chunks, {.bodies = {body}, .origin = {}}, styleOf(VisualStyle::VisibleEdges));
+    const DrawList list =
+        drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::VisibleEdges));
     ASSERT_EQ(list.chunks.size(), 1U);
     EXPECT_FALSE(list.lit);
     EXPECT_EQ(colorsOf(list.chunks[0]), std::set{vertexColor(kCanvas)});
@@ -136,7 +137,125 @@ TEST(ChunkSet, WireframeDrawsNoFaces)
 {
     ChunkSet chunks;
     const auto body = boxBody(0);
-    EXPECT_TRUE(drawn(chunks, {.bodies = {body}, .origin = {}}, styleOf(VisualStyle::Wireframe)).chunks.empty());
+    EXPECT_TRUE(
+        drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Wireframe)).chunks.empty())
+        << "a body without edges draws nothing in wireframe";
+    const auto edged = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const DrawList list =
+        drawn(chunks, {.bodies = {edged}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Wireframe));
+    EXPECT_FALSE(list.faces);
+    EXPECT_TRUE(list.edges);
+    ASSERT_EQ(list.chunks.size(), 1U);
+    EXPECT_EQ(list.chunks[0].segments.size(), 12U);
+}
+
+ViewportStyle edgedStyleOf(VisualStyle visual)
+{
+    ViewportStyle style = styleOf(visual);
+    style.bodyEdge = kRed;
+    style.wire = kGreen;
+    return style;
+}
+
+TEST(ChunkSet, EachStyleDrawsItsEdgesInItsColorAndWidth)
+{
+    struct Expected {
+        VisualStyle visual;
+        bool faces;
+        bool edges;
+        snapshot::Color color;
+        double width;
+    };
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    ChunkSet chunks;
+    for (const Expected& expected : {Expected{VisualStyle::Shaded, true, false, {}, 0.0},
+                                     Expected{VisualStyle::ShadedWithEdges, true, true, kRed, kBodyEdgeWidth},
+                                     Expected{VisualStyle::Wireframe, false, true, kGreen, kWireWidth},
+                                     Expected{VisualStyle::VisibleEdges, true, true, kGreen, kBodyEdgeWidth}}) {
+        const DrawList list =
+            drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, edgedStyleOf(expected.visual));
+        EXPECT_EQ(list.faces, expected.faces) << static_cast<int>(expected.visual);
+        EXPECT_EQ(list.edges, expected.edges) << static_cast<int>(expected.visual);
+        if (expected.edges) {
+            EXPECT_EQ(vertexColor(list.edgeColor), vertexColor(expected.color)) << static_cast<int>(expected.visual);
+            EXPECT_EQ(list.edgeWidth, expected.width) << static_cast<int>(expected.visual);
+        }
+    }
+    EXPECT_EQ(chunks.meshBuilds(), 1U) << "a style change rebuilds no mesh";
+}
+
+TEST(ChunkSet, EdgesBecomeSegmentsWithOneEntryPerEdge)
+{
+    snapshot::Mesh mesh = *test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
+    mesh.edges.push_back({.id = mesh.edgeCount++, .points = {{0.0, 0.0, 2.0}, {1.0, 0.0, 2.0}, {1.0, 1.0, 2.0}}});
+    const auto body = test::shared(test::bodyOf(std::make_shared<const snapshot::Mesh>(std::move(mesh))));
+    const snapshot::Point origin{0.5, 0.5, 0.5};
+    ChunkSet chunks;
+    const DrawList list =
+        drawn(chunks, {.bodies = {body}, .origin = origin, .hidden = {}}, styleOf(VisualStyle::ShadedWithEdges));
+    ASSERT_EQ(list.chunks.size(), 1U);
+    const Chunk& chunk = list.chunks[0];
+    ASSERT_EQ(chunk.segments.size(), 14U) << "twelve lines and one polyline of two segments";
+    ASSERT_EQ(chunk.edgePalette.size(), 13U);
+    std::set<std::uint32_t> entries;
+    for (const Segment& segment : chunk.segments) {
+        entries.insert(entryOf(segment));
+    }
+    EXPECT_EQ(entries.size(), 13U);
+    EXPECT_EQ(entryOf(chunk.segments[12]), entryOf(chunk.segments[13])) << "a polyline keeps its edge entry";
+    EXPECT_EQ(chunk.segments[13].end, relativePosition({1.0, 1.0, 2.0}, origin));
+    for (const Entry& entry : chunk.edgePalette) {
+        EXPECT_EQ(entry[0], static_cast<std::uint8_t>(EdgeState::Normal));
+        EXPECT_EQ(entry[3], kEntryVisible);
+    }
+    EXPECT_EQ(chunks.segmentCount(), 14U);
+}
+
+TEST(ChunkSet, HidingABodyHidesItsEdges)
+{
+    const auto shown = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}), {}, 0));
+    const auto other = test::shared(test::bodyOf(test::edgedBox({5.0, 0.0, 0.0}, {6.0, 1.0, 1.0}), {}, 1));
+    ChunkSet chunks;
+    const ViewportStyle style = styleOf(VisualStyle::Wireframe);
+    const Chunk first = drawn(chunks, {.bodies = {shown, other}, .origin = {}, .hidden = {}}, style).chunks.at(0);
+    const DrawList hidden = drawn(chunks, {.bodies = {other}, .origin = {}, .hidden = {shown}}, style);
+    ASSERT_EQ(hidden.chunks.size(), 1U);
+    const Chunk& chunk = hidden.chunks[0];
+    EXPECT_EQ(chunk.meshRevision, first.meshRevision);
+    ASSERT_EQ(chunk.segments.size(), 24U);
+    for (std::size_t i = 0; i < chunk.segments.size(); ++i) {
+        const bool visible = (chunk.edgePalette[entryOf(chunk.segments[i])][3] & kEntryVisible) != 0;
+        EXPECT_EQ(visible, i >= 12) << "segment " << i;
+    }
+    EXPECT_TRUE(drawn(chunks, {.bodies = {}, .origin = {}, .hidden = {shown, other}}, style).chunks.empty());
+}
+
+TEST(ChunkSet, ABodyAboveTheEdgeLimitSplitsIntoPieces)
+{
+    snapshot::Mesh mesh = *test::box({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
+    const std::uint32_t edges = kPaletteEntries + 100;
+    for (std::uint32_t edge = 0; edge < edges; ++edge) {
+        const double x = static_cast<double>(edge) / edges;
+        mesh.edges.push_back({.id = edge, .points = {{x, 0.0, 0.0}, {x, 1.0, 0.0}}});
+    }
+    mesh.edgeCount = edges;
+    const auto body = test::shared(test::bodyOf(std::make_shared<const snapshot::Mesh>(std::move(mesh))));
+    ChunkSet chunks;
+    const DrawList list =
+        drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::ShadedWithEdges));
+    ASSERT_EQ(list.chunks.size(), 2U);
+    std::size_t segments = 0;
+    std::size_t triangles = 0;
+    for (const Chunk& chunk : list.chunks) {
+        EXPECT_LE(chunk.edgePalette.size(), kPaletteEntries);
+        for (const Segment& segment : chunk.segments) {
+            ASSERT_LT(entryOf(segment), chunk.edgePalette.size());
+        }
+        segments += chunk.segments.size();
+        triangles += chunk.indices.size() / 3;
+    }
+    EXPECT_EQ(segments, edges);
+    EXPECT_EQ(triangles, kBoxTriangles) << "the faces stay whole";
 }
 
 TEST(ChunkSet, PositionsAreRelativeToTheSceneOrigin)
@@ -144,7 +263,8 @@ TEST(ChunkSet, PositionsAreRelativeToTheSceneOrigin)
     const snapshot::Point origin{1000000.0, -2000000.0, 3000000.0};
     const auto body = boxBody(0, {1000001.0, -1999998.0, 3000003.0});
     ChunkSet chunks;
-    const DrawList list = drawn(chunks, {.bodies = {body}, .origin = origin}, styleOf(VisualStyle::Shaded));
+    const DrawList list =
+        drawn(chunks, {.bodies = {body}, .origin = origin, .hidden = {}}, styleOf(VisualStyle::Shaded));
     ASSERT_EQ(list.chunks.size(), 1U);
     std::set<Position> expected;
     for (const snapshot::Point& vertex : body->mesh->vertices) {
@@ -162,19 +282,19 @@ TEST(ChunkSet, AColorEditOrAThemeChangeRewritesOnlyThePalette)
     const auto body = boxBody(0);
     ChunkSet chunks;
     const ViewportStyle style = styleOf(VisualStyle::Shaded);
-    const Chunk first = drawn(chunks, {.bodies = {body}, .origin = {}}, style).chunks.at(0);
+    const Chunk first = drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     const auto recolored = test::shared(test::bodyOf(body->mesh, {.color = kRed, .faces = {}}));
-    const Chunk second = drawn(chunks, {.bodies = {recolored}, .origin = {}}, style).chunks.at(0);
+    const Chunk second = drawn(chunks, {.bodies = {recolored}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     EXPECT_EQ(second.meshRevision, first.meshRevision);
     EXPECT_EQ(second.vertices.data(), first.vertices.data());
     EXPECT_NE(second.paletteRevision, first.paletteRevision);
     EXPECT_EQ(colorsOf(second), std::set{vertexColor(kRed)});
-    const Chunk again = drawn(chunks, {.bodies = {recolored}, .origin = {}}, style).chunks.at(0);
+    const Chunk again = drawn(chunks, {.bodies = {recolored}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     EXPECT_EQ(again.paletteRevision, second.paletteRevision) << "the same scene changes nothing";
 
     ViewportStyle light = style;
     light.body = {0.9F, 0.9F, 0.9F};
-    const Chunk themed = drawn(chunks, {.bodies = {body}, .origin = {}}, light).chunks.at(0);
+    const Chunk themed = drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, light).chunks.at(0);
     EXPECT_EQ(themed.meshRevision, first.meshRevision);
     EXPECT_EQ(colorsOf(themed), std::set{vertexColor(light.body)});
     EXPECT_EQ(chunks.meshBuilds(), 1U);
@@ -186,7 +306,7 @@ TEST(ChunkSet, HidingABodyClearsItsEntriesAndKeepsTheMesh)
     const auto other = boxBody(1, {5.0, 0.0, 0.0});
     ChunkSet chunks;
     const ViewportStyle style = styleOf(VisualStyle::Shaded);
-    const Chunk first = drawn(chunks, {.bodies = {shown, other}, .origin = {}}, style).chunks.at(0);
+    const Chunk first = drawn(chunks, {.bodies = {shown, other}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     const DrawList hidden = drawn(chunks, {.bodies = {other}, .origin = {}, .hidden = {shown}}, style);
     ASSERT_EQ(hidden.chunks.size(), 1U);
     const Chunk& chunk = hidden.chunks[0];
@@ -211,10 +331,10 @@ TEST(ChunkSet, MovingOneBodyRebuildsOnlyItsChunk)
     for (int part = 0; part < 6; ++part) {
         bodies.push_back(boxBody(part, {2.0 * part, 0.0, 0.0}));
     }
-    const DrawList before = drawn(chunks, {.bodies = bodies, .origin = {}}, style);
+    const DrawList before = drawn(chunks, {.bodies = bodies, .origin = {}, .hidden = {}}, style);
     ASSERT_EQ(before.chunks.size(), 3U) << "two boxes fit the budget of each chunk";
     bodies[3] = boxBody(3, {6.0, 5.0, 0.0});
-    const DrawList after = drawn(chunks, {.bodies = bodies, .origin = {}}, style);
+    const DrawList after = drawn(chunks, {.bodies = bodies, .origin = {}, .hidden = {}}, style);
     ASSERT_EQ(after.chunks.size(), 3U);
     int rebuilt = 0;
     for (std::size_t i = 0; i < after.chunks.size(); ++i) {
@@ -224,7 +344,7 @@ TEST(ChunkSet, MovingOneBodyRebuildsOnlyItsChunk)
     EXPECT_EQ(rebuilt, 1);
 
     bodies.erase(bodies.begin() + 2, bodies.begin() + 4);
-    const DrawList removed = drawn(chunks, {.bodies = bodies, .origin = {}}, style);
+    const DrawList removed = drawn(chunks, {.bodies = bodies, .origin = {}, .hidden = {}}, style);
     EXPECT_EQ(removed.chunks.size(), 2U) << "an empty chunk goes away";
     EXPECT_EQ(chunks.triangleCount(), 4 * kBoxTriangles);
 }
@@ -234,9 +354,9 @@ TEST(ChunkSet, AnOriginMoveRebuildsEveryMesh)
     const auto body = boxBody(0);
     ChunkSet chunks;
     const ViewportStyle style = styleOf(VisualStyle::Shaded);
-    const Chunk first = drawn(chunks, {.bodies = {body}, .origin = {}}, style).chunks.at(0);
+    const Chunk first = drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, style).chunks.at(0);
     const snapshot::Point moved{1000.0, 0.0, 0.0};
-    const Chunk second = drawn(chunks, {.bodies = {body}, .origin = moved}, style).chunks.at(0);
+    const Chunk second = drawn(chunks, {.bodies = {body}, .origin = moved, .hidden = {}}, style).chunks.at(0);
     EXPECT_NE(second.meshRevision, first.meshRevision);
     for (const Vertex& vertex : second.vertices) {
         EXPECT_LE(vertex.position[0], -999.0F);
@@ -248,13 +368,14 @@ TEST(ChunkSet, OpenAndClosedBodiesKeepSeparateChunks)
     const auto closed = boxBody(0);
     const auto open = test::shared(test::bodyOf(test::box({3.0, 0.0, 0.0}, {4.0, 1.0, 1.0}, false), {}, 1));
     ChunkSet chunks;
-    const DrawList list = drawn(chunks, {.bodies = {closed, open}, .origin = {}}, styleOf(VisualStyle::Shaded));
+    const DrawList list =
+        drawn(chunks, {.bodies = {closed, open}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Shaded));
     ASSERT_EQ(list.chunks.size(), 2U);
     EXPECT_NE(list.chunks[0].closed, list.chunks[1].closed);
     EXPECT_TRUE(list.cullClosed);
     ViewportStyle section = styleOf(VisualStyle::Shaded);
     section.cullClosed = false;
-    EXPECT_FALSE(drawn(chunks, {.bodies = {closed, open}, .origin = {}}, section).cullClosed);
+    EXPECT_FALSE(drawn(chunks, {.bodies = {closed, open}, .origin = {}, .hidden = {}}, section).cullClosed);
 }
 
 TEST(ChunkSet, AVertexSharedByTwoFacesIsSplit)
@@ -268,7 +389,8 @@ TEST(ChunkSet, AVertexSharedByTwoFacesIsSplit)
     const auto body =
         test::shared(test::bodyOf(std::make_shared<const snapshot::Mesh>(std::move(mesh)), std::move(appearance)));
     ChunkSet chunks;
-    const Chunk chunk = drawn(chunks, {.bodies = {body}, .origin = {}}, styleOf(VisualStyle::Shaded)).chunks.at(0);
+    const Chunk chunk =
+        drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Shaded)).chunks.at(0);
     EXPECT_EQ(chunk.vertices.size(), 6U) << "the diagonal's two vertices belong to both faces";
     EXPECT_EQ(colorAt(chunk, 0), vertexColor(kRed));
     EXPECT_EQ(colorAt(chunk, 3), vertexColor(kGreen));
@@ -290,7 +412,7 @@ TEST(ChunkSet, ABodyAboveThePaletteLimitKeepsEveryFaceColor)
     }
     const auto body = test::shared(test::bodyOf(mesh, std::move(appearance)));
     ChunkSet chunks;
-    const DrawList list = drawn(chunks, {.bodies = {body}, .origin = {}}, styleOf(VisualStyle::Shaded));
+    const DrawList list = drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Shaded));
     ASSERT_EQ(list.chunks.size(), 2U) << "the body splits into two pieces";
     std::size_t triangle = 0;
     for (const Chunk& chunk : list.chunks) {
@@ -319,7 +441,7 @@ TEST(ChunkSet, APixelRatioChangeShowsInTheNextDrawAndRebuildsNothing)
     ChunkSet chunks;
     ViewportStyle style = styleOf(VisualStyle::Shaded);
     const auto body = boxBody(0);
-    const snapshot::Scene scene{.bodies = {body}, .origin = {}};
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
     EXPECT_EQ(drawn(chunks, scene, style).pixelRatio, 1.0);
     const std::uint64_t meshes = chunks.meshBuilds();
     const std::uint64_t palettes = chunks.paletteBuilds();

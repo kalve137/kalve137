@@ -86,6 +86,24 @@ inline std::shared_ptr<const snapshot::Mesh> box(const snapshot::Point& low, con
     return std::make_shared<const snapshot::Mesh>(std::move(mesh));
 }
 
+inline std::shared_ptr<const snapshot::Mesh> edgedBox(const snapshot::Point& low, const snapshot::Point& high,
+                                                      bool closed = true)
+{
+    snapshot::Mesh mesh = *box(low, high, closed);
+    const auto corner = [&](int bits) {
+        return snapshot::Point{(bits & 1) != 0 ? high[0] : low[0], (bits & 2) != 0 ? high[1] : low[1],
+                               (bits & 4) != 0 ? high[2] : low[2]};
+    };
+    for (int from = 0; from < 8; ++from) {
+        for (const int axis : {1, 2, 4}) {
+            if ((from & axis) == 0) {
+                mesh.edges.push_back({.id = mesh.edgeCount++, .points = {corner(from), corner(from | axis)}});
+            }
+        }
+    }
+    return std::make_shared<const snapshot::Mesh>(std::move(mesh));
+}
+
 inline std::shared_ptr<const snapshot::Mesh> grid(const snapshot::Point& center, double size, int cells)
 {
     const auto point = [&](int i, int j) {

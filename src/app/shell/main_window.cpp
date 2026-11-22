@@ -918,6 +918,8 @@ void MainWindow::applyNewViewStyle()
     m_rhiView->setViewportStyle({
         .background = color(colors.viewport.canvas),
         .body = color(colors.viewport.body),
+        .bodyEdge = color(colors.viewport.bodyEdge),
+        .wire = color(colors.viewport.wire),
         .visualStyle = visual(m_preferences.visualStyle),
         .pixelRatio = devicePixelRatioF(),
     });

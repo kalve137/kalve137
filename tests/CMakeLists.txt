@@ -35,6 +35,7 @@ add_executable(kalve137_tests
     platform/crash_test.cpp
     render/cpu_backend_test.cpp
     render/draw_list_test.cpp
+    render/edge_quad_test.cpp
     render/positions_test.cpp
     render/shaders_test.cpp
     render/start_problem_test.cpp
@@ -89,10 +90,13 @@ add_executable(kalve137_uitests
     ui/feature_ui_test.cpp
     ui/files_ui_test.cpp
     ui/harness_test.cpp
+    ui/edge_pair_ui_test.cpp
     ui/hero_ui_test.cpp
     ui/line_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/new_view_ui_test.cpp
+    ui/pair_shots.cpp
+    ui/pair_shots.h
     ui/preferences_ui_test.cpp
     ui/recent_values_ui_test.cpp
     ui/scenario.cpp
@@ -140,7 +144,7 @@ foreach(scale 125 150 175)
     )
 endforeach()
 add_test(NAME NewView.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*)
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*)
 set_tests_properties(NewView.Harness PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui

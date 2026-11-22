@@ -161,4 +161,17 @@ std::uint32_t entryOf(const Vertex& vertex)
     return static_cast<std::uint32_t>(vertex.packed[2]) | (static_cast<std::uint32_t>(vertex.packed[3]) << 8);
 }
 
+Segment packSegment(const Position& start, const Position& end, std::uint32_t entry)
+{
+    return {
+        .start = start,
+        .end = end,
+        .packed = {static_cast<std::uint8_t>(entry & 0xFFU), static_cast<std::uint8_t>((entry >> 8) & 0xFFU), 0, 0}};
+}
+
+std::uint32_t entryOf(const Segment& segment)
+{
+    return static_cast<std::uint32_t>(segment.packed[0]) | (static_cast<std::uint32_t>(segment.packed[1]) << 8);
+}
+
 } // namespace kalve137::render

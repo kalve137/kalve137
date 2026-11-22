@@ -17,6 +17,8 @@ layout(std140, binding = 0) uniform Frame {
     vec4 look;
     vec4 specular;
     vec4 options;
+    vec4 edge;
+    vec4 target;
 };
 
 vec3 toSrgb(vec3 linear)

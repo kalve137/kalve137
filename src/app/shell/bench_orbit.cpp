@@ -592,6 +592,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     }
     if (const render::RhiView* view = window.newView()) {
         result.insert("chunks", static_cast<qint64>(view->chunks().chunkCount()));
+        result.insert("segments", static_cast<qint64>(view->chunks().segmentCount()));
         result.insert("draws", static_cast<qint64>(view->chunks().draw({}).chunks.size()));
     }
     if (!timed.cameraMs.empty()) {

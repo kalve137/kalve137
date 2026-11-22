@@ -27,6 +27,8 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
     FILES
         shaders/body.vert
         shaders/body.frag
+        shaders/edge.vert
+        shaders/edge.frag
 )
 kalve137_set_warnings(kalve137_render_rhi)
 kalve137_forbid(kalve137_render_rhi OCCT MODULES app core geometry sketch viewer)
