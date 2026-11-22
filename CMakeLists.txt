@@ -26,7 +26,7 @@ if(WIN32)
     endforeach()
 endif()
 find_package(OpenGL REQUIRED)
-find_package(Qt6 6.12 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg GuiPrivate)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg GuiPrivate ShaderTools)
 qt_standard_project_setup()
 
 add_subdirectory(third_party/occt_qt)
