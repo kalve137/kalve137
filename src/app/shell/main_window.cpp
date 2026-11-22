@@ -63,7 +63,11 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+#include <functional>
 #include <initializer_list>
+#include <map>
+#include <memory>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -78,6 +82,30 @@ constexpr int kFeaturePanelWidth = theme::kWidthNarrow;
 constexpr QPoint kFeaturePanelMargin{12, 12};
 constexpr QPoint kNavBarMargin{0, 10};
 const char* const kWindowGeometryKey = "windowGeometry";
+
+snapshot::Scene withVisibility(snapshot::Scene scene, const core::Model& model, const DesignSession& session)
+{
+    std::map<core::BodyKey, std::size_t> order;
+    for (std::size_t i = 0; i < model.bodies.size(); ++i) {
+        order.emplace(model.bodies[i].key(), i);
+    }
+    const auto keyOf = [](const snapshot::Body& body) {
+        return core::BodyKey{static_cast<core::FeatureId>(body.feature), body.part};
+    };
+    const auto place = [&](const std::shared_ptr<const snapshot::Body>& body) {
+        const auto it = order.find(keyOf(*body));
+        return it == order.end() ? model.bodies.size() : it->second;
+    };
+    std::vector<std::shared_ptr<const snapshot::Body>> all = std::move(scene.bodies);
+    all.insert(all.end(), scene.hidden.begin(), scene.hidden.end());
+    std::ranges::stable_sort(all, std::less{}, place);
+    scene.bodies.clear();
+    scene.hidden.clear();
+    for (auto& body : all) {
+        (session.isBodyVisible(keyOf(*body)) ? scene.bodies : scene.hidden).push_back(std::move(body));
+    }
+    return scene;
+}
 
 } // namespace
 
@@ -135,6 +163,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         updateActions();
     });
     connect(m_session, &DesignSession::visibilityChanged, this, &MainWindow::refreshScene);
+    connect(m_session, &DesignSession::bodiesVisibilityChanged, this, &MainWindow::refreshVisibility);
     connect(m_session, &DesignSession::fileStateChanged, this, &MainWindow::updateTitle);
     if (m_rhiView != nullptr) {
         connect(m_rhiView, &render::RhiView::ready, this, [this] {
@@ -802,6 +831,21 @@ void MainWindow::refreshScene()
     m_scene->show(document, m_session->model(), *m_session);
     if (m_rhiView != nullptr) {
         showSnapshot(m_session->snapshots().scene(m_session->model(), visible));
+    }
+}
+
+void MainWindow::refreshVisibility(const std::vector<core::BodyKey>& keys, bool visible)
+{
+    if (m_featurePanel->isActive() || m_sketchEditor->sketchId() != 0 || m_timelineHighlight != 0) {
+        refreshScene();
+        return;
+    }
+    m_cameraCommands->sceneChanged();
+    if (!m_scene->setBodiesVisible(keys, visible)) {
+        m_scene->show(m_session->document(), m_session->model(), *m_session);
+    }
+    if (m_rhiView != nullptr) {
+        m_rhiView->setScene(withVisibility(m_rhiView->scene(), m_session->model(), *m_session));
     }
 }
 

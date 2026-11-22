@@ -261,15 +261,21 @@ void Scene::updateBoxSelection()
         return;
     }
     m_view->setBoxSelection([this](const std::vector<Handle(SelectMgr_EntityOwner)>& owners) {
-        std::vector<std::shared_ptr<const snapshot::Mesh>> shown;
-        std::vector<const snapshot::Mesh*> meshes;
+        pick::Meshes all;
+        pick::Meshes shown;
         for (const core::Body& body : m_model.bodies) {
+            all.push_back(m_snapshots->body(body)->mesh);
             if (!m_hiddenBodies.contains(body.key())) {
-                shown.push_back(m_snapshots->body(body)->mesh);
-                meshes.push_back(shown.back().get());
+                shown.push_back(all.back());
             }
         }
-        const geometry::ViewBlockers blockers(m_rays->rays(shown), meshes);
+        pick::VisibleRays rays = m_rays->rays(all, shown);
+        std::vector<const snapshot::Mesh*> meshes;
+        meshes.reserve(rays.meshes.size());
+        for (const auto& mesh : rays.meshes) {
+            meshes.push_back(mesh.get());
+        }
+        const geometry::ViewBlockers blockers(rays.scene, meshes, std::move(rays.shown));
         std::vector<TopoDS_Shape> shapes(owners.size());
         for (std::size_t i = 0; i < owners.size(); ++i) {
             const std::optional<Pick> pick = pickOf(owners[i]);
@@ -495,6 +501,59 @@ void Scene::dropBodies()
         m_view->aisContext()->Remove(body.object, false);
     }
     m_bodies.clear();
+    dropErased();
+}
+
+void Scene::dropErased()
+{
+    for (const BodyObject& body : m_erased) {
+        m_view->aisContext()->Remove(body.object, false);
+    }
+    m_erased.clear();
+}
+
+void Scene::displayBody(const BodyObject& body)
+{
+    const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
+    context->Display(body.object, body.displayMode,
+                     m_bodySelection.empty() ? kNotSelectable : AIS_Shape::SelectionMode(m_bodySelection.front()),
+                     false);
+    for (std::size_t i = 1; i < m_bodySelection.size(); ++i) {
+        context->Activate(body.object, AIS_Shape::SelectionMode(m_bodySelection[i]));
+    }
+}
+
+bool Scene::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible)
+{
+    const auto byKey = [](const core::BodyKey& key) {
+        return [&key](const BodyObject& body) { return body.key == key; };
+    };
+    if (visible && std::ranges::any_of(keys, [&](const core::BodyKey& key) {
+            return m_hiddenBodies.contains(key) && std::ranges::none_of(m_erased, byKey(key));
+        })) {
+        return false;
+    }
+    for (const core::BodyKey& key : keys) {
+        if (visible) {
+            if (m_hiddenBodies.erase(key) == 0) {
+                continue;
+            }
+            const auto erased = std::ranges::find_if(m_erased, byKey(key));
+            displayBody(*erased);
+            m_bodies.push_back(std::move(*erased));
+            m_erased.erase(erased);
+        } else if (m_hiddenBodies.insert(key).second) {
+            const auto shown = std::ranges::find_if(m_bodies, byKey(key));
+            if (shown == m_bodies.end()) {
+                continue;
+            }
+            m_view->aisContext()->Erase(shown->object, false);
+            m_erased.push_back(std::move(*shown));
+            m_bodies.erase(shown);
+        }
+    }
+    m_view->redraw();
+    return true;
 }
 
 void Scene::rebuild()
@@ -600,6 +659,7 @@ std::size_t Scene::showBodies()
         dropBodies();
         m_bodySelection = selection;
     }
+    dropErased();
     std::vector<BodyObject> previous = std::exchange(m_bodies, {});
     std::size_t reused = 0;
     for (const core::Body& body : m_model.bodies) {
@@ -616,6 +676,7 @@ std::size_t Scene::showBodies()
                    b.preview == preview;
         });
         if (cached != previous.end()) {
+            cached->key = body.key();
             m_picks.emplace(cached->object.get(), pick);
             m_bodies.push_back(std::move(*cached));
             previous.erase(cached);
@@ -628,13 +689,10 @@ std::size_t Scene::showBodies()
         } else if (preview) {
             object->SetTransparency(kPreviewBodyTransparency);
         }
-        context->Display(object, displayMode,
-                         selection.empty() ? kNotSelectable : AIS_Shape::SelectionMode(selection.front()), false);
-        for (std::size_t i = 1; i < selection.size(); ++i) {
-            context->Activate(object, AIS_Shape::SelectionMode(selection[i]));
-        }
         m_picks.emplace(object.get(), pick);
-        m_bodies.push_back({body.shape, Handle(AIS_InteractiveObject)(object), body.color, body.faceColors, preview});
+        m_bodies.push_back({body.key(), body.shape, Handle(AIS_InteractiveObject)(object), body.color, body.faceColors,
+                            preview, displayMode});
+        displayBody(m_bodies.back());
     }
     for (const BodyObject& stale : previous) {
         context->Remove(stale.object, false);

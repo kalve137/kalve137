@@ -197,7 +197,7 @@ void DesignSession::setBodyVisible(core::BodyKey key, bool visible)
 
 void DesignSession::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible)
 {
-    bool changedAny = false;
+    std::vector<core::BodyKey> changed;
     for (const core::BodyKey& key : keys) {
         if (isBodyVisible(key) == visible) {
             continue;
@@ -207,10 +207,10 @@ void DesignSession::setBodiesVisible(const std::vector<core::BodyKey>& keys, boo
         } else {
             m_hiddenBodies.insert(key);
         }
-        changedAny = true;
+        changed.push_back(key);
     }
-    if (changedAny) {
-        emit visibilityChanged();
+    if (!changed.empty()) {
+        emit bodiesVisibilityChanged(changed, visible);
     }
 }
 

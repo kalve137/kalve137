@@ -18,6 +18,7 @@ struct Hit {
     double distance = 0.0;
     std::uint32_t triangle = 0;
     std::uint32_t face = 0;
+    std::uint32_t mesh = 0;
 };
 
 class RayScene {
@@ -30,7 +31,8 @@ public:
     RayScene(RayScene&&) noexcept;
     RayScene& operator=(RayScene&&) noexcept;
 
-    std::optional<Hit> first(const Point& origin, const Point& direction, double from = 0.0) const;
+    std::optional<Hit> first(const Point& origin, const Point& direction, double from = 0.0,
+                             const std::vector<bool>* shown = nullptr) const;
 
 private:
     struct Tree;

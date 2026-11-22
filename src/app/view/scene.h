@@ -100,6 +100,8 @@ public:
     Scene& operator=(const Scene&) = delete;
 
     void show(const core::Document& document, const core::Model& model, const DesignSession& session);
+    bool setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible);
+    std::size_t displayedBodies() const { return m_bodies.size(); }
     void setPickMode(PickMode mode);
     PickMode pickMode() const { return m_mode; }
     void setEditingSketch(core::FeatureId sketch);
@@ -121,17 +123,21 @@ public:
 
 private:
     struct BodyObject {
+        core::BodyKey key;
         TopoDS_Shape shape;
         Handle(AIS_InteractiveObject) object;
         std::optional<geometry::Color> color;
         geometry::FaceColors faceColors;
         bool preview = false;
+        int displayMode = AIS_Shaded;
     };
 
     void rebuild();
     void updateBoxSelection();
     bool isVisible(const TopoDS_Shape& shape, const geometry::ViewBlockers& blockers) const;
     void dropBodies();
+    void dropErased();
+    void displayBody(const BodyObject& body);
     std::size_t showBodies();
     void showSketches();
     void showHighlights();
@@ -166,6 +172,7 @@ private:
 
     std::vector<Handle(AIS_InteractiveObject)> m_objects;
     std::vector<BodyObject> m_bodies;
+    std::vector<BodyObject> m_erased;
     std::vector<TopAbs_ShapeEnum> m_bodySelection;
     std::map<const AIS_InteractiveObject*, Pick> m_picks;
     std::vector<Pick> m_preselection;

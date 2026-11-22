@@ -3,6 +3,7 @@
 
 #include "pick/scene_rays.h"
 
+#include <algorithm>
 #include <chrono>
 #include <utility>
 
@@ -10,17 +11,34 @@ namespace kalve137::pick {
 
 namespace {
 
-SceneRays::Meshes meshesOf(const snapshot::Scene& scene)
+Meshes ordered(Meshes meshes)
 {
-    SceneRays::Meshes meshes;
-    meshes.reserve(scene.bodies.size());
-    for (const auto& body : scene.bodies) {
+    std::erase(meshes, nullptr);
+    std::ranges::sort(meshes, std::less{}, &std::shared_ptr<const snapshot::Mesh>::get);
+    const auto [first, last] = std::ranges::unique(meshes);
+    meshes.erase(first, last);
+    return meshes;
+}
+
+Meshes meshesOf(const std::vector<std::shared_ptr<const snapshot::Body>>& bodies)
+{
+    Meshes meshes;
+    meshes.reserve(bodies.size());
+    for (const auto& body : bodies) {
         meshes.push_back(body->mesh);
     }
     return meshes;
 }
 
-std::shared_ptr<const RayScene> build(const SceneRays::Meshes& meshes)
+Meshes allMeshesOf(const snapshot::Scene& scene)
+{
+    Meshes meshes = meshesOf(scene.bodies);
+    const Meshes hidden = meshesOf(scene.hidden);
+    meshes.insert(meshes.end(), hidden.begin(), hidden.end());
+    return ordered(std::move(meshes));
+}
+
+std::shared_ptr<const RayScene> build(const Meshes& meshes)
 {
     std::vector<const snapshot::Mesh*> pointers;
     pointers.reserve(meshes.size());
@@ -32,6 +50,14 @@ std::shared_ptr<const RayScene> build(const SceneRays::Meshes& meshes)
 
 } // namespace
 
+std::optional<Hit> VisibleRays::first(const Point& origin, const Point& direction, double from) const
+{
+    if (scene == nullptr) {
+        return std::nullopt;
+    }
+    return scene->first(origin, direction, from, &shown);
+}
+
 bool SceneRays::running() const
 {
     return m_pending && m_pending->rays.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
@@ -39,7 +65,7 @@ bool SceneRays::running() const
 
 void SceneRays::prepare(const snapshot::Scene& scene)
 {
-    Meshes meshes = meshesOf(scene);
+    Meshes meshes = allMeshesOf(scene);
     if (meshes.empty() || (m_rays != nullptr && meshes == m_meshes) || (m_pending && meshes == m_pending->meshes) ||
         running()) {
         return;
@@ -49,12 +75,25 @@ void SceneRays::prepare(const snapshot::Scene& scene)
     ++m_builds;
 }
 
-std::shared_ptr<const RayScene> SceneRays::rays(const snapshot::Scene& scene)
+VisibleRays SceneRays::rays(const snapshot::Scene& scene)
 {
-    return rays(meshesOf(scene));
+    return rays(allMeshesOf(scene), meshesOf(scene.bodies));
 }
 
-std::shared_ptr<const RayScene> SceneRays::rays(const Meshes& meshes)
+VisibleRays SceneRays::rays(const Meshes& meshes, const Meshes& visible)
+{
+    VisibleRays result{.scene = nullptr, .meshes = ordered(meshes), .shown = {}};
+    result.scene = sceneOf(result.meshes);
+    const Meshes shown = ordered(visible);
+    result.shown.reserve(result.meshes.size());
+    for (const auto& mesh : result.meshes) {
+        result.shown.push_back(
+            std::ranges::binary_search(shown, mesh.get(), std::less{}, &std::shared_ptr<const snapshot::Mesh>::get));
+    }
+    return result;
+}
+
+std::shared_ptr<const RayScene> SceneRays::sceneOf(const Meshes& meshes)
 {
     if (meshes.empty()) {
         return nullptr;

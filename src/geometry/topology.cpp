@@ -411,15 +411,18 @@ std::vector<gp_Pnt> samplePoints(const TopoDS_Shape& shape)
 struct ViewBlockers::Faces {
     std::shared_ptr<const pick::RayScene> scene;
     std::vector<double> margins;
+    std::vector<bool> shown;
 };
 
 ViewBlockers::ViewBlockers(const std::vector<const snapshot::Mesh*>& meshes)
     : ViewBlockers(std::make_shared<const pick::RayScene>(meshes), meshes)
 {}
 
-ViewBlockers::ViewBlockers(std::shared_ptr<const pick::RayScene> rays, const std::vector<const snapshot::Mesh*>& meshes)
+ViewBlockers::ViewBlockers(std::shared_ptr<const pick::RayScene> rays, const std::vector<const snapshot::Mesh*>& meshes,
+                           std::vector<bool> shown)
     : m_faces(std::make_unique<Faces>())
 {
+    m_faces->shown = std::move(shown);
     for (const snapshot::Mesh* mesh : meshes) {
         for (std::uint32_t face = 0; face < mesh->faceCount; ++face) {
             const double deflection = face < mesh->faceDeflections.size() ? mesh->faceDeflections[face] : 0.0;
@@ -439,7 +442,8 @@ bool ViewBlockers::blocks(const gp_Pnt& point, const gp_Dir& towardViewer) const
         return false;
     }
     double from = 0.0;
-    while (const std::optional<pick::Hit> hit = m_faces->scene->first(origin, direction, from)) {
+    const std::vector<bool>* shown = m_faces->shown.empty() ? nullptr : &m_faces->shown;
+    while (const std::optional<pick::Hit> hit = m_faces->scene->first(origin, direction, from, shown)) {
         if (hit->distance > m_faces->margins[hit->face]) {
             return true;
         }

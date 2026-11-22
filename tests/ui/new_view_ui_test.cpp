@@ -10,6 +10,11 @@
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_navigation.h"
 #include "camera/camera.h"
+#include "core/document.h"
+#include "core/feature.h"
+#include "geometry/exchange.h"
+#include "geometry/shapes.h"
+#include "pick/scene_rays.h"
 #include "render/chunk_set.h"
 #include "render/cpu_backend.h"
 #include "render/draw_list.h"
@@ -28,12 +33,18 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <AIS_InteractiveContext.hxx>
+#include <AIS_InteractiveObject.hxx>
+#include <TopLoc_Location.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -416,6 +427,67 @@ TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
     expectShown(*canvas, {}, "the theme and the pixel ratio back");
     EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, themed.pixelRatio);
     ui->save("staleness");
+}
+
+std::size_t displayedObjects(viewer::OcctViewWidget& view)
+{
+    NCollection_List<Handle(AIS_InteractiveObject)> shown;
+    view.aisContext()->DisplayedObjects(shown);
+    return static_cast<std::size_t>(shown.Size());
+}
+
+TEST_F(NewViewTest, HideAndShowRewriteOnlyThePalette)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    constexpr double kSide = 20.0;
+    constexpr double kGap = 40.0;
+    std::vector<geometry::StepPart> parts;
+    for (int i = 0; i < 2; ++i) {
+        geometry::StepPart part;
+        part.name = "Box " + std::to_string(i);
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(kGap * i, 0.0, 0.0));
+        part.shape = geometry::makeBox(kSide, kSide, kSide).Moved(TopLoc_Location(shift));
+        parts.push_back(std::move(part));
+    }
+    core::Document document;
+    document.add(core::ImportFeature{"boxes.step", std::move(parts)});
+    app::DesignSession& session = ui->session();
+    session.reset(std::move(document), {});
+    ui->window().cameraCommands()->fit(app::CameraCommands::Move::Jump);
+    ui->settle(kSettleMs);
+    ASSERT_EQ(session.model().bodies.size(), 2U);
+    const core::BodyKey second = session.model().bodies[1].key();
+    const auto bodies = canvas->scene().bodies;
+    const QImage before = grabbed(*canvas);
+    session.rays().rays(canvas->scene());
+    const std::size_t rayBuilds = session.rays().builds();
+    const std::uint64_t meshBuilds = canvas->chunks().meshBuilds();
+    viewer::OcctViewWidget& old = *ui->window().oldView();
+    const std::size_t displayed = displayedObjects(old);
+    const pick::Point above{kGap + kSide / 2.0, kSide / 2.0, kGap * 10.0};
+    const pick::Point down{0.0, 0.0, -1.0};
+
+    session.setBodyVisible(second, false);
+    EXPECT_EQ(canvas->scene().bodies.size(), 1U);
+    EXPECT_EQ(canvas->scene().hidden.size(), 1U);
+    EXPECT_EQ(canvas->chunks().meshBuilds(), meshBuilds) << "a hide rewrites palettes only";
+    expectShown(*canvas, before, "a hide");
+    EXPECT_FALSE(session.rays().rays(canvas->scene()).first(above, down)) << "a hidden body takes no ray";
+    EXPECT_EQ(session.rays().builds(), rayBuilds) << "a hide keeps the ray scene";
+    EXPECT_EQ(displayedObjects(old), displayed - 1) << "the old view erases only the hidden body";
+
+    session.setBodyVisible(second, true);
+    EXPECT_EQ(canvas->scene().bodies, bodies) << "a show puts the body back in model order";
+    EXPECT_TRUE(canvas->scene().hidden.empty());
+    EXPECT_EQ(canvas->chunks().meshBuilds(), meshBuilds);
+    EXPECT_EQ(differing(grabbed(*canvas), before), 0U) << "a hide and a show leave the same frame";
+    EXPECT_TRUE(session.rays().rays(canvas->scene()).first(above, down));
+    EXPECT_EQ(session.rays().builds(), rayBuilds);
+    EXPECT_EQ(displayedObjects(old), displayed);
 }
 
 std::size_t backFaceLeakAllowed(const render::RhiView& view, const QImage& image)

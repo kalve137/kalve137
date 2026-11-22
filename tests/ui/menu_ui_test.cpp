@@ -8,6 +8,9 @@
 #include "app/shell/main_window.h"
 #include "viewer/occt_view_widget.h"
 
+#include <AIS_InteractiveContext.hxx>
+#include <AIS_InteractiveObject.hxx>
+
 #include <QAction>
 #include <QColor>
 #include <QTreeWidget>
@@ -152,11 +155,19 @@ TEST_F(MenuTest, TimelineHoverHighlightsTheBody)
 
 TEST_F(MenuTest, BrowserHidesAndShowsABody)
 {
+    const auto displayed = [this] {
+        NCollection_List<Handle(AIS_InteractiveObject)> shown;
+        ui->window().oldView()->aisContext()->DisplayedObjects(shown);
+        return shown.Size();
+    };
+    const auto before = displayed();
     ui->contextMenu(ui->browserItem("Body1"), "Hide");
     EXPECT_FALSE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
+    EXPECT_EQ(displayed(), before - 1) << "the old view erases only the body";
     ui->save("hidden");
     ui->contextMenu(ui->browserItem("Body1"), "Show");
     EXPECT_TRUE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
+    EXPECT_EQ(displayed(), before);
 }
 
 TEST_F(MenuTest, BrowserEditsTheSketch)
