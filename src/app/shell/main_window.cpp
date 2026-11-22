@@ -339,6 +339,7 @@ void MainWindow::createActions()
         {SketchEditor::Tool::Parallel, "parallel", tr("Parallel"), {}},
         {SketchEditor::Tool::Perpendicular, "perpendicular", tr("Perpendicular"), {}},
         {SketchEditor::Tool::Tangent, "tangent", tr("Tangent"), {}},
+        {SketchEditor::Tool::Concentric, "concentric", tr("Concentric"), {}},
         {SketchEditor::Tool::Equal, "equal", tr("Equal"), {}},
         {SketchEditor::Tool::Midpoint, "midpoint", tr("Midpoint"), {}},
         {SketchEditor::Tool::Symmetric, "symmetric", tr("Symmetric"), {}},
@@ -538,6 +539,7 @@ void MainWindow::createToolBars()
     addConstraint(SketchEditor::Tool::Parallel);
     addConstraint(SketchEditor::Tool::Perpendicular);
     addConstraint(SketchEditor::Tool::Tangent);
+    addConstraint(SketchEditor::Tool::Concentric);
     addConstraint(SketchEditor::Tool::Equal);
     addConstraint(SketchEditor::Tool::Midpoint);
     addConstraint(SketchEditor::Tool::Symmetric);

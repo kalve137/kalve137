@@ -59,6 +59,7 @@ public:
         Parallel,
         Perpendicular,
         Tangent,
+        Concentric,
         Equal,
         Midpoint,
         Symmetric,

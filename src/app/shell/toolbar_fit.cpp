@@ -4,6 +4,7 @@
 #include "app/shell/toolbar_fit.h"
 
 #include <QEvent>
+#include <QStyle>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -51,6 +52,11 @@ void ToolBarFit::setCompact(bool compact)
             button->setIconSize(iconSize);
             button->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextUnderIcon);
         }
+    }
+    m_bar->setProperty("compact", compact);
+    for (QToolButton* button : m_bar->findChildren<QToolButton*>()) {
+        button->style()->unpolish(button);
+        button->style()->polish(button);
     }
 }
 

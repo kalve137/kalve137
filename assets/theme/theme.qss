@@ -75,6 +75,9 @@ QToolButton {
     border: 1px solid transparent;
     border-radius: @radiusControl;
 }
+QToolBar[compact="true"] QToolButton {
+    padding: @spaceS;
+}
 QToolButton:hover {
     background: @raised;
 }
@@ -89,7 +92,8 @@ QToolButton:checked {
 QToolButton:disabled {
     color: @textDisabled;
 }
-QToolButton[popupMode="1"] {
+QToolButton[popupMode="1"],
+QToolBar[compact="true"] QToolButton[popupMode="1"] {
     padding-right: 18px;
 }
 QToolButton::menu-button {
