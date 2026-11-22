@@ -7,9 +7,11 @@
 
 #include <QSize>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -49,14 +51,20 @@ private:
     template <typename T>
     using Owned = std::unique_ptr<T, Release>;
 
+    struct Palette {
+        Owned<QRhiTexture> texture;
+        Owned<QRhiShaderResourceBindings> bindings;
+    };
     struct Gpu {
         std::uint64_t meshRevision = 0;
         std::uint64_t paletteRevision = 0;
         Owned<QRhiBuffer> vertices;
         Owned<QRhiBuffer> indices;
-        Owned<QRhiTexture> palette;
-        Owned<QRhiShaderResourceBindings> bindings;
+        Owned<QRhiBuffer> segments;
+        Palette faces;
+        Palette edges;
         std::uint32_t indexCount = 0;
+        std::uint32_t segmentCount = 0;
         bool used = false;
     };
     struct Call {
@@ -66,20 +74,25 @@ private:
 
     bool createShared();
     Owned<QRhiShaderResourceBindings> bindingsFor(QRhiTexture* palette) const;
-    Owned<QRhiGraphicsPipeline> pipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull) const;
+    Owned<QRhiGraphicsPipeline> facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull, bool biased) const;
+    Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const;
     bool refresh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
     bool refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
-    bool refreshPalette(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates);
+    bool refreshPalette(std::span<const Entry> entries, Palette& palette, QRhiResourceUpdateBatch* updates);
 
     QRhi* m_rhi;
     Owned<QRhiBuffer> m_uniforms;
+    Owned<QRhiBuffer> m_corners;
     Owned<QRhiSampler> m_sampler;
     Owned<QRhiTexture> m_layoutTexture;
     Owned<QRhiShaderResourceBindings> m_layout;
-    Owned<QRhiGraphicsPipeline> m_culled;
-    Owned<QRhiGraphicsPipeline> m_unculled;
+    std::array<Owned<QRhiGraphicsPipeline>, 4> m_faces;
+    Owned<QRhiGraphicsPipeline> m_edges;
     std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
+    std::vector<const Gpu*> m_edgeCalls;
+    bool m_biased = false;
+    bool m_cornersUploaded = false;
     std::uint64_t m_meshUploads = 0;
     std::uint64_t m_paletteUploads = 0;
 };

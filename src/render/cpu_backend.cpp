@@ -3,10 +3,14 @@
 
 #include "render/cpu_backend.h"
 
+#include "render/edge_quad.h"
+#include "render/style.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <thread>
 
 namespace kalve137::render {
@@ -20,6 +24,7 @@ constexpr std::int64_t kSubpixel = 1 << kSubpixelBits;
 constexpr double kGuard = 1 << 21;
 constexpr float kByte = 255.0F;
 constexpr std::uint32_t kOpaque = 0xFF000000U;
+constexpr float kDepthUnit = 2.0F / static_cast<float>(1 << 24);
 
 std::uint32_t channel(float value)
 {
@@ -93,7 +98,6 @@ void CpuBackend::draw(const DrawList& list, int supersample, Image& image)
 {
     const Frame& frame = list.frame;
     m_frame = frame;
-    m_lit = list.lit;
     m_width = std::max(0, frame.width);
     m_height = std::max(0, frame.height);
     image.width = m_width;
@@ -129,6 +133,12 @@ void CpuBackend::project(const DrawList& list)
     m_vertices.clear();
     m_triangles.clear();
     for (const Chunk& item : list.chunks) {
+        if (list.edges) {
+            projectEdges(list, item);
+        }
+        if (!list.faces) {
+            continue;
+        }
         const std::span<const Vertex> vertices = item.vertices;
         const auto offset = static_cast<std::uint32_t>(m_vertices.size());
         m_vertices.resize(m_vertices.size() + vertices.size());
@@ -172,8 +182,66 @@ void CpuBackend::project(const DrawList& list)
                                    .c = offset + indices[i + 2],
                                    .color = color,
                                    .linear = linearOf(color),
-                                   .cull = cull});
+                                   .cull = cull,
+                                   .flat = !list.lit,
+                                   .biased = list.edges});
         }
+    }
+}
+
+void CpuBackend::projectEdges(const DrawList& list, const Chunk& chunk)
+{
+    const std::array<float, 16>& m = list.frame.viewProjection;
+    const double width = static_cast<double>(m_width) * m_supersample;
+    const double height = static_cast<double>(m_height) * m_supersample;
+    const double edgeWidth = list.edgeWidth * list.pixelRatio * m_supersample;
+    const VertexColor color = vertexColor(list.edgeColor);
+    const auto clipOf = [&m](const Position& p) {
+        Clip clip{};
+        for (std::size_t r = 0; r < clip.size(); ++r) {
+            clip[r] = (static_cast<double>(m[r]) * p[0]) + (static_cast<double>(m[r + 4]) * p[1]) +
+                      (static_cast<double>(m[r + 8]) * p[2]) + static_cast<double>(m[r + 12]);
+        }
+        return clip;
+    };
+    for (const Segment& segment : chunk.segments) {
+        const std::uint32_t entry = entryOf(segment);
+        if (entry >= chunk.edgePalette.size() || (chunk.edgePalette[entry][3] & kEntryVisible) == 0) {
+            continue;
+        }
+        const Clip start = clipOf(segment.start);
+        const Clip end = clipOf(segment.end);
+        const auto first = static_cast<std::uint32_t>(m_vertices.size());
+        bool drawn = true;
+        for (int corner = 0; corner < kEdgeCorners && drawn; ++corner) {
+            const std::optional<Clip> at = expandEdge(start, end, corner, edgeWidth, width, height);
+            drawn = at.has_value() && (*at)[3] > 0.0;
+            if (drawn) {
+                const Clip& c = *at;
+                m_vertices.push_back({.x = fixed((c[0] / c[3] + 1.0) * 0.5 * width),
+                                      .y = fixed((1.0 - c[1] / c[3]) * 0.5 * height),
+                                      .z = static_cast<float>(c[2] / c[3]),
+                                      .normal = {},
+                                      .position = {},
+                                      .valid = true});
+            }
+        }
+        if (!drawn) {
+            m_vertices.resize(first);
+            continue;
+        }
+        const Triangle quad{
+            .color = color, .linear = linearOf(color), .cull = false, .flat = true, .biased = false, .edge = true};
+        Triangle lower = quad;
+        lower.a = first;
+        lower.b = first + 1;
+        lower.c = first + 2;
+        Triangle upper = quad;
+        upper.a = first + 1;
+        upper.b = first + 3;
+        upper.c = first + 2;
+        m_triangles.push_back(lower);
+        m_triangles.push_back(upper);
     }
 }
 
@@ -306,6 +374,13 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
         const Position dp1 = difference(b.position, a.position, inverse);
         const Position dp2 = difference(c.position, a.position, inverse);
         const std::uint32_t flat = pack(triangle.color[0], triangle.color[1], triangle.color[2]);
+        float bias = 0.0F;
+        if (triangle.biased) {
+            const float slopeX = std::abs((dz1 * static_cast<float>(stepX1)) + (dz2 * static_cast<float>(stepX2)));
+            const float slopeY = std::abs((dz1 * static_cast<float>(stepY1)) + (dz2 * static_cast<float>(stepY2)));
+            bias = (kFaceBiasSlope * std::max(slopeX, slopeY) * static_cast<float>(supersample)) +
+                   (static_cast<float>(kFaceBiasUnits) * kDepthUnit);
+        }
         for (int sy = minY; sy <= maxY; ++sy) {
             std::int64_t e0 = row0;
             std::int64_t e1 = row1;
@@ -317,9 +392,10 @@ void CpuBackend::shadeTile(int tile, int worker, Image& image)
                     const auto f1 = static_cast<float>(e1);
                     const auto f2 = static_cast<float>(e2);
                     const float z = a.z + (dz1 * f1) + (dz2 * f2);
-                    if (z < depth[index] && z >= -1.0F && z <= 1.0F) {
-                        depth[index] = z;
-                        if (!m_lit) {
+                    const float biased = z + bias;
+                    if ((triangle.edge ? biased <= depth[index] : biased < depth[index]) && z >= -1.0F && z <= 1.0F) {
+                        depth[index] = biased;
+                        if (triangle.flat) {
                             color[index] = flat;
                         } else {
                             const Normal normal = unit(interpolated(a.normal, dn1, dn2, f1, f2));

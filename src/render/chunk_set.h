@@ -37,6 +37,7 @@ public:
 
     std::size_t chunkCount() const { return m_chunks.size(); }
     std::size_t triangleCount() const;
+    std::size_t segmentCount() const;
     std::uint64_t meshBuilds() const { return m_meshBuilds; }
     std::uint64_t paletteBuilds() const { return m_paletteBuilds; }
 
@@ -50,6 +51,9 @@ private:
         std::uint32_t firstFace = 0;
         std::uint32_t firstEntry = 0;
         std::uint32_t entryCount = 0;
+        std::uint32_t firstEdge = 0;
+        std::uint32_t firstEdgeEntry = 0;
+        std::uint32_t edgeEntryCount = 0;
         std::size_t vertexCount = 0;
     };
     struct Data {
@@ -61,8 +65,11 @@ private:
         std::vector<Vertex> vertices;
         std::vector<std::uint32_t> indices;
         std::vector<Entry> palette;
+        std::vector<Segment> segments;
+        std::vector<Entry> edgePalette;
         std::size_t vertexCount = 0;
         std::size_t entryCount = 0;
+        std::size_t edgeEntryCount = 0;
         bool meshDirty = false;
         bool paletteDirty = false;
     };
@@ -74,6 +81,7 @@ private:
     std::map<Key, Shown> shownOf(const snapshot::Scene& scene) const;
     void place(const Key& key, const Shown& shown);
     void buildMesh(Data& chunk);
+    void addSegments(Data& chunk, const Slot& slot) const;
     void buildPalette(Data& chunk);
     Entry colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const;
 
@@ -83,8 +91,11 @@ private:
     snapshot::Point m_origin{};
     bool m_lit = true;
     bool m_drawn = true;
+    bool m_edges = false;
     bool m_cullClosed = true;
     double m_pixelRatio = 1.0;
+    double m_edgeWidth = 0.0;
+    snapshot::Color m_edgeColor;
     snapshot::Color m_fallback;
     snapshot::Color m_fill;
     std::uint64_t m_nextId = 1;

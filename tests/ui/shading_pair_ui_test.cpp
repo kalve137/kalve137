@@ -5,28 +5,24 @@
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
 #include "app/theme/theme.h"
-#include "app/view/camera_commands.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
 #include "geometry/shapes.h"
+#include "pair_shots.h"
 #include "render/rhi/rhi_view.h"
 #include "scenario.h"
 #include "snapshot/body.h"
 #include "ui_driver.h"
 #include "viewer/occt_view_widget.h"
 
-#include <QAction>
 #include <QColor>
-#include <QCoreApplication>
 #include <QImage>
 #include <QString>
-#include <QTest>
 
 #include <gp_Pnt.hxx>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -45,9 +41,6 @@
 namespace kalve137::uitest {
 namespace {
 
-constexpr QSize kWindowSize{800, 600};
-constexpr int kReadyMs = 10000;
-constexpr int kSettleMs = 300;
 constexpr int kFaceTolerance = 15;
 constexpr int kBackgroundTolerance = 2;
 constexpr int kInset = 2;
@@ -60,114 +53,6 @@ struct Case {
     std::function<void(app::MainWindow&)> load;
     bool measureFaces = true;
 };
-
-struct Shots {
-    QImage old;
-    QImage fresh;
-    camera::Camera camera;
-    camera::Viewport viewport;
-    snapshot::Scene scene;
-    QColor background;
-};
-
-std::filesystem::path shotFolder()
-{
-    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
-    std::filesystem::path root =
-        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
-                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
-    return root / "ShadingPairTest";
-}
-
-std::unique_ptr<app::MainWindow> showWindow(app::ViewKind view)
-{
-    auto window = std::make_unique<app::MainWindow>(app::StartupOptions{.view = view, .graphicsApi = std::nullopt});
-    window->setAttribute(Qt::WA_DontShowOnScreen);
-    window->resize(kWindowSize);
-    window->show();
-    const bool settled = QTest::qWaitFor(
-        [&] {
-            if (view == app::ViewKind::New) {
-                return window->newView() == nullptr || window->newView()->isReady() || window->newView()->hasFailed();
-            }
-            return window->oldView()->isReady();
-        },
-        kReadyMs);
-    EXPECT_TRUE(settled) << "The window's view did not start";
-    return window;
-}
-
-QAction* actionNamed(app::MainWindow& window, const QString& text)
-{
-    for (QAction* action : window.findChildren<QAction*>()) {
-        if (action->text().remove('&') == text) {
-            return action;
-        }
-    }
-    ADD_FAILURE() << "No action " << text.toStdString();
-    return nullptr;
-}
-
-void showOnlyBodies(app::MainWindow& window)
-{
-    if (QAction* shaded = actionNamed(window, QStringLiteral("Shaded"))) {
-        shaded->trigger();
-    }
-    if (QAction* grid = actionNamed(window, QStringLiteral("Show Grid")); grid != nullptr && grid->isChecked()) {
-        grid->trigger();
-    }
-}
-
-int gapOf(QRgb a, QRgb b)
-{
-    return std::max({std::abs(qRed(a) - qRed(b)), std::abs(qGreen(a) - qGreen(b)), std::abs(qBlue(a) - qBlue(b))});
-}
-
-QRgb median(const std::vector<QRgb>& colors)
-{
-    std::array<std::vector<int>, 3> channels;
-    for (const QRgb color : colors) {
-        channels[0].push_back(qRed(color));
-        channels[1].push_back(qGreen(color));
-        channels[2].push_back(qBlue(color));
-    }
-    std::array<int, 3> middle{};
-    for (std::size_t i = 0; i < 3; ++i) {
-        std::ranges::sort(channels[i]);
-        middle[i] = channels[i][channels[i].size() / 2];
-    }
-    return qRgb(middle[0], middle[1], middle[2]);
-}
-
-std::string hex(QRgb color)
-{
-    return QColor(color).name().toUpper().toStdString();
-}
-
-camera::Vec3 toVec(const snapshot::Point& point)
-{
-    return {point[0], point[1], point[2]};
-}
-
-Shots grab(app::MainWindow& oldWindow, app::MainWindow& newWindow)
-{
-    render::RhiView& canvas = *newWindow.newView();
-    newWindow.cameraCommands()->home(app::CameraCommands::Move::Jump);
-    QTest::qWait(kSettleMs);
-    const camera::Camera camera = canvas.camera();
-    const camera::Viewport viewport = canvas.viewport();
-    oldWindow.oldView()->setSyncedCamera(camera, viewport);
-    QTest::qWait(kSettleMs);
-    const snapshot::Color& background = canvas.viewportStyle().background;
-    return {
-        .old = oldWindow.oldView()->grabFramebuffer().convertToFormat(QImage::Format_RGB32),
-        .fresh = canvas.grabFramebuffer().convertToFormat(QImage::Format_RGB32),
-        .camera = camera,
-        .viewport = viewport,
-        .scene = canvas.scene(),
-        .background = QColor::fromRgbF(background.red, background.green, background.blue),
-    };
-}
 
 struct FaceSamples {
     std::vector<QPoint> pixels;
@@ -281,7 +166,7 @@ TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
     if (app::startupFromEnvironment().view != app::ViewKind::New) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
-    const std::filesystem::path folder = shotFolder();
+    const std::filesystem::path folder = pairFolder("ShadingPairTest");
     std::filesystem::create_directories(folder);
     std::ofstream faces(folder / "shading-pairs.tsv");
     faces << "case\ttheme\tbody\tface\told\tnew\tgap\n";
@@ -310,25 +195,24 @@ TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
          .measureFaces = false},
     };
     for (const Case& sample : cases) {
-        const std::unique_ptr<app::MainWindow> newWindow = showWindow(app::ViewKind::New);
+        const std::unique_ptr<app::MainWindow> newWindow = showPairWindow(app::ViewKind::New);
         if (newWindow->newView() == nullptr || !newWindow->newView()->isReady()) {
             GTEST_SKIP() << "The new view did not start";
         }
-        const std::unique_ptr<app::MainWindow> oldWindow = showWindow(app::ViewKind::Old);
+        const std::unique_ptr<app::MainWindow> oldWindow = showPairWindow(app::ViewKind::Old);
         ASSERT_TRUE(oldWindow->oldView()->isReady());
         for (app::MainWindow* window : {oldWindow.get(), newWindow.get()}) {
-            showOnlyBodies(*window);
+            showOnlyBodies(*window, QStringLiteral("Shaded"));
             sample.load(*window);
         }
         for (const auto& [scheme, theme] :
              {std::pair{app::theme::Scheme::Dark, "dark"}, std::pair{app::theme::Scheme::Light, "light"}}) {
             app::theme::setScheme(scheme);
-            const Shots shots = grab(*oldWindow, *newWindow);
+            const Shots shots = grabPair(*oldWindow, *newWindow, homeCamera);
             ASSERT_EQ(shots.old.size(), shots.fresh.size()) << sample.name;
             ASSERT_EQ(shots.fresh.width(), shots.viewport.width) << sample.name;
             const std::string stem = std::format("{}-{}", sample.name, theme);
-            shots.old.save(QString::fromStdU16String((folder / (stem + "-old.png")).u16string()));
-            shots.fresh.save(QString::fromStdU16String((folder / (stem + "-new.png")).u16string()));
+            savePair(shots, folder, stem);
 
             const Share share = bodyShare(shots);
             EXPECT_GT(share.body, 1000U) << stem << " shows the body";

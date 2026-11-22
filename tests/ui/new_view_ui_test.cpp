@@ -327,6 +327,39 @@ camera::Camera obliqueAt(const snapshot::Point& center, double scale)
     return camera;
 }
 
+TEST_F(NewViewTest, DrawsEdgesLikeTheCpuBackend)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    const auto closed = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
+    const auto open = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({1020.0, -1010.0, -10.0}, {1040.0, -990.0, 5.0}, false), {}, 1));
+    canvas->setScene({.bodies = {closed, open}, .origin = origin, .hidden = {}});
+    canvas->setCamera(obliqueAt({1015.0, -1000.0, 0.0}, 70.0));
+    const render::ViewportStyle original = canvas->viewportStyle();
+    for (const render::VisualStyle visual :
+         {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Wireframe, render::VisualStyle::VisibleEdges}) {
+        render::ViewportStyle style = original;
+        style.visualStyle = visual;
+        canvas->setViewportStyle(style);
+        const QImage gpu = grabbed(*canvas);
+        const render::Image cpu = cpuOf(*canvas);
+        const Comparison comparison = compare(gpu, cpu);
+        ASSERT_TRUE(comparison.sameSize);
+        const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+        EXPECT_GT(comparison.body, pixels / 500) << static_cast<int>(visual);
+        EXPECT_LT(comparison.different, pixels / 200)
+            << static_cast<int>(visual) << ": " << comparison.different << " of " << comparison.body
+            << " drawn pixels differ by more than " << kBackendTolerance;
+        ui->save("edges " + std::to_string(static_cast<int>(visual)));
+    }
+    canvas->setViewportStyle(original);
+}
+
 TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
 {
     render::RhiView* canvas = ui->newView();
@@ -426,8 +459,11 @@ TEST_F(NewViewTest, CullingClosedBodiesChangesNoPixel)
     const camera::Camera camera = obliqueAt({20.0, 0.0, 0.0}, 90.0);
     canvas->setCamera(camera);
     canvas->setScene(scene);
-    const render::ViewportStyle style = canvas->viewportStyle();
-    ASSERT_TRUE(style.cullClosed);
+    const render::ViewportStyle original = canvas->viewportStyle();
+    ASSERT_TRUE(original.cullClosed);
+    render::ViewportStyle style = original;
+    style.visualStyle = render::VisualStyle::Shaded;
+    canvas->setViewportStyle(style);
     expectShown(*canvas, {}, "closed bodies culled");
 
     const QImage culled = grabbed(*canvas);
@@ -435,7 +471,7 @@ TEST_F(NewViewTest, CullingClosedBodiesChangesNoPixel)
     unculled.cullClosed = false;
     canvas->setViewportStyle(unculled);
     const QImage all = grabbed(*canvas);
-    canvas->setViewportStyle(style);
+    canvas->setViewportStyle(original);
     EXPECT_LE(differing(culled, all), backFaceLeakAllowed(*canvas, culled))
         << "the GPU winds front faces counterclockwise like the CPU backend";
 

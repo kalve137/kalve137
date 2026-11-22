@@ -47,6 +47,9 @@ private:
         VertexColor color{};
         Linear linear{};
         bool cull = false;
+        bool flat = false;
+        bool biased = false;
+        bool edge = false;
     };
     struct TileBuffers {
         std::vector<std::uint32_t> color;
@@ -60,12 +63,12 @@ private:
     };
 
     void project(const DrawList& list);
+    void projectEdges(const DrawList& list, const Chunk& chunk);
     void bin();
     void shadeTile(int tile, int worker, Image& image);
 
     ThreadPool m_pool;
     Frame m_frame;
-    bool m_lit = true;
     int m_supersample = 1;
     int m_width = 0;
     int m_height = 0;

@@ -10,6 +10,8 @@ add_library(kalve137_render STATIC
     cpu_backend.h
     draw_list.cpp
     draw_list.h
+    edge_quad.cpp
+    edge_quad.h
     graphics_api.h
     positions.h
     style.h

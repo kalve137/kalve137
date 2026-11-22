@@ -47,10 +47,19 @@ struct Vertex {
 };
 static_assert(sizeof(Vertex) == 16);
 
+struct Segment {
+    Position start{};
+    Position end{};
+    std::array<std::uint8_t, 4> packed{};
+};
+static_assert(sizeof(Segment) == 28);
+
 using Entry = std::array<std::uint8_t, 4>;
 inline constexpr std::uint8_t kEntryVisible = 1;
 inline constexpr std::uint32_t kPaletteWidth = 256;
 inline constexpr std::uint32_t kPaletteEntries = 1U << 16;
+
+enum class EdgeState : std::uint8_t { Normal, Hovered, Selected };
 
 struct Chunk {
     std::uint64_t id = 0;
@@ -60,6 +69,8 @@ struct Chunk {
     std::span<const Vertex> vertices;
     std::span<const std::uint32_t> indices;
     std::span<const Entry> palette;
+    std::span<const Segment> segments;
+    std::span<const Entry> edgePalette;
 };
 
 struct DrawList {
@@ -68,7 +79,14 @@ struct DrawList {
     bool cullClosed = true;
     double pixelRatio = 1.0;
     std::vector<Chunk> chunks;
+    bool faces = true;
+    bool edges = false;
+    snapshot::Color edgeColor{};
+    double edgeWidth = 0.0;
 };
+
+Segment packSegment(const Position& start, const Position& end, std::uint32_t entry);
+std::uint32_t entryOf(const Segment& segment);
 
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,
                 const snapshot::Color& background, const Look& look = {});

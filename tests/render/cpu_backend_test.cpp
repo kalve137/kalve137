@@ -12,11 +12,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <numbers>
 #include <utility>
 #include <vector>
 
@@ -207,6 +209,217 @@ TEST(CpuBackend, ShadesWithTheLookFormula)
     const std::uint32_t shadow = image.at(static_cast<int>(outer.x), static_cast<int>(outer.y));
     EXPECT_LT(channelOf(shadow, 16), channelOf(pixel, 16)) << "the side away from the light is darker";
     EXPECT_EQ(image.at(130, 130), backgroundOf(backend, frame)) << "the hole shows the canvas";
+}
+
+constexpr snapshot::Color kEdge{1.0F, 0.0F, 1.0F};
+constexpr snapshot::Color kWire{0.0F, 1.0F, 1.0F};
+
+ViewportStyle edgedStyle(VisualStyle visual)
+{
+    ViewportStyle style = kShaded;
+    style.bodyEdge = kEdge;
+    style.wire = kWire;
+    style.visualStyle = visual;
+    return style;
+}
+
+std::uint32_t pixelOf(const snapshot::Color& color)
+{
+    const VertexColor encoded = vertexColor(color);
+    return 0xFF000000U | (std::uint32_t{encoded[0]} << 16) | (std::uint32_t{encoded[1]} << 8) | encoded[2];
+}
+
+camera::Camera orbitingAt(const snapshot::Point& center, double degrees)
+{
+    const double angle = degrees * std::numbers::pi / 180.0;
+    camera::Camera camera;
+    EXPECT_TRUE(camera.setEyeAndCenter(
+        {center[0] + (360.0 * std::cos(angle)), center[1] + (360.0 * std::sin(angle)), center[2] + 250.0},
+        {center[0], center[1], center[2]}));
+    EXPECT_TRUE(camera.setUp({0.0, 0.0, 1.0}));
+    EXPECT_TRUE(camera.setScale(30.0));
+    return camera;
+}
+
+camera::ScreenPoint screenOf(const Frame& frame, const snapshot::Point& origin, const snapshot::Point& point)
+{
+    const Position p = relativePosition(point, origin);
+    const std::array<float, 16>& m = frame.viewProjection;
+    std::array<double, 4> clip{};
+    for (std::size_t r = 0; r < clip.size(); ++r) {
+        clip.at(r) = (static_cast<double>(m.at(r)) * p[0]) + (static_cast<double>(m.at(r + 4)) * p[1]) +
+                     (static_cast<double>(m.at(r + 8)) * p[2]) + static_cast<double>(m.at(r + 12));
+    }
+    return {(clip[0] / clip[3] + 1.0) * 0.5 * frame.width, (1.0 - (clip[1] / clip[3])) * 0.5 * frame.height};
+}
+
+std::uint32_t pixelAt(const Image& image, const Frame& frame, const snapshot::Point& origin,
+                      const snapshot::Point& point, double offsetX = 0.0, double offsetY = 0.0)
+{
+    const camera::ScreenPoint screen = screenOf(frame, origin, point);
+    return image.at(static_cast<int>(std::floor(screen.x + offsetX)), static_cast<int>(std::floor(screen.y + offsetY)));
+}
+
+bool edgeNear(const Image& image, const Frame& frame, const snapshot::Point& origin, const snapshot::Point& point,
+              std::uint32_t edge)
+{
+    for (const double dy : {-1.0, 0.0, 1.0}) {
+        for (const double dx : {-1.0, 0.0, 1.0}) {
+            if (pixelAt(image, frame, origin, point, dx, dy) == edge) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+snapshot::Point along(const snapshot::Point& from, const snapshot::Point& to, double t)
+{
+    return {from[0] + ((to[0] - from[0]) * t), from[1] + ((to[1] - from[1]) * t), from[2] + ((to[2] - from[2]) * t)};
+}
+
+const std::vector<std::pair<snapshot::Point, snapshot::Point>> kFrontEdges{{{10.0, 0.0, 0.0}, {10.0, 0.0, 10.0}},
+                                                                           {{10.0, 0.0, 10.0}, {10.0, 10.0, 10.0}},
+                                                                           {{0.0, 0.0, 10.0}, {10.0, 0.0, 10.0}}};
+const std::vector<std::pair<snapshot::Point, snapshot::Point>> kHiddenEdges{
+    {{0.0, 10.0, 0.0}, {10.0, 10.0, 0.0}}, {{0.0, 10.0, 0.0}, {0.0, 0.0, 0.0}}, {{0.0, 10.0, 0.0}, {0.0, 10.0, 10.0}}};
+
+TEST(CpuBackend, EachStyleDrawsItsEdgesOverItsFaces)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const camera::Camera camera = orbitingAt({5.0, 5.0, 5.0}, -33.0);
+    const camera::Viewport viewport{240, 200, 1.0};
+    const Frame frame = makeFrame(camera, viewport, {}, kCanvas);
+    CpuBackend backend(4);
+    const std::uint32_t background = backgroundOf(backend, frame);
+    const Image shaded = drawnWith(backend, scene, frame, edgedStyle(VisualStyle::Shaded));
+    const snapshot::Point faceCenter{10.0, 5.0, 5.0};
+    const auto at = [&](const Image& image, const snapshot::Point& point) { return pixelAt(image, frame, {}, point); };
+
+    struct Expected {
+        VisualStyle visual;
+        std::uint32_t edge;
+        bool hiddenShow;
+    };
+    for (const Expected& expected : {Expected{VisualStyle::ShadedWithEdges, pixelOf(kEdge), false},
+                                     Expected{VisualStyle::Wireframe, pixelOf(kWire), true},
+                                     Expected{VisualStyle::VisibleEdges, pixelOf(kWire), false}}) {
+        const Image image = drawnWith(backend, scene, frame, edgedStyle(expected.visual));
+        const int style = static_cast<int>(expected.visual);
+        for (const auto& [from, to] : kFrontEdges) {
+            for (const double t : {0.2, 0.5, 0.8}) {
+                EXPECT_TRUE(edgeNear(image, frame, {}, along(from, to, t), expected.edge)) << style;
+            }
+        }
+        for (const auto& [from, to] : kHiddenEdges) {
+            EXPECT_EQ(edgeNear(image, frame, {}, along(from, to, 0.3), expected.edge), expected.hiddenShow) << style;
+        }
+        const std::uint32_t face = at(image, faceCenter);
+        switch (expected.visual) {
+        case VisualStyle::ShadedWithEdges:
+            EXPECT_EQ(face, at(shaded, faceCenter)) << "the bias moves depth, not color";
+            break;
+        case VisualStyle::Wireframe:
+            EXPECT_EQ(face, background);
+            break;
+        case VisualStyle::VisibleEdges:
+            EXPECT_EQ(face, pixelOf(kCanvas));
+            break;
+        case VisualStyle::Shaded:
+            break;
+        }
+    }
+    EXPECT_EQ(countOf(shaded, pixelOf(kEdge)) + countOf(shaded, pixelOf(kWire)), 0U) << "shaded draws no edges";
+}
+
+TEST(CpuBackend, EdgesWidenWithThePixelRatio)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const camera::Camera camera = orbitingAt({5.0, 5.0, 5.0}, -33.0);
+    CpuBackend backend(2);
+    ViewportStyle style = edgedStyle(VisualStyle::Wireframe);
+    const Image single = drawnWith(backend, scene, makeFrame(camera, {240, 200, 1.0}, {}, kCanvas), style);
+    style.pixelRatio = 2.0;
+    const Image doubled = drawnWith(backend, scene, makeFrame(camera, {240, 200, 1.0}, {}, kCanvas), style);
+    const double ratio =
+        static_cast<double>(countOf(doubled, pixelOf(kWire))) / static_cast<double>(countOf(single, pixelOf(kWire)));
+    EXPECT_GT(ratio, 1.6);
+    EXPECT_LT(ratio, 2.4);
+}
+
+TEST(CpuBackend, AThinWallHidesTheEdgeOnItsFarSide)
+{
+    constexpr double kThickness = 0.3;
+    constexpr double kSide = 40.0;
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {kSide, kSide, kThickness})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const double elevation = 25.0 * std::numbers::pi / 180.0;
+    const snapshot::Point center{kSide / 2.0, kSide, kThickness / 2.0};
+    camera::Camera camera;
+    ASSERT_TRUE(camera.setEyeAndCenter(
+        {center[0], center[1] - (500.0 * std::cos(elevation)), center[2] + (500.0 * std::sin(elevation))},
+        {center[0], center[1], center[2]}));
+    ASSERT_TRUE(camera.setUp({0.0, 0.0, 1.0}));
+    ASSERT_TRUE(camera.setScale(17.0));
+    const Frame frame = makeFrame(camera, {400, 300, 1.0}, {}, kCanvas);
+    CpuBackend backend(4);
+    const Image image = drawnWith(backend, scene, frame, edgedStyle(VisualStyle::ShadedWithEdges));
+    std::size_t near = 0;
+    std::size_t far = 0;
+    constexpr int kSamples = 40;
+    for (int i = 1; i < kSamples; ++i) {
+        const double x = kSide * (0.25 + (0.5 * i / kSamples));
+        near += pixelAt(image, frame, {}, {x, kSide, kThickness}) == pixelOf(kEdge) ? 1 : 0;
+        far += pixelAt(image, frame, {}, {x, kSide, 0.0}) == pixelOf(kEdge) ? 1 : 0;
+    }
+    EXPECT_EQ(near, static_cast<std::size_t>(kSamples - 1)) << "the near edge shows";
+    EXPECT_EQ(far, 0U) << "the edge behind the top face stays hidden";
+}
+
+TEST(CpuBackend, EdgesStayWholeOnFaceBordersOneKilometerOut)
+{
+    const snapshot::Point origin{1000000.0, 1000000.0, 1000000.0};
+    const snapshot::Point low{1000123.4, 999876.5, 1000042.0};
+    const auto body = test::shared(test::bodyOf(test::edgedBox(low, {low[0] + 10.0, low[1] + 10.0, low[2] + 10.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = origin, .hidden = {}};
+    const snapshot::Point center{low[0] + 5.0, low[1] + 5.0, low[2] + 5.0};
+    const camera::Viewport viewport{240, 200, 1.0};
+    CpuBackend backend(4);
+    const auto shifted = [&](const snapshot::Point& point) {
+        return snapshot::Point{point[0] + low[0], point[1] + low[1], point[2] + low[2]};
+    };
+    constexpr int kSteps = 40;
+    constexpr int kSamples = 24;
+    std::size_t missing = 0;
+    std::size_t bare = 0;
+    for (int step = 0; step < kSteps; ++step) {
+        const Frame frame = makeFrame(orbitingAt(center, -33.0 + (0.013 * step)), viewport, origin, kCanvas);
+        const Image image = drawnWith(backend, scene, frame, edgedStyle(VisualStyle::ShadedWithEdges));
+        const std::uint32_t background = backgroundOf(backend, frame);
+        for (const auto& [from, to] : kFrontEdges) {
+            const camera::ScreenPoint a = screenOf(frame, origin, shifted(from));
+            const camera::ScreenPoint b = screenOf(frame, origin, shifted(to));
+            const double length = std::hypot(b.x - a.x, b.y - a.y);
+            const double normalX = -(b.y - a.y) / length * 4.0;
+            const double normalY = (b.x - a.x) / length * 4.0;
+            for (int i = 1; i < kSamples; ++i) {
+                const double t = static_cast<double>(i) / kSamples;
+                const snapshot::Point point = along(shifted(from), shifted(to), t);
+                missing += pixelAt(image, frame, origin, point) == pixelOf(kEdge) ? 0 : 1;
+                if (t < 0.2 || t > 0.8) {
+                    continue;
+                }
+                for (const double side : {-1.0, 1.0}) {
+                    const std::uint32_t beside = pixelAt(image, frame, origin, point, side * normalX, side * normalY);
+                    bare += beside == pixelOf(kEdge) || beside == background ? 1 : 0;
+                }
+            }
+        }
+    }
+    EXPECT_EQ(missing, 0U) << "every sample on a front edge shows the edge";
+    EXPECT_EQ(bare, 0U) << "four pixels off the line a face shows on either side";
 }
 
 } // namespace
