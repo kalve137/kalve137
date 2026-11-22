@@ -16,6 +16,7 @@ inline constexpr double kBlockDepth = 20.0;
 inline constexpr double kBlockHeight = 15.0;
 inline constexpr double kBlockVolume = kBlockWidth * kBlockDepth * kBlockHeight;
 
+core::Document blockDocument();
 void sketchRectangle(UiDriver& ui, core::OriginPlane plane, const gp_Pnt& corner, const gp_Pnt& opposite);
 void extrude(UiDriver& ui, const QString& distance);
 void block(UiDriver& ui);

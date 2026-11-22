@@ -174,6 +174,9 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
     ui = std::make_unique<UiDriver>();
     ui->trigger("Open Sample");
     const std::filesystem::path folder = ui->save("light body").parent_path();
+    if (ui->newView() != nullptr) {
+        GTEST_SKIP() << "The new view has no view cube and no view clicks yet";
+    }
     const QRectF cube = ui->view().viewCubeRect();
     const auto saveCube = [&](const std::string& name) {
         const QRect area = cube.toAlignedRect().adjusted(-kCubeMargin, -kCubeMargin, kCubeMargin, kCubeMargin);

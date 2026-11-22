@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "snapshot/color.h"
 #include "snapshot/mesh.h"
 
 #include <memory>
@@ -10,14 +11,6 @@
 #include <vector>
 
 namespace kalve137::snapshot {
-
-struct Color {
-    float red = 0.0F;
-    float green = 0.0F;
-    float blue = 0.0F;
-
-    bool operator==(const Color&) const = default;
-};
 
 struct Appearance {
     std::optional<Color> color;

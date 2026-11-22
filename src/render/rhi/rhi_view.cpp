@@ -4,6 +4,8 @@
 #include "render/rhi/rhi_view.h"
 
 #include "log/log.h"
+#include "render/draw_list.h"
+#include "render/rhi/rhi_backend.h"
 
 #include <QColor>
 #include <QElapsedTimer>
@@ -31,6 +33,7 @@ namespace {
 using Api = QRhiWidget::Api;
 
 constexpr double kWheelNotch = 120.0;
+constexpr int kSamples = 4;
 
 Api widgetApi(GraphicsApi api)
 {
@@ -146,11 +149,14 @@ QLabel* makeFailureNotice(GraphicsApi api, QWidget* parent)
 RhiView::RhiView(GraphicsApi api, QWidget* parent) : QRhiWidget(parent), m_api(api)
 {
     setApi(widgetApi(api));
+    setSampleCount(kSamples);
     m_message = new QLabel(this);
     styleNotice(*m_message, api);
     m_message->hide();
     connect(this, &QRhiWidget::renderFailed, this, &RhiView::fail);
 }
+
+RhiView::~RhiView() = default;
 
 void RhiView::setViewportStyle(const ViewportStyle& style)
 {
@@ -164,11 +170,13 @@ void RhiView::setViewportStyle(const ViewportStyle& style)
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
+    update();
 }
 
 std::optional<double> RhiView::benchFrame()
 {
-    if (!m_ready || m_failed || rhi() == nullptr || renderTarget() == nullptr || colorTexture() == nullptr) {
+    QRhiTexture* resolved = resolvedTexture();
+    if (!m_ready || m_failed || rhi() == nullptr || resolved == nullptr) {
         return std::nullopt;
     }
     QElapsedTimer timer;
@@ -179,7 +187,7 @@ std::optional<double> RhiView::benchFrame()
     }
     record(buffer, renderTarget());
     QRhiReadbackResult result;
-    QRhiReadbackDescription description(colorTexture());
+    QRhiReadbackDescription description(resolved);
     description.setRect(QRect(0, 0, 1, 1));
     QRhiResourceUpdateBatch* batch = rhi()->nextResourceUpdateBatch();
     batch->readBackTexture(description, &result);
@@ -195,7 +203,14 @@ void RhiView::initialize(QRhiCommandBuffer*)
     if (m_backend.isEmpty()) {
         m_backend = QString::fromLatin1(rhi()->backendName());
         m_device = QString::fromUtf8(rhi()->driverInfo().deviceName);
-        K137_INFO(Viewer, "New view draws with {} on {}", m_backend.toStdString(), m_device.toStdString());
+        K137_INFO(Viewer, "New view draws with {} on {} at {}x samples", m_backend.toStdString(),
+                  m_device.toStdString(), sampleCount());
+    }
+    if (m_bodies == nullptr) {
+        m_bodies = std::make_unique<RhiBackend>(rhi());
+    }
+    if (!m_bodies->setTarget(renderTarget()->renderPassDescriptor(), sampleCount())) {
+        fail();
     }
 }
 
@@ -208,7 +223,10 @@ void RhiView::render(QRhiCommandBuffer* buffer)
     }
 }
 
-void RhiView::releaseResources() {}
+void RhiView::releaseResources()
+{
+    m_bodies.reset();
+}
 
 void RhiView::setCamera(const camera::Camera& camera)
 {
@@ -255,10 +273,36 @@ void RhiView::wheelEvent(QWheelEvent* event)
 
 void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
 {
-    const Color& background = m_style.background;
+    const snapshot::Color& background = m_style.background;
     const QColor clear = QColor::fromRgbF(background.red, background.green, background.blue, background.alpha);
-    buffer->beginPass(target, clear, {1.0F, 0});
+    QRhiResourceUpdateBatch* updates = nullptr;
+    if (!m_failed && m_bodies != nullptr) {
+        updates = rhi()->nextResourceUpdateBatch();
+        const DrawList list =
+            m_cache.draw(m_scene, makeFrame(m_camera, viewport(), m_scene.origin, background), m_style);
+        if (!m_bodies->prepare(list, updates)) {
+            fail();
+        }
+    }
+    buffer->beginPass(target, clear, {1.0F, 0}, updates);
+    if (!m_failed && m_bodies != nullptr) {
+        m_bodies->draw(buffer, target->pixelSize());
+    }
     buffer->endPass();
+}
+
+QRhiTexture* RhiView::resolvedTexture() const
+{
+    if (colorTexture() != nullptr) {
+        return colorTexture();
+    }
+    const QRhiRenderTarget* target = renderTarget();
+    if (target == nullptr || target->resourceType() != QRhiResource::TextureRenderTarget) {
+        return nullptr;
+    }
+    const QRhiTextureRenderTargetDescription description =
+        static_cast<const QRhiTextureRenderTarget*>(target)->description();
+    return description.colorAttachmentCount() > 0 ? description.cbeginColorAttachments()->resolveTexture() : nullptr;
 }
 
 void RhiView::fail()

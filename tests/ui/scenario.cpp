@@ -3,11 +3,37 @@
 
 #include "scenario.h"
 
+#include "app/session/design_session.h"
+#include "core/feature.h"
+#include "sketch/sketch.h"
 #include "viewer/occt_view_widget.h"
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 namespace kalve137::uitest {
+
+core::Document blockDocument()
+{
+    core::Document document;
+    core::SketchFeature base;
+    sketch::Sketch& s = base.sketch;
+    const auto a = s.addPoint({-kBlockWidth / 2, -kBlockDepth / 2});
+    const auto b = s.addPoint({kBlockWidth / 2, -kBlockDepth / 2});
+    const auto c = s.addPoint({kBlockWidth / 2, kBlockDepth / 2});
+    const auto d = s.addPoint({-kBlockWidth / 2, kBlockDepth / 2});
+    s.addConstraint(sketch::ConstraintKind::Horizontal, {s.addLine(a, b)});
+    s.addConstraint(sketch::ConstraintKind::Vertical, {s.addLine(b, c)});
+    s.addConstraint(sketch::ConstraintKind::Horizontal, {s.addLine(c, d)});
+    s.addConstraint(sketch::ConstraintKind::Vertical, {s.addLine(d, a)});
+    core::ExtrudeFeature pad;
+    pad.profiles = {document.add(std::move(base)), {{0.0, 0.0}}};
+    pad.distance = kBlockHeight;
+    pad.bodyName = document.takeBodyName();
+    document.add(std::move(pad));
+    return document;
+}
 
 void sketchRectangle(UiDriver& ui, core::OriginPlane plane, const gp_Pnt& corner, const gp_Pnt& opposite)
 {
@@ -30,6 +56,11 @@ void extrude(UiDriver& ui, const QString& distance)
 
 void block(UiDriver& ui)
 {
+    if (ui.newView() != nullptr) {
+        ui.session().reset(blockDocument(), {});
+        homeView(ui);
+        return;
+    }
     sketchRectangle(ui, core::OriginPlane::XY, gp_Pnt(-kBlockWidth / 2, -kBlockDepth / 2, 0),
                     gp_Pnt(kBlockWidth / 2, kBlockDepth / 2, 0));
     extrude(ui, QString::number(kBlockHeight));
@@ -39,6 +70,11 @@ void block(UiDriver& ui)
 
 void homeView(UiDriver& ui)
 {
+    if (ui.newView() != nullptr) {
+        ui.trigger("Home");
+        ui.trigger("Fit All");
+        return;
+    }
     ui.view().homeView();
     ui.view().fitAll();
     ui.settle();

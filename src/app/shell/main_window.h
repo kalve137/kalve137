@@ -129,6 +129,7 @@ private:
     void showGridSettings();
     void applyPreferences();
     void applyViewportTheme();
+    void applyNewViewStyle();
     void lookAtSketch();
 
     static constexpr int kMessageTimeoutMs = 5000;
