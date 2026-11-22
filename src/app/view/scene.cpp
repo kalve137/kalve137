@@ -623,7 +623,7 @@ std::size_t Scene::showBodies()
             context->Activate(object, AIS_Shape::SelectionMode(selection[i]));
         }
         m_picks.emplace(object.get(), pick);
-        m_bodies.push_back({body.shape, object, body.color, body.faceColors, preview});
+        m_bodies.push_back({body.shape, Handle(AIS_InteractiveObject)(object), body.color, body.faceColors, preview});
     }
     for (const BodyObject& stale : previous) {
         context->Remove(stale.object, false);
