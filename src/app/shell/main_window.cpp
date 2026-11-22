@@ -781,16 +781,22 @@ void MainWindow::refreshScene()
         }
     }
     m_scene->setHighlightedBodies(std::move(highlighted));
+    const auto visible = [this](core::BodyKey key) { return m_session->isBodyVisible(key); };
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
     if (index >= 0 && std::cmp_less(index + 1, document.marker())) {
         core::Document context = document;
         context.setMarker(static_cast<std::size_t>(index) + 1);
-        m_scene->show(context, core::recompute(context), *m_session);
+        const core::Model model = core::recompute(context);
+        m_scene->show(context, model, *m_session);
+        if (m_rhiView != nullptr) {
+            m_rhiView->setScene(m_contextSnapshots.scene(model, visible));
+        }
         return;
     }
+    m_contextSnapshots.clear();
     m_scene->show(document, m_session->model(), *m_session);
     if (m_rhiView != nullptr) {
-        m_rhiView->setScene(m_session->snapshots().scene(m_session->model()));
+        m_rhiView->setScene(m_session->snapshots().scene(m_session->model(), visible));
     }
 }
 

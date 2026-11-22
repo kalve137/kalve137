@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -38,6 +40,25 @@ struct Mesh {
     std::uint32_t edgeCount = 0;
     std::vector<Vertex> points;
     std::uint32_t pointCount = 0;
+    Point low{};
+    Point high{};
 };
+
+inline void setBounds(Mesh& mesh)
+{
+    if (mesh.vertices.empty()) {
+        mesh.low = {};
+        mesh.high = {};
+        return;
+    }
+    mesh.low = mesh.vertices.front();
+    mesh.high = mesh.vertices.front();
+    for (const Point& vertex : mesh.vertices) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            mesh.low[axis] = std::min(mesh.low[axis], vertex[axis]);
+            mesh.high[axis] = std::max(mesh.high[axis], vertex[axis]);
+        }
+    }
+}
 
 } // namespace kalve137::snapshot

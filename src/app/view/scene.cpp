@@ -264,7 +264,7 @@ void Scene::updateBoxSelection()
         for (const core::Body& body : m_model.bodies) {
             if (!m_hiddenBodies.contains(body.key())) {
                 shown.push_back(m_snapshots->body(body));
-                meshes.push_back(&shown.back()->mesh);
+                meshes.push_back(shown.back()->mesh.get());
             }
         }
         const geometry::ViewBlockers blockers(meshes);

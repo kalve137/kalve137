@@ -71,7 +71,7 @@ const pick::RayScene* SnapshotNavigationScene::rays() const
         std::vector<const snapshot::Mesh*> meshes;
         meshes.reserve(bodies.size());
         for (const std::shared_ptr<const snapshot::Body>& body : bodies) {
-            meshes.push_back(&body->mesh);
+            meshes.push_back(body->mesh.get());
         }
         m_rays = std::make_unique<pick::RayScene>(meshes);
         m_bodies = bodies;
