@@ -42,14 +42,14 @@ std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& 
                                                           const camera::Viewport& viewport, const camera::Pixel& pixel,
                                                           bool) const
 {
-    const std::shared_ptr<const pick::RayScene> scene = m_rays->rays(m_view->scene());
-    if (scene == nullptr) {
+    const pick::VisibleRays rays = m_rays->rays(m_view->scene());
+    if (rays.scene == nullptr) {
         return std::nullopt;
     }
     const camera::Ray ray = camera.ray(pixel, viewport);
     const camera::Vec3 direction = camera::normalized(ray.direction);
     const std::optional<pick::Hit> hit =
-        scene->first({ray.origin.x, ray.origin.y, ray.origin.z}, {direction.x, direction.y, direction.z});
+        rays.first({ray.origin.x, ray.origin.y, ray.origin.z}, {direction.x, direction.y, direction.z});
     if (!hit) {
         return std::nullopt;
     }

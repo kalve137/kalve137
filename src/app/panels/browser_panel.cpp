@@ -54,6 +54,7 @@ BrowserPanel::BrowserPanel(DesignSession& session, QWidget* parent) : QTreeWidge
     connect(&session, &DesignSession::changed, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
     connect(&session, &DesignSession::fileStateChanged, this, &BrowserPanel::rebuild, Qt::QueuedConnection);
     connect(&session, &DesignSession::visibilityChanged, this, &BrowserPanel::syncVisibility);
+    connect(&session, &DesignSession::bodiesVisibilityChanged, this, &BrowserPanel::syncVisibility);
     connect(theme::notifier(), &theme::Notifier::changed, this, &BrowserPanel::rebuild);
     rebuild();
 }

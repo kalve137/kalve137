@@ -345,8 +345,13 @@ std::size_t trianglesOf(core::SnapshotCache& snapshots, const core::Body& body)
     return snapshots.body(body)->mesh->triangles.size();
 }
 
-std::optional<QJsonObject> timeChange(DesignSession& session, render::RhiView& view,
-                                      const std::function<void(int)>& change, bool recomputes)
+struct BenchChange {
+    std::function<void(int)> apply;
+    std::function<void()> before;
+};
+
+std::optional<QJsonObject> timeChange(DesignSession& session, render::RhiView& view, const BenchChange& change,
+                                      bool recomputes)
 {
     std::vector<double> totals;
     std::vector<double> recomputeMs;
@@ -356,9 +361,16 @@ std::optional<QJsonObject> timeChange(DesignSession& session, render::RhiView& v
     std::vector<double> frameMs;
     std::vector<double> settledMs;
     for (int i = 0; i < kChangeWarmup + kChangeRepeats; ++i) {
+        if (change.before) {
+            change.before();
+            QApplication::processEvents();
+            if (!view.benchFrame()) {
+                return std::nullopt;
+            }
+        }
         QElapsedTimer timer;
         timer.start();
-        change(i);
+        change.apply(i);
         const double changed = elapsedMs(timer);
         QApplication::processEvents();
         const double events = elapsedMs(timer) - changed;
@@ -439,20 +451,26 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
     };
     const auto recolor = [&](const QString& label, core::AppearanceFeature appearance) {
         const core::FeatureId id = added(label, std::move(appearance));
-        return std::function<void(int)>([session, label, id](int i) {
-            session->edit(label, [&](core::Document& document) {
-                std::get<core::AppearanceFeature>(document.find(id)->data).color = kBenchColors.at((i + 1) % 2);
-            });
-        });
+        return BenchChange{.apply =
+                               [session, label, id](int i) {
+                                   session->edit(label, [&](core::Document& document) {
+                                       std::get<core::AppearanceFeature>(document.find(id)->data).color =
+                                           kBenchColors.at((i + 1) % 2);
+                                   });
+                               },
+                           .before = {}};
     };
     core::FeatureId moveId = 0;
     const auto moved = [session, &moveId]() {
-        return std::function<void(int)>([session, &moveId](int i) {
-            session->edit(QStringLiteral("Bench move"), [&](core::Document& document) {
-                const double distance = kBenchMoveStep * (1 + ((i + 1) % 2));
-                std::get<core::MoveFeature>(document.find(moveId)->data).translation = gp_Vec(distance, 0.0, 0.0);
-            });
-        });
+        return BenchChange{.apply =
+                               [session, &moveId](int i) {
+                                   session->edit(QStringLiteral("Bench move"), [&](core::Document& document) {
+                                       const double distance = kBenchMoveStep * (1 + ((i + 1) % 2));
+                                       std::get<core::MoveFeature>(document.find(moveId)->data).translation =
+                                           gp_Vec(distance, 0.0, 0.0);
+                                   });
+                               },
+                           .before = {}};
     };
     const auto move = [&]() {
         core::MoveFeature data;
@@ -461,9 +479,13 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
         moveId = added(QStringLiteral("Bench move"), data);
         return moved();
     };
-    const std::array<std::tuple<const char*, std::function<std::function<void(int)>()>, bool>, 5> plan{{
-        {"hide", [&] { return std::function<void(int)>([&](int i) { session->setBodyVisible(key, i % 2 == 1); }); },
-         false},
+    const auto shown = [session, key](bool visible) {
+        return BenchChange{.apply = [session, key, visible](int) { session->setBodyVisible(key, visible); },
+                           .before = [session, key, visible] { session->setBodyVisible(key, !visible); }};
+    };
+    const std::array<std::tuple<const char*, std::function<BenchChange()>, bool>, 6> plan{{
+        {"hide", [&] { return shown(false); }, false},
+        {"show", [&] { return shown(true); }, false},
         {"recolor_body",
          [&] {
              return recolor(QStringLiteral("Bench body color"),

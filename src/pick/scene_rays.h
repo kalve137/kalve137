@@ -15,13 +15,23 @@
 
 namespace kalve137::pick {
 
+using Meshes = std::vector<std::shared_ptr<const snapshot::Mesh>>;
+
+struct VisibleRays {
+    std::shared_ptr<const RayScene> scene;
+    Meshes meshes;
+    std::vector<bool> shown;
+
+    std::optional<Hit> first(const Point& origin, const Point& direction, double from = 0.0) const;
+};
+
 class SceneRays {
 public:
-    using Meshes = std::vector<std::shared_ptr<const snapshot::Mesh>>;
+    using Meshes = pick::Meshes;
 
     void prepare(const snapshot::Scene& scene);
-    std::shared_ptr<const RayScene> rays(const snapshot::Scene& scene);
-    std::shared_ptr<const RayScene> rays(const Meshes& meshes);
+    VisibleRays rays(const snapshot::Scene& scene);
+    VisibleRays rays(const Meshes& meshes, const Meshes& visible);
     std::size_t builds() const { return m_builds; }
 
 private:
@@ -31,6 +41,7 @@ private:
     };
 
     bool running() const;
+    std::shared_ptr<const RayScene> sceneOf(const Meshes& meshes);
 
     Meshes m_meshes;
     std::shared_ptr<const RayScene> m_rays;

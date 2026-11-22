@@ -81,6 +81,7 @@ private:
     void updateTitle();
     void updateStatus();
     void refreshScene();
+    void refreshVisibility(const std::vector<core::BodyKey>& keys, bool visible);
 
     void startCreateSketch();
     void stopPickingPlane();

@@ -61,6 +61,7 @@ signals:
     void changed();
     void fileStateChanged();
     void visibilityChanged();
+    void bodiesVisibilityChanged(const std::vector<core::BodyKey>& keys, bool visible);
     void historyJumped();
 
 private:
