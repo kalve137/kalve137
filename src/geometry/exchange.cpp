@@ -10,6 +10,7 @@
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BinTools.hxx>
+#include <DESTEP_Parameters.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Message_ProgressIndicator.hxx>
 #include <Message_ProgressScope.hxx>
@@ -153,16 +154,33 @@ void collectParts(const Xcaf& xcaf, const TDF_Label& label, const TopLoc_Locatio
         return;
     }
     const TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(label);
+    int solids = 0;
     for (TopExp_Explorer it(shape, TopAbs_SOLID); it.More(); it.Next()) {
+        ++solids;
+    }
+    std::vector<std::string> folder = path;
+    if (solids > 1) {
+        folder.push_back(name);
+    }
+    int index = 0;
+    for (TopExp_Explorer it(shape, TopAbs_SOLID); it.More(); it.Next()) {
+        ++index;
         std::optional<Color> solidColor = color;
+        std::string solidName;
         TDF_Label solidLabel;
         if (xcaf.shapes->FindSubShape(label, it.Current(), solidLabel)) {
             if (const std::optional<Color> own = colorOf(xcaf, solidLabel)) {
                 solidColor = own;
             }
+            solidName = nameOf(solidLabel);
         }
-        parts.push_back({name, it.Current().Moved(location), solidColor,
-                         faceColorsOf(xcaf, label, it.Current(), solidColor), path});
+        if (solids == 1) {
+            solidName = name;
+        } else if (solidName.empty()) {
+            solidName = name + " " + std::to_string(index);
+        }
+        parts.push_back({solidName, it.Current().Moved(location), solidColor,
+                         faceColorsOf(xcaf, label, it.Current(), solidColor), folder});
     }
 }
 
@@ -272,7 +290,10 @@ std::vector<StepPart> readStepParts(const std::filesystem::path& path, const Pro
     STEPCAFControl_Reader reader;
     reader.SetNameMode(true);
     reader.SetColorMode(true);
-    if (reader.ReadFile(utf8(path).c_str()) != IFSelect_RetDone) {
+    DESTEP_Parameters parameters;
+    parameters.InitFromStatic();
+    parameters.ReadSubshapeNames = true;
+    if (reader.ReadFile(utf8(path).c_str(), parameters) != IFSelect_RetDone) {
         throw std::runtime_error("Could not read " + utf8(path) + " as STEP");
     }
     if (!report(0.0)) {
