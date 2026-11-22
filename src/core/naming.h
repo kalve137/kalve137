@@ -7,6 +7,9 @@
 
 #include "geometry/face_names.h"
 
+#include <Bnd_Box.hxx>
+#include <NCollection_DataMap.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -42,7 +45,26 @@ struct EdgeHit {
     TopoDS_Edge edge;
 };
 
-std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref);
+class FaceLookup {
+public:
+    std::optional<FaceHit> atPoint(const std::vector<Body>& bodies, const gp_Pnt& point);
+    void clear();
+
+private:
+    struct Found {
+        gp_Pnt point;
+        std::vector<TopoDS_Shape> shapes;
+        std::optional<FaceHit> hit;
+        int faceIndex = 0;
+    };
+
+    const Bnd_Box& boxOf(const TopoDS_Shape& shape);
+
+    std::vector<Found> m_found;
+    NCollection_DataMap<TopoDS_Shape, Bnd_Box, TopTools_ShapeMapHasher> m_boxes;
+};
+
+std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup = nullptr);
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref);
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref);
 

@@ -10,8 +10,15 @@
 
 #include <gtest/gtest.h>
 
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <gp_Trsf.hxx>
 
 #include <nlohmann/json.hpp>
 
@@ -164,6 +171,47 @@ void expectFollows(Block& b, FeatureId id, const std::function<double(Size)>& ex
 double roundOff(double radius, double length)
 {
     return (1.0 - kPi / 4.0) * radius * radius * length;
+}
+
+std::optional<FaceHit> everyFaceAt(const std::vector<Body>& bodies, const gp_Pnt& point)
+{
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(point);
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
+        std::optional<FaceHit> best;
+        double bestDistance = kRefTolerance;
+        for (TopExp_Explorer it(bodies[i].shape, TopAbs_FACE); it.More(); it.Next()) {
+            BRepExtrema_DistShapeShape distance(probe, it.Current());
+            if (distance.IsDone() && distance.Value() <= bestDistance) {
+                bestDistance = distance.Value();
+                best = FaceHit{i, TopoDS::Face(it.Current())};
+            }
+        }
+        if (best) {
+            return best;
+        }
+    }
+    return std::nullopt;
+}
+
+Model threeBodies()
+{
+    Document doc;
+    addExtrude(doc, addRectangle(doc, 0, 0, 20, 10), {5, 5}, 8.0, Operation::NewBody);
+    addExtrude(doc, addRectangle(doc, 40, 0, 60, 10), {45, 5}, 8.0, Operation::NewBody);
+    SketchFeature round;
+    round.sketch.addCircle(round.sketch.addPoint({80, 5}), 6.0);
+    const FeatureId sketchId = doc.add(std::move(round));
+    addExtrude(doc, sketchId, {80, 5}, 8.0, Operation::NewBody);
+    return recompute(doc);
+}
+
+void expectSameHit(const std::optional<FaceHit>& actual, const std::optional<FaceHit>& expected)
+{
+    ASSERT_EQ(actual.has_value(), expected.has_value());
+    if (expected) {
+        EXPECT_EQ(actual->body, expected->body);
+        EXPECT_TRUE(actual->face.IsSame(expected->face));
+    }
 }
 
 } // namespace
@@ -393,4 +441,81 @@ TEST(Naming, RefsRoundTripAndOlderFilesLoad)
     const Model model = recompute(legacy);
     EXPECT_EQ(model.status.at(fillet).health, FeatureHealth::Ok);
     EXPECT_EQ(model.status.at(pull).health, FeatureHealth::Ok) << model.status.at(pull).message;
+}
+
+TEST(FaceLookup, FindsTheSameFaceAsCheckingEveryFace)
+{
+    const Model model = threeBodies();
+    ASSERT_EQ(model.bodies.size(), 3u);
+    std::vector<gp_Pnt> points{gp_Pnt(30, 5, 4), gp_Pnt(500, 500, 500)};
+    for (const Body& body : model.bodies) {
+        for (TopExp_Explorer it(body.shape, TopAbs_FACE); it.More(); it.Next()) {
+            points.push_back(geometry::facePoint(TopoDS::Face(it.Current())));
+        }
+    }
+    FaceLookup lookup;
+    for (const gp_Pnt& point : points) {
+        SCOPED_TRACE(std::to_string(point.X()) + " " + std::to_string(point.Y()) + " " + std::to_string(point.Z()));
+        const std::optional<FaceHit> expected = everyFaceAt(model.bodies, point);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}), expected);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}, &lookup), expected);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}, &lookup), expected);
+    }
+}
+
+TEST(FaceLookup, LooksAgainWhenABodyUpToTheHitChanges)
+{
+    const Model model = threeBodies();
+    const gp_Pnt onSecond(50, 5, 8);
+    FaceLookup lookup;
+    const std::optional<FaceHit> first = lookup.atPoint(model.bodies, onSecond);
+    ASSERT_TRUE(first.has_value());
+    EXPECT_EQ(first->body, 1u);
+
+    std::vector<Body> movedAway = model.bodies;
+    gp_Trsf away;
+    away.SetTranslation(gp_Vec(0, 0, 100));
+    movedAway[1].shape = movedAway[1].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(movedAway, onSecond), everyFaceAt(movedAway, onSecond));
+    EXPECT_FALSE(lookup.atPoint(movedAway, onSecond).has_value());
+
+    std::vector<Body> movedOnto = model.bodies;
+    gp_Trsf onto;
+    onto.SetTranslation(gp_Vec(40, 0, 0));
+    movedOnto[0].shape = movedOnto[0].shape.Moved(TopLoc_Location(onto));
+    const std::optional<FaceHit> hit = lookup.atPoint(movedOnto, onSecond);
+    expectSameHit(hit, everyFaceAt(movedOnto, onSecond));
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->body, 0u);
+
+    std::vector<Body> laterMoved = model.bodies;
+    laterMoved[2].shape = laterMoved[2].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(laterMoved, onSecond), first);
+
+    std::vector<Body> earlierMoved = model.bodies;
+    earlierMoved[0].shape = earlierMoved[0].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(earlierMoved, onSecond), first);
+}
+
+TEST(FaceLookup, GivesTheCurrentFaceWhenAMoveRepeatsTheSamePlace)
+{
+    const Model model = threeBodies();
+    const auto movedAgain = [&]() {
+        std::vector<Body> bodies = model.bodies;
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(5, 0, 0));
+        bodies[0].shape = bodies[0].shape.Moved(TopLoc_Location(shift));
+        return bodies;
+    };
+    const gp_Pnt onFirst(15, 5, 8);
+    const gp_Pnt onSecond(50, 5, 8);
+    FaceLookup lookup;
+    const std::vector<Body> once = movedAgain();
+    expectSameHit(lookup.atPoint(once, onFirst), everyFaceAt(once, onFirst));
+    expectSameHit(lookup.atPoint(once, onSecond), everyFaceAt(once, onSecond));
+
+    const std::vector<Body> twice = movedAgain();
+    ASSERT_FALSE(twice[0].shape.IsEqual(once[0].shape));
+    expectSameHit(lookup.atPoint(twice, onFirst), everyFaceAt(twice, onFirst));
+    expectSameHit(lookup.atPoint(twice, onSecond), everyFaceAt(twice, onSecond));
 }

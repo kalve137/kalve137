@@ -68,7 +68,8 @@ class ShapeStoreTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        m_folder = std::filesystem::temp_directory_path() / "kalve137-shape-store-test";
+        m_folder = std::filesystem::temp_directory_path() / "kalve137-shape-store-test" /
+                   ::testing::UnitTest::GetInstance()->current_test_info()->name();
         std::filesystem::remove_all(m_folder);
         std::filesystem::create_directories(m_folder);
         m_design = m_folder / "assembly.k137";

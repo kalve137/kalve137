@@ -62,7 +62,9 @@ struct Model {
     std::vector<geometry::StepPart> stepParts() const;
 };
 
-Model recompute(const Document& document);
+class FaceLookup;
+
+Model recompute(const Document& document, FaceLookup* lookup = nullptr);
 
 Model extend(const Model& base, const Feature& feature);
 

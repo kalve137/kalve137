@@ -4,6 +4,7 @@
 #pragma once
 
 #include "core/document.h"
+#include "core/naming.h"
 #include "core/recompute.h"
 #include "core/snapshot_cache.h"
 #include "core/undo_stack.h"
@@ -68,6 +69,7 @@ private:
 
     core::Document m_document;
     core::Model m_model;
+    core::FaceLookup m_faces;
     core::SnapshotCache m_snapshots;
     pick::SceneRays m_rays;
     core::UndoStack m_undo;
