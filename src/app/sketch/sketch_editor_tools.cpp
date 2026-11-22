@@ -222,6 +222,10 @@ void SketchEditor::openInputs()
 
 void SketchEditor::onInputsAccepted()
 {
+    if (m_typedMove) {
+        acceptTypedMove();
+        return;
+    }
     if (!isActive() || !m_first) {
         return;
     }

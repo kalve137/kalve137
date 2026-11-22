@@ -55,6 +55,21 @@ public:
 
     GCS::VEC_pD& unknowns() { return m_unknowns; }
 
+    void addTargets(GCS::System& system, const std::vector<DragTarget>& targets, std::vector<double>& goals)
+    {
+        goals.reserve(2 * targets.size());
+        for (const DragTarget& target : targets) {
+            const auto it = m_points.find(target.point);
+            if (it == m_points.end() || std::ranges::find(m_unknowns, it->second.x) == m_unknowns.end()) {
+                continue;
+            }
+            goals.push_back(target.pos.x);
+            system.addConstraintEqual(it->second.x, &goals.back(), GCS::DefaultTemporaryConstraint);
+            goals.push_back(target.pos.y);
+            system.addConstraintEqual(it->second.y, &goals.back(), GCS::DefaultTemporaryConstraint);
+        }
+    }
+
     bool isFinite() const
     {
         return std::ranges::all_of(m_params, [](double value) { return std::isfinite(value); });
@@ -440,11 +455,13 @@ std::vector<Id> toIds(const GCS::VEC_I& tags)
 
 } // namespace
 
-SolveResult solve(Sketch& sketch)
+SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
 {
     SolverModel model(sketch);
     GCS::System system;
     model.addConstraints(system);
+    std::vector<double> goals;
+    model.addTargets(system, targets, goals);
     system.declareUnknowns(model.unknowns());
     system.initSolution();
 

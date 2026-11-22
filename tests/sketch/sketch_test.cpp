@@ -181,6 +181,54 @@ TEST(Solver, ArcKeepsEndpointsOnCircle)
     EXPECT_NEAR(distance(c, s.point(end)->pos), 8.0, 1e-6);
 }
 
+TEST(Solver, DragTargetsMoveFreeGeometryExactly)
+{
+    Sketch s;
+    const Id a = s.addPoint({0, 0});
+    const Id b = s.addPoint({10, 0});
+    const Id line = s.addLine(a, b);
+    s.addConstraint(ConstraintKind::Distance, {line}, 10.0);
+    const int dof = solve(s).dof;
+    const SolveResult result = solve(s, {{a, {3, 4}}, {b, {13, 4}}});
+    ASSERT_TRUE(result.solved);
+    EXPECT_EQ(result.dof, dof) << "Targets add no freedom and take none";
+    EXPECT_NEAR(s.point(a)->pos.x, 3.0, 1e-6);
+    EXPECT_NEAR(s.point(a)->pos.y, 4.0, 1e-6);
+    EXPECT_NEAR(s.point(b)->pos.x, 13.0, 1e-6);
+    EXPECT_NEAR(s.point(b)->pos.y, 4.0, 1e-6);
+    EXPECT_EQ(s.constraints().size(), 1U);
+}
+
+TEST(Solver, DragTargetsGiveWayToConstraints)
+{
+    Sketch s;
+    const Rectangle r = addRectangle(s, {0, 0}, {10, 5});
+    constrainRectangleShape(s, r);
+    s.addConstraint(ConstraintKind::Distance, {r.sides[0]}, 10.0);
+    s.point(r.corners[0])->fixed = true;
+    const SolveResult result = solve(s, {{r.corners[2], {14, 8}}, {r.corners[3], {4, 8}}});
+    ASSERT_TRUE(result.solved);
+    EXPECT_TRUE(result.conflicting.empty());
+    EXPECT_NEAR(s.point(r.corners[3])->pos.x, 0.0, 1e-6) << "The fixed corner and the width hold the sides";
+    EXPECT_NEAR(s.point(r.corners[2])->pos.x, 10.0, 1e-6);
+    EXPECT_NEAR(s.point(r.corners[2])->pos.y, 8.0, 1e-6) << "The free height follows the drag";
+    EXPECT_NEAR(s.point(r.corners[3])->pos.y, 8.0, 1e-6);
+    EXPECT_NEAR(s.point(r.corners[0])->pos.x, 0.0, 1e-12);
+}
+
+TEST(Solver, DragTargetOnFixedPointIsIgnored)
+{
+    Sketch s;
+    const Id a = s.addPoint({0, 0}, true);
+    const Id b = s.addPoint({10, 0});
+    s.addLine(a, b);
+    const SolveResult result = solve(s, {{a, {5, 5}}, {b, {20, 0}}});
+    ASSERT_TRUE(result.solved);
+    EXPECT_EQ(s.point(a)->pos.x, 0.0);
+    EXPECT_EQ(s.point(a)->pos.y, 0.0);
+    EXPECT_NEAR(s.point(b)->pos.x, 20.0, 1e-6);
+}
+
 TEST(Profiles, RectangleIsOneProfile)
 {
     Sketch s;

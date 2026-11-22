@@ -13,6 +13,7 @@
 
 class QAction;
 class QLineEdit;
+class QString;
 class QWidget;
 
 namespace kalve137::app {
@@ -30,6 +31,8 @@ public:
     bool isOpen() const { return !m_boxes.empty(); }
 
     void setLive(std::size_t index, double value, QPointF anchor, QPointF away = {});
+    void place(std::size_t index, QPointF anchor, QPointF away = {});
+    void setPlaceholder(std::size_t index, const QString& text);
     QSizeF boxSize(std::size_t index) const;
     std::optional<double> held(std::size_t index) const;
 

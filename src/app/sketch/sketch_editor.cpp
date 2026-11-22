@@ -83,7 +83,13 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
     });
 
     m_inputs = new SketchInputs(view, this);
-    connect(m_inputs, &SketchInputs::edited, this, &SketchEditor::redrawPreview);
+    connect(m_inputs, &SketchInputs::edited, this, [this] {
+        if (m_typedMove) {
+            previewTypedMove();
+        } else {
+            redrawPreview();
+        }
+    });
     connect(m_inputs, &SketchInputs::accepted, this, &SketchEditor::onInputsAccepted);
 
     connect(view, &viewer::OcctViewWidget::capturedPress, this, &SketchEditor::onPress);
@@ -170,7 +176,13 @@ void SketchEditor::cancel()
         closeValueEditor();
         return;
     }
-    if (m_dragPoint != 0 || m_dragLabel != 0) {
+    if (m_typedMove) {
+        resetProgress();
+        redraw();
+        emit stateChanged();
+        return;
+    }
+    if (!m_dragPoints.empty() || m_dragLabel != 0) {
         dropDrag();
         redraw();
         return;
@@ -232,11 +244,14 @@ void SketchEditor::toggleConstruction()
 
 QString SketchEditor::hint() const
 {
+    if (m_typedMove) {
+        return tr("Type X and Y offsets, Tab to next value, Enter to move, Esc to stop");
+    }
     switch (m_tool) {
     case Tool::Select:
-        return tr("Click to select, drag points to move, double-click a dimension to edit it");
+        return tr("Click to select, drag geometry to move, double-click a dimension to edit it");
     case Tool::Line:
-        return m_first ? tr("Type a length, Tab to the next value, Enter to finish, Esc to stop")
+        return m_first ? tr("Type a length, Tab to next value, Enter to finish, Esc to stop")
                        : tr("Click the start point");
     case Tool::Rectangle:
         return m_first ? tr("Click the opposite corner, or type the width, Tab, the height and Enter")
@@ -428,6 +443,10 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         return;
     }
     closeValueEditor();
+    if (m_typedMove) {
+        resetProgress();
+        redraw();
+    }
     const std::optional<Vec2> p = toSketch(pos);
     if (!p) {
         return;
@@ -440,6 +459,8 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
             m_boxStart = pos;
         } else if (hit.kind == Hit::Kind::Constraint) {
             startLabelDrag(hit.id, pos, *p);
+        } else if (m_selection.contains(hit.id)) {
+            startGroupDrag(pos, *p, movablePoints());
         }
         break;
     }
@@ -512,11 +533,12 @@ void SketchEditor::onRelease(QPointF pos)
         }
         return;
     }
-    if (m_dragPoint == 0 && m_dragLabel == 0) {
+    if (m_dragPoints.empty() && m_dragLabel == 0) {
         return;
     }
     const QString label = m_dragLabel != 0 ? tr("Move Dimension") : tr("Move");
-    m_dragPoint = 0;
+    m_dragPoints.clear();
+    m_draggingGroup = false;
     m_dragLabel = 0;
     m_draggingLabel = false;
     std::optional<sketch::Sketch> moved = std::move(m_dragPreview);
@@ -550,23 +572,8 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
         dragLabel(pos, *p);
         return;
     }
-    if (m_dragPoint != 0 && (buttons & Qt::LeftButton) && m_dragStart) {
-        sketch::Sketch candidate = *m_dragStart;
-        sketch::Point* point = candidate.point(m_dragPoint);
-        if (m_moveIncrement > 0.0) {
-            const Vec2 from = point->pos;
-            point->pos = {from.x + viewer::roundToIncrement(p->x - from.x, m_moveIncrement),
-                          from.y + viewer::roundToIncrement(p->y - from.y, m_moveIncrement)};
-        } else {
-            point->pos = *p;
-        }
-        point->fixed = true;
-        const sketch::SolveResult result = sketch::solve(candidate);
-        if (result.solved && result.conflicting.empty()) {
-            candidate.point(m_dragPoint)->fixed = false;
-            m_dragPreview = std::move(candidate);
-            redraw();
-        }
+    if (!m_dragPoints.empty() && !m_typedMove && (buttons & Qt::LeftButton) && m_dragStart) {
+        dragGroup(pos, *p);
         return;
     }
 
@@ -681,14 +688,6 @@ void SketchEditor::clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers)
         }
     } else if (!m_selection.contains(hit.id)) {
         m_selection = {hit.id};
-    }
-    if (hit.kind == Hit::Kind::Point) {
-        const sketch::Point* point = current().point(hit.id);
-        if (point != nullptr && !point->fixed) {
-            m_dragPoint = hit.id;
-            m_dragStart = current();
-            m_dragPreview.reset();
-        }
     }
     redraw();
 }
@@ -902,11 +901,17 @@ void SketchEditor::resetProgress()
         m_mirrorAxis = 0;
     }
     m_inputs->close();
+    if (std::exchange(m_typedMove, false)) {
+        m_dragPoints.clear();
+        m_dragStart.reset();
+        m_dragPreview.reset();
+    }
 }
 
 void SketchEditor::dropDrag()
 {
-    m_dragPoint = 0;
+    m_dragPoints.clear();
+    m_draggingGroup = false;
     m_dragLabel = 0;
     m_draggingLabel = false;
     m_dragStart.reset();

@@ -78,6 +78,7 @@ public:
     void setTool(Tool tool);
     Tool tool() const { return m_tool; }
     void cancel();
+    void startTypedMove();
     void deleteSelection();
     void toggleConstruction();
 
@@ -185,6 +186,13 @@ private:
     std::optional<QPointF> labelOnScreen(sketch::Id constraint) const;
     void selectInBox(QPointF from, QPointF to);
     void dropBox();
+    std::vector<sketch::Id> movablePoints() const;
+    void startGroupDrag(QPointF pos, sketch::Vec2 at, std::vector<sketch::Id> points);
+    void dragGroup(QPointF pos, sketch::Vec2 at);
+    bool moveBy(sketch::Vec2 delta);
+    void placeMoveInputs(const sketch::Sketch& s);
+    void previewTypedMove();
+    void acceptTypedMove();
 
     bool commit(const QString& label, sketch::Sketch candidate);
     void startDimension(sketch::ConstraintKind kind, std::vector<sketch::Id> refs, double value,
@@ -238,7 +246,11 @@ private:
     std::optional<QPointF> m_boxStart;
     bool m_boxing = false;
 
-    sketch::Id m_dragPoint = 0;
+    std::vector<sketch::Id> m_dragPoints;
+    QPointF m_dragPress;
+    sketch::Vec2 m_dragGrab;
+    bool m_draggingGroup = false;
+    bool m_typedMove = false;
     sketch::Id m_dragLabel = 0;
     QPointF m_dragLabelPress;
     sketch::Vec2 m_dragLabelGrab;
