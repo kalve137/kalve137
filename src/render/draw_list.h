@@ -71,6 +71,8 @@ struct Chunk {
     std::span<const Entry> palette;
     std::span<const Segment> segments;
     std::span<const Entry> edgePalette;
+    std::span<const Segment> points;
+    std::span<const Entry> pointPalette;
 };
 
 struct DrawList {

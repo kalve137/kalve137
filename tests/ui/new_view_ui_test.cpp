@@ -19,6 +19,8 @@
 #include "render/cpu_backend.h"
 #include "render/draw_list.h"
 #include "render/graphics_api.h"
+#include "render/pick_id.h"
+#include "render/rhi/rhi_backend.h"
 #include "render/rhi/rhi_view.h"
 #include "render/style.h"
 #include "snapshot/body.h"
@@ -47,10 +49,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace kalve137::uitest {
 namespace {
@@ -552,6 +557,199 @@ TEST_F(NewViewTest, CullingClosedBodiesChangesNoPixel)
             EXPECT_LE(gap->first, gap->second) << render::graphicsApiName(api);
         }
     }
+}
+
+using IdCache = std::map<std::uint32_t, std::optional<render::PickedItem>>;
+
+std::optional<render::PickedItem> itemOf(std::uint32_t id, const render::ChunkSet& chunks,
+                                         const std::vector<std::uint64_t>& places, IdCache& cache)
+{
+    const auto [found, added] = cache.try_emplace(id);
+    if (added) {
+        const render::PickId decoded = render::decodePickId(id);
+        if (decoded.kind != render::PickKind::None && decoded.chunk < places.size()) {
+            found->second = chunks.itemOf(places[decoded.chunk], decoded.kind, decoded.entry);
+        }
+    }
+    return found->second;
+}
+
+render::Frame frameOf(const render::RhiView& canvas)
+{
+    return render::makeFrame(canvas.camera(), canvas.viewport(), canvas.scene().origin,
+                             canvas.viewportStyle().background);
+}
+
+QPointF devicePixelOf(const render::RhiView& canvas, const snapshot::Point& point)
+{
+    const render::Frame frame = frameOf(canvas);
+    const snapshot::Point& origin = canvas.scene().origin;
+    const std::array<float, 16>& m = frame.viewProjection;
+    std::array<double, 4> clip{};
+    for (std::size_t r = 0; r < clip.size(); ++r) {
+        clip[r] = (static_cast<double>(m[r]) * (point[0] - origin[0])) +
+                  (static_cast<double>(m[r + 4]) * (point[1] - origin[1])) +
+                  (static_cast<double>(m[r + 8]) * (point[2] - origin[2])) + static_cast<double>(m[r + 12]);
+    }
+    return {(clip[0] / clip[3] + 1.0) * 0.5 * frame.width, (1.0 - clip[1] / clip[3]) * 0.5 * frame.height};
+}
+
+QPointF logicalPixelOf(const render::RhiView& canvas, const snapshot::Point& point)
+{
+    return devicePixelOf(canvas, point) / canvas.viewport().pixelRatio;
+}
+
+QPointF toward(QPointF from, QPointF to, double distance)
+{
+    const QPointF step = to - from;
+    return from + (step / std::hypot(step.x(), step.y()) * distance);
+}
+
+void expectCpuIds(render::RhiView& canvas, const std::string& api)
+{
+    const render::IdStyle style{.points = true};
+    const camera::Viewport port = canvas.viewport();
+    const std::optional<render::IdImage> gpu = canvas.readIds(QRect(0, 0, port.width, port.height), style);
+    ASSERT_TRUE(gpu) << api;
+
+    render::ChunkSet chunks;
+    chunks.update(canvas.scene(), canvas.viewportStyle());
+    const render::DrawList list = chunks.pickList(frameOf(canvas));
+    std::vector<std::uint64_t> cpuPlaces;
+    cpuPlaces.reserve(list.chunks.size());
+    for (const render::Chunk& chunk : list.chunks) {
+        cpuPlaces.push_back(chunk.id);
+    }
+    render::IdImage cpu;
+    render::CpuBackend backend;
+    backend.drawIds(list, style, cpu);
+    ASSERT_EQ(gpu->width, cpu.width) << api;
+    ASSERT_EQ(gpu->height, cpu.height) << api;
+
+    IdCache gpuCache;
+    IdCache cpuCache;
+    std::size_t body = 0;
+    std::size_t different = 0;
+    std::size_t kinds = 0;
+    float depthGap = 0.0F;
+    for (int y = 0; y < cpu.height; ++y) {
+        for (int x = 0; x < cpu.width; ++x) {
+            const std::optional<render::PickedItem> ours = itemOf(cpu.idAt(x, y), chunks, cpuPlaces, cpuCache);
+            const std::optional<render::PickedItem> theirs =
+                itemOf(gpu->idAt(x, y), canvas.chunks(), canvas.backend()->idChunks(), gpuCache);
+            body += ours ? 1 : 0;
+            different += ours != theirs ? 1 : 0;
+            kinds += ours && theirs && ours->kind != theirs->kind ? 1 : 0;
+            if (ours && ours == theirs) {
+                depthGap = std::max(depthGap, std::abs(cpu.depthAt(x, y) - gpu->depthAt(x, y)));
+            }
+        }
+    }
+    const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+    EXPECT_GT(body, pixels / 20) << api << ": the box and the torus fill part of the view";
+    EXPECT_LT(different, body / 50) << api << ": " << different << " of " << body << " picked pixels differ";
+    EXPECT_LT(kinds, body / 100) << api;
+    EXPECT_LT(depthGap, 2e-4F) << api << ": the picked depth leaves out the face bias";
+    std::set<render::PickKind> seen;
+    for (const auto& [id, item] : gpuCache) {
+        if (item) {
+            seen.insert(item->kind);
+        }
+    }
+    EXPECT_EQ(seen.size(), 3U) << api << ": faces, edges and points all reach the id buffer";
+}
+
+TEST_F(NewViewTest, TheIdPassMatchesTheCpuIds)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
+    const auto torus =
+        render::test::shared(render::test::bodyOf(render::test::torus({1060.0, -1000.0, 0.0}, 64, 32), {}, 1));
+    const snapshot::Scene scene{.bodies = {box, torus}, .origin = origin, .hidden = {}};
+    const camera::Camera camera = obliqueAt({1030.0, -1000.0, 0.0}, 110.0);
+    canvas->setScene(scene);
+    canvas->setCamera(camera);
+    ASSERT_FALSE(grabbed(*canvas).isNull());
+    expectCpuIds(*canvas, "the main view");
+
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
+        }
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        view.setCamera(camera);
+        view.setScene(scene);
+        ASSERT_FALSE(grabbed(view).isNull());
+        expectCpuIds(view, std::string(render::graphicsApiName(api)));
+    }
+}
+
+TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const auto mesh = render::test::edgedBox({-10.0, -10.0, -10.0}, {10.0, 10.0, 10.0});
+    const auto box = render::test::shared(render::test::bodyOf(mesh));
+    canvas->setScene({.bodies = {box}, .origin = {}, .hidden = {}});
+    const camera::Camera camera = obliqueAt({}, 60.0);
+    canvas->setCamera(camera);
+    ASSERT_FALSE(grabbed(*canvas).isNull());
+    const std::uint64_t passes = canvas->idPasses();
+    const render::PickKinds facesAndEdges{.faces = true, .edges = true, .points = false};
+    const render::PickKinds everything{.faces = true, .edges = true, .points = true};
+    constexpr std::uint32_t kTopFace = 5;
+
+    const QPointF topCenter = logicalPixelOf(*canvas, {0.0, 0.0, 10.0});
+    const std::optional<render::IdPick> face = canvas->pickAt(topCenter, facesAndEdges);
+    ASSERT_TRUE(face);
+    EXPECT_EQ(face->item,
+              (render::PickedItem{.feature = 1, .part = 0, .kind = render::PickKind::Face, .index = kTopFace}));
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "the first pick draws the id pass";
+
+    std::uint32_t frontTop = 0;
+    for (const snapshot::Edge& edge : mesh->edges) {
+        if (edge.points.front() == snapshot::Point{10.0, -10.0, 10.0} &&
+            edge.points.back() == snapshot::Point{10.0, 10.0, 10.0}) {
+            frontTop = edge.id;
+        }
+    }
+    const QPointF onEdge = logicalPixelOf(*canvas, {10.0, 0.0, 10.0});
+    const std::optional<render::IdPick> edge = canvas->pickAt(toward(onEdge, topCenter, 3.0), facesAndEdges);
+    ASSERT_TRUE(edge);
+    EXPECT_EQ(edge->item,
+              (render::PickedItem{.feature = 1, .part = 0, .kind = render::PickKind::Edge, .index = frontTop}))
+        << "an edge 3 px away beats the face under the cursor";
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "an unchanged view reads the kept id pass";
+
+    const QPointF corner = toward(logicalPixelOf(*canvas, {10.0, -10.0, 10.0}), topCenter, 2.0);
+    const std::optional<render::IdPick> point = canvas->pickAt(corner, everything, {.points = true});
+    ASSERT_TRUE(point);
+    EXPECT_EQ(point->item.kind, render::PickKind::Point);
+    EXPECT_EQ(point->item.index, 5U);
+    EXPECT_EQ(canvas->idPasses(), passes + 2) << "points draw in a pass of their own";
+
+    camera::Camera turned = camera;
+    ASSERT_TRUE(turned.setScale(70.0));
+    canvas->setCamera(turned);
+    EXPECT_TRUE(canvas->pickAt(logicalPixelOf(*canvas, {0.0, 0.0, 10.0}), facesAndEdges));
+    EXPECT_EQ(canvas->idPasses(), passes + 3) << "a camera change makes the id pass stale";
+
+    canvas->setScene({.bodies = {}, .origin = {}, .hidden = {box}});
+    EXPECT_FALSE(canvas->pickAt(logicalPixelOf(*canvas, {0.0, 0.0, 10.0}), everything, {.points = true}))
+        << "a hidden body picks nothing";
+    EXPECT_EQ(canvas->idPasses(), passes + 4);
+    EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
 
 TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)

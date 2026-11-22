@@ -4,6 +4,7 @@
 #pragma once
 
 #include "render/draw_list.h"
+#include "render/pick_id.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
@@ -24,6 +25,15 @@ struct FaceEntry {
     bool operator==(const FaceEntry&) const = default;
 };
 
+struct PickedItem {
+    int feature = 0;
+    int part = 0;
+    PickKind kind = PickKind::None;
+    std::uint32_t index = 0;
+
+    bool operator==(const PickedItem&) const = default;
+};
+
 class ChunkSet {
 public:
     static constexpr std::size_t kDefaultVertexBudget = std::size_t{1} << 16;
@@ -32,8 +42,10 @@ public:
 
     void update(const snapshot::Scene& scene, const ViewportStyle& style);
     DrawList draw(const Frame& frame) const;
+    DrawList pickList(const Frame& frame) const;
     void clear();
     std::optional<FaceEntry> entryOf(int feature, int part, std::uint32_t face) const;
+    std::optional<PickedItem> itemOf(std::uint64_t chunk, PickKind kind, std::uint32_t entry) const;
 
     std::size_t chunkCount() const { return m_chunks.size(); }
     std::size_t triangleCount() const;
@@ -54,6 +66,9 @@ private:
         std::uint32_t firstEdge = 0;
         std::uint32_t firstEdgeEntry = 0;
         std::uint32_t edgeEntryCount = 0;
+        std::uint32_t firstPoint = 0;
+        std::uint32_t firstPointEntry = 0;
+        std::uint32_t pointEntryCount = 0;
         std::size_t vertexCount = 0;
     };
     struct Data {
@@ -67,9 +82,12 @@ private:
         std::vector<Entry> palette;
         std::vector<Segment> segments;
         std::vector<Entry> edgePalette;
+        std::vector<Segment> points;
+        std::vector<Entry> pointPalette;
         std::size_t vertexCount = 0;
         std::size_t entryCount = 0;
         std::size_t edgeEntryCount = 0;
+        std::size_t pointEntryCount = 0;
         bool meshDirty = false;
         bool paletteDirty = false;
     };
@@ -82,6 +100,8 @@ private:
     void place(const Key& key, const Shown& shown);
     void buildMesh(Data& chunk);
     void addSegments(Data& chunk, const Slot& slot) const;
+    void addPoints(Data& chunk, const Slot& slot) const;
+    Chunk chunkOf(const Data& chunk) const;
     void buildPalette(Data& chunk);
     Entry colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const;
 

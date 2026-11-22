@@ -6,13 +6,16 @@
 #include "camera/camera.h"
 #include "render/chunk_set.h"
 #include "render/graphics_api.h"
+#include "render/pick_id.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
 #include <QPointF>
+#include <QRect>
 #include <QRhiWidget>
 #include <QString>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -34,6 +37,11 @@ struct DeviceProbe {
 };
 
 enum class StartProblem { None, NoDevice, TooOld };
+
+struct IdPick {
+    PickedItem item;
+    IdHit hit;
+};
 
 StartProblem startProblem(const DeviceProbe& probe);
 StartProblem checkStart(GraphicsApi api);
@@ -67,6 +75,9 @@ public:
     const RhiBackend* backend() const { return m_bodies.get(); }
     std::optional<double> benchFrame();
     double lastUpdateMs() const { return m_updateMs; }
+    std::optional<IdImage> readIds(const QRect& deviceRect, const IdStyle& style = {});
+    std::optional<IdPick> pickAt(QPointF position, const PickKinds& kinds, const IdStyle& style = {});
+    std::uint64_t idPasses() const { return m_idPasses; }
 
 signals:
     void ready();
@@ -89,8 +100,11 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
+    struct IdTargets;
+
     void updateChunks();
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
+    bool ensureIdTargets(QSize size);
     QRhiTexture* resolvedTexture() const;
     void fail();
     void placeMessage();
@@ -101,6 +115,11 @@ private:
     camera::Camera m_camera;
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
+    std::unique_ptr<IdTargets> m_ids;
+    IdStyle m_idStyle;
+    bool m_idsFresh = false;
+    bool m_idsFailed = false;
+    std::uint64_t m_idPasses = 0;
     QString m_backend;
     QString m_device;
     QLabel* m_message = nullptr;
