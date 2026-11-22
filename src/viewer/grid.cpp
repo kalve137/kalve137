@@ -28,8 +28,6 @@ namespace kalve137::viewer {
 
 namespace {
 
-constexpr int kPiecesPerLine = 24;
-constexpr double kFadeStart = 0.35;
 constexpr double kLabelRadius = 0.5;
 constexpr double kLabelGap = 0.4;
 constexpr double kLabelHeight = 12.0;
@@ -38,18 +36,10 @@ constexpr int kWashSegments = 96;
 constexpr float kWashTransparency = static_cast<float>(style::kTintHalf);
 constexpr float kWashOffsetFactor = 2.0f;
 constexpr float kWashOffsetUnits = 4.0f;
-constexpr double kGridRecenterFraction = 0.1;
-constexpr double kGridShrinkFraction = 0.6;
 
-struct Line {
-    bool alongV = false;
-    double offset = 0.0;
-};
-
-double smoothstep(double t)
+camera::Vec3 toVec(const gp_XYZ& xyz)
 {
-    t = std::clamp(t, 0.0, 1.0);
-    return t * t * (3.0 - 2.0 * t);
+    return {xyz.X(), xyz.Y(), xyz.Z()};
 }
 
 std::string formatValue(double value, double step)
@@ -75,71 +65,29 @@ std::string formatValue(double value, double step)
 
 } // namespace
 
-double niceGridStep(double minimum)
-{
-    const double decade = std::pow(10.0, std::floor(std::log10(minimum)));
-    for (const double factor : {1.0, 2.0, 5.0}) {
-        if (decade * factor >= minimum) {
-            return decade * factor;
-        }
-    }
-    return decade * 10.0;
-}
-
-double gridStep(bool adaptive, double spacing, double minimum)
-{
-    if (adaptive || spacing <= 0.0) {
-        return niceGridStep(minimum);
-    }
-    double step = spacing;
-    while (step < minimum) {
-        step *= GridObject::kMajorEvery;
-    }
-    return step;
-}
-
 double roundToIncrement(double value, double increment)
 {
     return increment > 0.0 ? std::round(value / increment) * increment : value;
 }
 
-GridLayout layoutGrid(const gp_Ax3& plane, double step, const gp_Pnt& viewTarget, double viewRadius,
-                      const std::optional<GridExtent>& extent)
+render::GridPlane gridPlaneOf(const gp_Ax3& plane)
 {
-    double radius = viewRadius;
-    gp_Pnt target = viewTarget;
-    if (extent && extent->radius < viewRadius) {
-        radius = extent->radius;
-        target = extent->center;
-    }
-    const gp_Vec toTarget(plane.Location(), target);
-    const double majorStep = step * GridObject::kMajorEvery;
-    const gp_Pnt2d center(std::round(toTarget.Dot(gp_Vec(plane.XDirection())) / majorStep) * majorStep,
-                          std::round(toTarget.Dot(gp_Vec(plane.YDirection())) / majorStep) * majorStep);
-    return {step, center, radius};
+    return {toVec(plane.Location().XYZ()), toVec(plane.XDirection().XYZ()), toVec(plane.YDirection().XYZ()),
+            toVec(plane.Direction().XYZ())};
 }
 
-bool isGridStale(const GridLayout& current, const GridLayout& wanted)
+render::GridExtent gridExtentOf(const GridExtent& extent)
 {
-    return wanted.step != current.step || wanted.radius > current.radius ||
-           wanted.radius < current.radius * kGridShrinkFraction ||
-           wanted.center.Distance(current.center) > current.radius * kGridRecenterFraction;
+    return {toVec(extent.center.XYZ()), extent.radius};
 }
 
 GridObject::GridObject(Part part) : m_part(part) {}
-
-void GridObject::setLayout(double step, const gp_Pnt2d& center, double radius)
-{
-    m_step = step;
-    m_center = center;
-    m_radius = radius;
-}
 
 void GridObject::Compute(const Handle(PrsMgr_PresentationManager)&, const Handle(Prs3d_Presentation)& presentation,
                          int mode)
 {
     presentation->SetInfiniteState(true);
-    if (mode != 0 || m_step <= 0.0 || m_radius <= 0.0) {
+    if (mode != 0 || m_layout.step <= 0.0 || m_layout.radius <= 0.0) {
         return;
     }
     switch (m_part) {
@@ -158,13 +106,15 @@ void GridObject::Compute(const Handle(PrsMgr_PresentationManager)&, const Handle
 void GridObject::computeWash(const Handle(Prs3d_Presentation)& presentation) const
 {
     Handle(Graphic3d_ArrayOfTriangles) fan = new Graphic3d_ArrayOfTriangles(kWashSegments * 3);
-    const gp_Pnt center = toWorld(m_center.X(), m_center.Y());
+    const render::GridPoint& middle = m_layout.center;
+    const double radius = m_layout.radius;
+    const gp_Pnt center = toWorld(middle.u, middle.v);
     for (int i = 0; i < kWashSegments; ++i) {
         const double a = 2.0 * std::numbers::pi * i / kWashSegments;
         const double b = 2.0 * std::numbers::pi * (i + 1) / kWashSegments;
         fan->AddVertex(center);
-        fan->AddVertex(toWorld(m_center.X() + m_radius * std::cos(a), m_center.Y() + m_radius * std::sin(a)));
-        fan->AddVertex(toWorld(m_center.X() + m_radius * std::cos(b), m_center.Y() + m_radius * std::sin(b)));
+        fan->AddVertex(toWorld(middle.u + radius * std::cos(a), middle.v + radius * std::sin(a)));
+        fan->AddVertex(toWorld(middle.u + radius * std::cos(b), middle.v + radius * std::sin(b)));
     }
     Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
     material.SetColor(m_style.background);
@@ -185,44 +135,37 @@ void GridObject::computeWash(const Handle(Prs3d_Presentation)& presentation) con
 
 void GridObject::computeLines(const Handle(Prs3d_Presentation)& presentation) const
 {
-    std::vector<Line> minor;
-    std::vector<Line> major;
-    std::vector<Line> axes;
-    const int half = static_cast<int>(std::ceil(m_radius / m_step));
-    for (const bool alongV : {true, false}) {
-        const double center = alongV ? m_center.X() : m_center.Y();
-        for (int i = -half; i <= half; ++i) {
-            const double offset = center + i * m_step;
-            if (std::abs(offset - center) >= m_radius) {
-                continue;
-            }
-            const long long index = std::llround(offset / m_step);
-            const Line line{alongV, static_cast<double>(index) * m_step};
-            if (index == 0) {
-                axes.push_back(line);
-            } else if (index % kMajorEvery == 0) {
-                major.push_back(line);
-            } else {
-                minor.push_back(line);
-            }
+    std::vector<render::GridLine> minor;
+    std::vector<render::GridLine> major;
+    std::vector<render::GridLine> axes;
+    for (const render::GridLine& line : render::gridLines(m_layout)) {
+        switch (line.kind) {
+        case render::GridLineKind::Minor:
+            minor.push_back(line);
+            break;
+        case render::GridLineKind::Major:
+            major.push_back(line);
+            break;
+        case render::GridLineKind::Axis:
+            axes.push_back(line);
+            break;
         }
     }
 
-    const auto addGroup = [&](const std::vector<Line>& lines, double width, const Quantity_Color* fixedColor) {
+    const auto addGroup = [&](const std::vector<render::GridLine>& lines, double width,
+                              const Quantity_Color* fixedColor) {
         if (lines.empty()) {
             return;
         }
         Handle(Graphic3d_ArrayOfSegments) segments = new Graphic3d_ArrayOfSegments(
-            static_cast<int>(lines.size()) * kPiecesPerLine * 2, 0, Graphic3d_ArrayFlags_VertexColor);
-        for (const Line& line : lines) {
+            static_cast<int>(lines.size()) * render::kGridPiecesPerLine * 2, 0, Graphic3d_ArrayFlags_VertexColor);
+        for (const render::GridLine& line : lines) {
             const Quantity_Color color = fixedColor != nullptr
                                              ? *fixedColor
                                              : axisColor(line.alongV ? m_plane.YDirection() : m_plane.XDirection());
-            const double across = line.offset - (line.alongV ? m_center.X() : m_center.Y());
-            const double reach = std::sqrt(std::max(0.0, m_radius * m_radius - across * across));
-            const double start = (line.alongV ? m_center.Y() : m_center.X()) - reach;
-            const double piece = 2.0 * reach / kPiecesPerLine;
-            for (int p = 0; p < kPiecesPerLine; ++p) {
+            const double start = line.start;
+            const double piece = (line.end - line.start) / render::kGridPiecesPerLine;
+            for (int p = 0; p < render::kGridPiecesPerLine; ++p) {
                 for (const double along : {start + p * piece, start + (p + 1) * piece}) {
                     const double u = line.alongV ? line.offset : along;
                     const double v = line.alongV ? along : line.offset;
@@ -241,9 +184,10 @@ void GridObject::computeLines(const Handle(Prs3d_Presentation)& presentation) co
 
 void GridObject::computeLabels(const Handle(Prs3d_Presentation)& presentation) const
 {
-    const double majorStep = m_step * kMajorEvery;
-    const double reach = m_radius * kLabelRadius;
-    const double gap = m_step * kLabelGap;
+    const double step = m_layout.step;
+    const double majorStep = step * render::kGridMajorEvery;
+    const double reach = m_layout.radius * kLabelRadius;
+    const double gap = step * kLabelGap;
     Handle(Graphic3d_Group) group = presentation->NewGroup();
 
     Handle(Prs3d_TextAspect) below = new Prs3d_TextAspect();
@@ -263,25 +207,26 @@ void GridObject::computeLabels(const Handle(Prs3d_Presentation)& presentation) c
         return std::pair{static_cast<long long>(std::ceil((center - reach) / majorStep)),
                          static_cast<long long>(std::floor((center + reach) / majorStep))};
     };
-    if (std::abs(m_center.Y()) < reach) {
-        const auto [first, last] = range(m_center.X());
+    const render::GridPoint& center = m_layout.center;
+    if (std::abs(center.v) < reach) {
+        const auto [first, last] = range(center.u);
         for (long long i = first; i <= last; ++i) {
             if (i == 0) {
                 continue;
             }
             const double u = static_cast<double>(i) * majorStep;
-            const TCollection_ExtendedString text(formatValue(u, m_step).c_str());
+            const TCollection_ExtendedString text(formatValue(u, step).c_str());
             Prs3d_Text::Draw(group, below, text, toWorld(u, -gap));
         }
     }
-    if (std::abs(m_center.X()) < reach) {
-        const auto [first, last] = range(m_center.Y());
+    if (std::abs(center.u) < reach) {
+        const auto [first, last] = range(center.v);
         for (long long i = first; i <= last; ++i) {
             if (i == 0) {
                 continue;
             }
             const double v = static_cast<double>(i) * majorStep;
-            const TCollection_ExtendedString text(formatValue(v, m_step).c_str());
+            const TCollection_ExtendedString text(formatValue(v, step).c_str());
             Prs3d_Text::Draw(group, beside, text, toWorld(-gap, v));
         }
     }
@@ -294,8 +239,7 @@ gp_Pnt GridObject::toWorld(double u, double v) const
 
 Quantity_Color GridObject::faded(const Quantity_Color& color, double u, double v) const
 {
-    const double distance = std::hypot(u - m_center.X(), v - m_center.Y()) / m_radius;
-    const double w = smoothstep((distance - kFadeStart) / (1.0 - kFadeStart));
+    const double w = render::gridFade(m_layout, u, v);
     const Quantity_Color& to = m_style.background;
     return Quantity_Color(color.Red() + (to.Red() - color.Red()) * w, color.Green() + (to.Green() - color.Green()) * w,
                           color.Blue() + (to.Blue() - color.Blue()) * w, Quantity_TOC_RGB);

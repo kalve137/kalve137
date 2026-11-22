@@ -15,6 +15,8 @@ add_library(kalve137_render STATIC
     edge_quad.cpp
     edge_quad.h
     graphics_api.h
+    grid.cpp
+    grid.h
     pick_id.cpp
     pick_id.h
     positions.h

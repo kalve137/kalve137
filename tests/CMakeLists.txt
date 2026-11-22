@@ -37,6 +37,7 @@ add_executable(kalve137_tests
     render/cpu_backend_test.cpp
     render/draw_list_test.cpp
     render/edge_quad_test.cpp
+    render/grid_test.cpp
     render/pick_id_test.cpp
     render/positions_test.cpp
     render/shaders_test.cpp

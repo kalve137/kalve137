@@ -26,6 +26,7 @@ target_include_directories(kalve137_viewer PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(kalve137_viewer
     PUBLIC
         kalve137_camera
+        kalve137_render
         Qt6::OpenGLWidgets
         Qt6::Widgets
         TKV3d
