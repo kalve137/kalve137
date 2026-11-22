@@ -4,7 +4,7 @@ Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## Build and test
 
-You need Visual Studio 2022 or newer with the C++ workload, Qt 6.8 or newer (MSVC 64-bit kit), vcpkg and LLVM, with `VCPKG_ROOT` and `QT_ROOT_DIR` set.
+You need Visual Studio 2022 or newer with the C++ workload, Qt 6.12 or newer (MSVC 64-bit kit) with the Qt Shader Tools add-on, vcpkg and LLVM, with `VCPKG_ROOT` and `QT_ROOT_DIR` set.
 
 ```powershell
 . .\scripts\dev-shell.ps1

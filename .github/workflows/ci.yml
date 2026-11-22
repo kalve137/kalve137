@@ -69,6 +69,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
+          modules: qtshadertools
           dir: C:\
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
@@ -163,6 +164,7 @@ jobs:
           host: linux
           target: desktop
           arch: linux_gcc_64
+          modules: qtshadertools
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 
@@ -220,6 +222,7 @@ jobs:
           host: mac
           target: desktop
           arch: clang_64
+          modules: qtshadertools
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 

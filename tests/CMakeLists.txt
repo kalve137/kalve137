@@ -33,6 +33,7 @@ add_executable(kalve137_tests
     pick/ray_scene_test.cpp
     platform/crash_test.cpp
     render/positions_test.cpp
+    render/shaders_test.cpp
     sketch/build_test.cpp
     sketch/dimension_test.cpp
     sketch/draft_test.cpp
@@ -57,6 +58,17 @@ target_link_libraries(kalve137_tests PRIVATE
     kalve137_viewer
     GTest::gtest_main
     nlohmann_json::nlohmann_json
+    Qt6::GuiPrivate
+)
+qt_add_shaders(kalve137_tests "kalve137_test_shaders"
+    PREFIX "/shaders"
+    BASE render/shaders
+    GLSL "100 es,120,150"
+    HLSL 50
+    MSL 12
+    FILES
+        render/shaders/probe.vert
+        render/shaders/probe.frag
 )
 kalve137_set_warnings(kalve137_tests)
 kalve137_copy_runtime_dlls(kalve137_tests)
