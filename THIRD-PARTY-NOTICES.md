@@ -37,4 +37,5 @@ The new viewport's camera moves exactly like the 3D view built on Open CASCADE T
 | `src/camera/navigator.cpp` | `AIS_ViewController` (orbit, pan, zoom and their constants) |
 | `src/camera/transition.cpp` | The camera interpolation in `Graphic3d_Camera.cxx` and `gp_Quaternion::SetMatrix` |
 | `src/camera/views.cpp` | `V3d_View::SetProj` |
+| `src/render/draw_list.cpp` | The default material in `Graphic3d_MaterialAspect.cxx` and the Phong lighting of `Graphic3d_ShaderManager.cxx` |
 | `src/viewer/occt_view_widget_camera.cpp` | `V3d_View::GravityPoint`, `V3d_View::ConvertWithProj` and `V3d_View::Convert` |

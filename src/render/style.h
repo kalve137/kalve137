@@ -3,19 +3,16 @@
 
 #pragma once
 
+#include "snapshot/color.h"
+
 namespace kalve137::render {
 
-struct Color {
-    float red = 0.0F;
-    float green = 0.0F;
-    float blue = 0.0F;
-    float alpha = 1.0F;
-
-    bool operator==(const Color&) const = default;
-};
+enum class VisualStyle { Shaded, ShadedWithEdges, Wireframe, VisibleEdges };
 
 struct ViewportStyle {
-    Color background;
+    snapshot::Color background;
+    snapshot::Color body{0.64F, 0.68F, 0.73F};
+    VisualStyle visualStyle = VisualStyle::ShadedWithEdges;
     double pixelRatio = 1.0;
 
     bool operator==(const ViewportStyle&) const = default;

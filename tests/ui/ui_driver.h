@@ -108,6 +108,7 @@ public:
     nlohmann::json state() const;
 
 private:
+    QWidget* canvas() const;
     void keepActive();
     void sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,
                    Qt::KeyboardModifiers modifiers);

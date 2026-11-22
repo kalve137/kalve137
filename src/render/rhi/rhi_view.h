@@ -5,6 +5,7 @@
 
 #include "camera/camera.h"
 #include "render/graphics_api.h"
+#include "render/scene_cache.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
@@ -12,6 +13,7 @@
 #include <QRhiWidget>
 #include <QString>
 
+#include <memory>
 #include <optional>
 
 class QLabel;
@@ -19,6 +21,8 @@ class QRhiCommandBuffer;
 class QRhiRenderTarget;
 
 namespace kalve137::render {
+
+class RhiBackend;
 
 bool canStart(GraphicsApi api);
 QLabel* makeFailureNotice(GraphicsApi api, QWidget* parent);
@@ -28,6 +32,11 @@ class RhiView : public QRhiWidget {
 
 public:
     explicit RhiView(GraphicsApi api, QWidget* parent = nullptr);
+    ~RhiView() override;
+    RhiView(const RhiView&) = delete;
+    RhiView& operator=(const RhiView&) = delete;
+    RhiView(RhiView&&) = delete;
+    RhiView& operator=(RhiView&&) = delete;
 
     void setViewportStyle(const ViewportStyle& style);
     const ViewportStyle& viewportStyle() const { return m_style; }
@@ -65,6 +74,7 @@ protected:
 
 private:
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
+    QRhiTexture* resolvedTexture() const;
     void fail();
     void placeMessage();
 
@@ -72,6 +82,8 @@ private:
     ViewportStyle m_style;
     snapshot::Scene m_scene;
     camera::Camera m_camera;
+    SceneCache m_cache;
+    std::unique_ptr<RhiBackend> m_bodies;
     QString m_backend;
     QString m_device;
     QLabel* m_message = nullptr;

@@ -9,6 +9,8 @@
 #include "app/shell/main_window.h"
 #include "app/sketch/sketch_editor.h"
 #include "app/theme/theme.h"
+#include "app/view/camera_commands.h"
+#include "camera/camera.h"
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "log/log.h"
@@ -498,7 +500,10 @@ void UiDriver::settle(int milliseconds)
     frame();
     QElapsedTimer clock;
     clock.start();
-    while (m_view != nullptr && m_view->isAnimating() && clock.elapsed() < kAnimationLimitMs) {
+    const auto animating = [this] {
+        return m_view != nullptr ? m_view->isAnimating() : m_window->cameraCommands()->isAnimating();
+    };
+    while (animating() && clock.elapsed() < kAnimationLimitMs) {
         QTest::qWait(kFrameMs);
         frame();
     }
@@ -526,19 +531,32 @@ QPointF UiDriver::originPlane(core::OriginPlane plane)
 
 QPointF UiDriver::at(const gp_Pnt& world) const
 {
-    return m_view->toScreen(world);
+    if (m_view != nullptr) {
+        return m_view->toScreen(world);
+    }
+    const camera::ScreenPoint point =
+        m_newView->camera().project({world.X(), world.Y(), world.Z()}, m_newView->viewport());
+    return {point.x, point.y};
+}
+
+QWidget* UiDriver::canvas() const
+{
+    if (m_view != nullptr) {
+        return m_view;
+    }
+    return m_newView;
 }
 
 void UiDriver::sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,
                          Qt::KeyboardModifiers modifiers)
 {
-    const QPoint inWindow = m_view->mapTo(m_window.get(), pos.toPoint());
+    const QPoint inWindow = canvas()->mapTo(m_window.get(), pos.toPoint());
     QWidget* target = m_grab;
     if (target == nullptr) {
         target = m_window->childAt(inWindow);
     }
     if (target == nullptr) {
-        target = m_view;
+        target = canvas();
     }
     if (type == QEvent::MouseButtonPress) {
         m_grab = target;
@@ -568,7 +586,7 @@ QPointF UiDriver::centerOf(const QWidget* widget) const
 
 QPointF UiDriver::inView(const QWidget* widget, QPoint local) const
 {
-    return m_view->mapFrom(m_window.get(), widget->mapTo(m_window.get(), local));
+    return canvas()->mapFrom(m_window.get(), widget->mapTo(m_window.get(), local));
 }
 
 QPointF UiDriver::timelineChip(core::FeatureId id) const
@@ -607,7 +625,7 @@ void UiDriver::contextMenu(QPointF pos, const QString& item)
 {
     chooseFromMenu(item);
     move(pos);
-    const QPoint inWindow = m_view->mapTo(m_window.get(), pos.toPoint());
+    const QPoint inWindow = canvas()->mapTo(m_window.get(), pos.toPoint());
     QWidget* target = m_window->childAt(inWindow);
     if (target == nullptr) {
         ADD_FAILURE() << "Nothing to right-click at " << pos.x() << "," << pos.y();
@@ -780,16 +798,16 @@ void UiDriver::drag(QPointF from, QPointF to, Qt::MouseButton button, Qt::Keyboa
 
 void UiDriver::wheel(QPointF pos, int notches)
 {
-    QWheelEvent event(pos, m_view->mapToGlobal(pos), QPoint(), QPoint(0, kWheelStep * notches), m_buttons, {},
+    QWheelEvent event(pos, canvas()->mapToGlobal(pos), QPoint(), QPoint(0, kWheelStep * notches), m_buttons, {},
                       Qt::NoScrollPhase, false);
-    QApplication::sendEvent(m_view, &event);
+    QApplication::sendEvent(canvas(), &event);
     settle();
 }
 
 QWidget* UiDriver::focused() const
 {
     QWidget* widget = m_window->focusWidget();
-    return widget != nullptr ? widget : m_view;
+    return widget != nullptr ? widget : canvas();
 }
 
 void UiDriver::key(int key, Qt::KeyboardModifiers modifiers)

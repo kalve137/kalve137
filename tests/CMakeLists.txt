@@ -33,8 +33,11 @@ add_executable(kalve137_tests
     log/log_test.cpp
     pick/ray_scene_test.cpp
     platform/crash_test.cpp
+    render/cpu_backend_test.cpp
+    render/draw_list_test.cpp
     render/positions_test.cpp
     render/shaders_test.cpp
+    render/test_meshes.h
     sketch/build_test.cpp
     sketch/dimension_test.cpp
     sketch/draft_test.cpp
@@ -96,6 +99,7 @@ add_executable(kalve137_uitests
     ui/sketch_move_ui_test.cpp
     ui/scenario.h
     ui/screen_ui_test.cpp
+    ui/shading_pair_ui_test.cpp
     ui/ui_driver.cpp
     ui/ui_driver.h
     ui/ui_main.cpp
@@ -135,8 +139,24 @@ foreach(scale 125 150 175)
     )
 endforeach()
 add_test(NAME NewView.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*)
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*)
 set_tests_properties(NewView.Harness PROPERTIES
+    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
+    LABELS ui
+    RUN_SERIAL TRUE
+)
+set(new_view_pairs
+    FilesTest.SavesReopensExportsAndImports
+    FilesTest.OpenSampleOpensAnUntitledCopyOfTheDodecahedron
+    MenuTest.TimelineSuppressesAndUnsuppresses
+    MenuTest.BrowserHidesAndShowsABody
+    MenuTest.BrowserOpensAppearance
+    PreferencesTest.ChoosingLightSwitchesLiveAndIsKept
+    PreferencesTest.LightThemeShowsABodyASketchAndADialog
+)
+list(JOIN new_view_pairs ":" new_view_filter)
+add_test(NAME NewView.Pairs COMMAND kalve137_uitests --gtest_filter=${new_view_filter})
+set_tests_properties(NewView.Pairs PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE

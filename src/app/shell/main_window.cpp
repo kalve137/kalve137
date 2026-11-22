@@ -658,7 +658,7 @@ void MainWindow::createDocks()
 
 void MainWindow::createOverlays()
 {
-    auto* overlay = new ViewOverlay(m_view);
+    auto* overlay = new ViewOverlay(m_rhiView != nullptr ? static_cast<QWidget*>(m_rhiView) : m_view);
 
     m_featureFrame = new QFrame;
     m_featureFrame->setObjectName("floatingPanel");
@@ -889,14 +889,38 @@ void MainWindow::applyViewportTheme()
         .axisZ = colors.viewport.axisZ,
         .labelFont = fonts::families().occtMedium,
     });
-    if (m_rhiView != nullptr) {
-        const QColor& canvas = colors.viewport.canvas;
-        m_rhiView->setViewportStyle({
-            .background = {static_cast<float>(canvas.redF()), static_cast<float>(canvas.greenF()),
-                           static_cast<float>(canvas.blueF()), static_cast<float>(canvas.alphaF())},
-            .pixelRatio = devicePixelRatioF(),
-        });
+    applyNewViewStyle();
+}
+
+void MainWindow::applyNewViewStyle()
+{
+    if (m_rhiView == nullptr) {
+        return;
     }
+    const auto color = [](const QColor& color) {
+        return snapshot::Color{static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
+                               static_cast<float>(color.blueF()), static_cast<float>(color.alphaF())};
+    };
+    const auto visual = [](VisualStyle style) {
+        switch (style) {
+        case VisualStyle::Shaded:
+            return render::VisualStyle::Shaded;
+        case VisualStyle::ShadedWithEdges:
+            return render::VisualStyle::ShadedWithEdges;
+        case VisualStyle::Wireframe:
+            return render::VisualStyle::Wireframe;
+        case VisualStyle::VisibleEdges:
+            return render::VisualStyle::VisibleEdges;
+        }
+        return render::VisualStyle::ShadedWithEdges;
+    };
+    const theme::Palette& colors = theme::palette();
+    m_rhiView->setViewportStyle({
+        .background = color(colors.viewport.canvas),
+        .body = color(colors.viewport.body),
+        .visualStyle = visual(m_preferences.visualStyle),
+        .pixelRatio = devicePixelRatioF(),
+    });
 }
 
 void MainWindow::applyPreferences()
@@ -911,6 +935,7 @@ void MainWindow::applyPreferences()
         m_view->setGridLabels(m_preferences.sketchGridLabels);
     }
     m_scene->setVisualStyle(m_preferences.visualStyle);
+    applyNewViewStyle();
     m_sketchEditor->setDisplay({m_preferences.sketchProfiles, m_preferences.sketchPoints,
                                 m_preferences.sketchDimensions, m_preferences.constraintGlyphs,
                                 m_preferences.sketchConstruction});

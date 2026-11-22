@@ -3,14 +3,20 @@
 
 #include "ui_test.h"
 
+#include "../render/test_meshes.h"
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_navigation.h"
 #include "camera/camera.h"
+#include "render/cpu_backend.h"
+#include "render/draw_list.h"
 #include "render/graphics_api.h"
 #include "render/rhi/rhi_view.h"
+#include "render/scene_cache.h"
+#include "render/style.h"
+#include "snapshot/body.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QApplication>
@@ -29,6 +35,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -38,6 +45,7 @@ namespace {
 using NewViewTest = UiTest;
 
 constexpr int kColorTolerance = 2;
+constexpr int kBackendTolerance = 24;
 constexpr int kSettleMs = 200;
 constexpr int kTransitionWaitMs = 3000;
 constexpr int kWheelStep = 120;
@@ -184,6 +192,67 @@ TEST_F(NewViewTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
 
     QTest::qWait(kSettleMs);
     expectFollowed(*ui, "idle");
+}
+
+TEST_F(NewViewTest, DrawsTheTorusLikeTheCpuBackend)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    EXPECT_EQ(canvas->sampleCount(), 4);
+    const snapshot::Point center{1234.5, -567.25, 89.0};
+    const auto torus = std::make_shared<const snapshot::Body>(render::test::bodyOf(render::test::torus(center)));
+    const snapshot::Scene scene{.bodies = {torus}, .origin = {1000.0, -1000.0, 0.0}};
+    camera::Camera camera;
+    ASSERT_TRUE(
+        camera.setEyeAndCenter({center[0], center[1] - 300.0, center[2] + 400.0}, {center[0], center[1], center[2]}));
+    ASSERT_TRUE(camera.setUp({0.0, 0.0, 1.0}));
+    ASSERT_TRUE(camera.setScale(140.0));
+    canvas->setScene(scene);
+    canvas->setCamera(camera);
+    const QImage gpu = canvas->grabFramebuffer().convertToFormat(QImage::Format_ARGB32);
+    ASSERT_FALSE(gpu.isNull());
+    EXPECT_TRUE(canvas->benchFrame()) << "the bench times multisampled frames";
+
+    const render::ViewportStyle style = canvas->viewportStyle();
+    const camera::Viewport viewport = canvas->viewport();
+    render::SceneCache cache;
+    const render::DrawList list =
+        cache.draw(scene, render::makeFrame(camera, viewport, scene.origin, style.background), style);
+    render::CpuBackend backend;
+    render::Image cpu;
+    backend.draw(list, 2, cpu);
+    ASSERT_EQ(gpu.width(), cpu.width);
+    ASSERT_EQ(gpu.height(), cpu.height);
+
+    const QRgb background = cpu.at(0, 0);
+    std::size_t body = 0;
+    std::size_t different = 0;
+    for (int y = 0; y < cpu.height; ++y) {
+        const auto* line = reinterpret_cast<const QRgb*>(gpu.constScanLine(y));
+        for (int x = 0; x < cpu.width; ++x) {
+            const QRgb ours = cpu.at(x, y);
+            const QRgb theirs = line[x];
+            body += ours != background ? 1 : 0;
+            const int gap = std::max({std::abs(qRed(ours) - qRed(theirs)), std::abs(qGreen(ours) - qGreen(theirs)),
+                                      std::abs(qBlue(ours) - qBlue(theirs))});
+            different += gap > kBackendTolerance ? 1 : 0;
+        }
+    }
+    const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+    EXPECT_GT(body, pixels / 20) << "the torus fills part of the view";
+    EXPECT_LT(different, pixels / 100) << different << " of " << pixels << " pixels differ by more than "
+                                       << kBackendTolerance;
+    const std::filesystem::path shot = ui->save("gpu");
+    QImage cpuShot(cpu.width, cpu.height, QImage::Format_ARGB32);
+    for (int y = 0; y < cpu.height; ++y) {
+        auto* line = reinterpret_cast<QRgb*>(cpuShot.scanLine(y));
+        for (int x = 0; x < cpu.width; ++x) {
+            line[x] = cpu.at(x, y);
+        }
+    }
+    cpuShot.save(QString::fromStdU16String((shot.parent_path() / "cpu.png").u16string()));
 }
 
 TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)

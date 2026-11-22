@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 add_library(kalve137_render_rhi STATIC
+    rhi_backend.cpp
+    rhi_backend.h
     rhi_view.cpp
     rhi_view.h
 )
@@ -14,6 +16,16 @@ target_link_libraries(kalve137_render_rhi
     PRIVATE
         kalve137_log
         Qt6::GuiPrivate
+)
+qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
+    PREFIX "/kalve137/shaders"
+    BASE shaders
+    GLSL "100 es,120,150"
+    HLSL 50
+    MSL 12
+    FILES
+        shaders/body.vert
+        shaders/body.frag
 )
 kalve137_set_warnings(kalve137_render_rhi)
 kalve137_forbid(kalve137_render_rhi OCCT MODULES app core geometry sketch viewer)
