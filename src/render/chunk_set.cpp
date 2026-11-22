@@ -137,6 +137,8 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
     m_pixelRatio = style.pixelRatio;
     m_fallback = style.body;
     m_fill = style.background;
+    m_hover = style.hover;
+    m_selected = style.selected;
     if (scene.origin != m_origin) {
         m_origin = scene.origin;
         for (const auto& chunk : m_chunks) {
@@ -352,9 +354,103 @@ void ChunkSet::buildPalette(Data& chunk)
         std::fill_n(chunk.edgePalette.begin() + slot.firstEdgeEntry, slot.edgeEntryCount, edge);
         std::fill_n(chunk.pointPalette.begin() + slot.firstPointEntry, slot.pointEntryCount, edge);
     }
+    for (const std::set<PickedItem>* items : {&m_highlight.hovered, &m_highlight.selected}) {
+        for (const PickedItem& item : *items) {
+            Data* owner = nullptr;
+            if (Entry* entry = entryFor(item, &owner); entry != nullptr && owner == &chunk) {
+                writeState(item, *entry);
+            }
+        }
+    }
     chunk.paletteRevision = m_nextId++;
     chunk.paletteDirty = false;
     ++m_paletteBuilds;
+}
+
+void ChunkSet::setHighlight(Highlight highlight)
+{
+    if (highlight == m_highlight) {
+        return;
+    }
+    std::set<PickedItem> changed;
+    for (const Highlight* side : {&m_highlight, &highlight}) {
+        changed.insert(side->hovered.begin(), side->hovered.end());
+        changed.insert(side->selected.begin(), side->selected.end());
+    }
+    m_highlight = std::move(highlight);
+    std::set<Data*> written;
+    for (const PickedItem& item : changed) {
+        Data* owner = nullptr;
+        if (Entry* entry = entryFor(item, &owner); entry != nullptr) {
+            writeState(item, *entry);
+            written.insert(owner);
+        }
+    }
+    for (Data* chunk : written) {
+        chunk->paletteRevision = m_nextId++;
+    }
+    ++m_highlightWrites;
+}
+
+Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
+{
+    const auto found = m_owner.find({item.feature, item.part, item.index / kPaletteEntries});
+    if (found == m_owner.end()) {
+        return nullptr;
+    }
+    Data& data = *found->second;
+    const Slot& slot = data.members.at(found->first);
+    std::vector<Entry>* palette = nullptr;
+    std::uint32_t first = 0;
+    std::uint32_t count = 0;
+    std::uint32_t base = 0;
+    switch (item.kind) {
+    case PickKind::None:
+        return nullptr;
+    case PickKind::Face:
+        palette = &data.palette;
+        first = slot.firstEntry;
+        count = slot.entryCount;
+        base = slot.firstFace;
+        break;
+    case PickKind::Edge:
+        palette = &data.edgePalette;
+        first = slot.firstEdgeEntry;
+        count = slot.edgeEntryCount;
+        base = slot.firstEdge;
+        break;
+    case PickKind::Point:
+        palette = &data.pointPalette;
+        first = slot.firstPointEntry;
+        count = slot.pointEntryCount;
+        base = slot.firstPoint;
+        break;
+    }
+    const std::uint32_t offset = item.index - base;
+    if (offset >= count || first + offset >= palette->size()) {
+        return nullptr;
+    }
+    *chunk = &data;
+    return &(*palette)[first + offset];
+}
+
+void ChunkSet::writeState(const PickedItem& item, Entry& entry) const
+{
+    const bool selected = m_highlight.selected.contains(item);
+    const bool hovered = !selected && m_highlight.hovered.contains(item);
+    if (item.kind == PickKind::Face) {
+        const std::uint8_t state = selected ? kEntrySelected : hovered ? kEntryHovered : std::uint8_t{0};
+        entry[3] = static_cast<std::uint8_t>((entry[3] & kEntryVisible) | state);
+        return;
+    }
+    const EdgeState state = selected ? EdgeState::Selected : hovered ? EdgeState::Hovered : EdgeState::Normal;
+    entry[0] = static_cast<std::uint8_t>(state);
+}
+
+bool ChunkSet::edgesHighlighted() const
+{
+    const auto edge = [](const PickedItem& item) { return item.kind == PickKind::Edge; };
+    return std::ranges::any_of(m_highlight.hovered, edge) || std::ranges::any_of(m_highlight.selected, edge);
 }
 
 Entry ChunkSet::colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const
@@ -385,17 +481,22 @@ std::optional<FaceEntry> ChunkSet::entryOf(int feature, int part, std::uint32_t 
 
 DrawList ChunkSet::draw(const Frame& frame) const
 {
+    const bool highlightedOnly = !m_edges && edgesHighlighted();
+    const bool edges = m_edges || highlightedOnly;
     DrawList list{.frame = frame,
                   .lit = m_lit,
                   .cullClosed = m_cullClosed,
                   .pixelRatio = m_pixelRatio,
                   .chunks = {},
                   .faces = m_drawn,
-                  .edges = m_edges,
+                  .edges = edges,
+                  .highlightedEdgesOnly = highlightedOnly,
                   .edgeColor = m_edgeColor,
-                  .edgeWidth = m_edgeWidth};
+                  .edgeWidth = m_edgeWidth,
+                  .hover = m_hover,
+                  .selected = m_selected};
     for (const auto& chunk : m_chunks) {
-        if ((!m_drawn || chunk->indices.empty()) && (!m_edges || chunk->segments.empty())) {
+        if ((!m_drawn || chunk->indices.empty()) && (!edges || chunk->segments.empty())) {
             continue;
         }
         const bool shown = std::ranges::any_of(chunk->members, [](const auto& item) { return item.second.visible; });
@@ -411,6 +512,7 @@ DrawList ChunkSet::pickList(const Frame& frame) const
 {
     DrawList list = draw(frame);
     list.edges = true;
+    list.highlightedEdgesOnly = false;
     list.chunks.clear();
     for (const auto& chunk : m_chunks) {
         if (std::ranges::any_of(chunk->members, [](const auto& item) { return item.second.visible; })) {

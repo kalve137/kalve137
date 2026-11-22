@@ -41,7 +41,8 @@ class FeaturePanel : public QWidget {
     Q_OBJECT
 
 public:
-    FeaturePanel(DesignSession& session, Scene& scene, viewer::OcctViewWidget* view, QWidget* parent = nullptr);
+    FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, viewer::OcctViewWidget* view,
+                 QWidget* parent = nullptr);
 
     void startExtrude();
     void startRevolve();
@@ -144,6 +145,7 @@ private:
 
     DesignSession& m_session;
     Scene& m_scene;
+    PickSource& m_source;
     viewer::OcctViewWidget* m_view;
 
     std::optional<core::FeatureData> m_data;

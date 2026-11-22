@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "app/view/pick.h"
+#include "app/view/pick_source.h"
 #include "core/document.h"
 #include "core/recompute.h"
 
@@ -13,8 +15,6 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
-#include <gp_Ax1.hxx>
-#include <gp_Ax3.hxx>
 #include <gp_Pnt.hxx>
 
 #include <cstddef>
@@ -45,65 +45,27 @@ namespace kalve137::app {
 
 class DesignSession;
 
-struct Pick {
-    enum class Kind {
-        OriginPlane,
-        Face,
-        Edge,
-        Vertex,
-        Profile,
-        SketchLine,
-        SketchPoint,
-        ConstructionPlane,
-        OriginAxis,
-        ConstructionAxis,
-        ConstructionPoint,
-    };
-
-    Kind kind = Kind::Face;
-    core::OriginPlane plane = core::OriginPlane::XY;
-    core::ConstructionPlane construction;
-    core::AxisKind axis = core::AxisKind::X;
-    gp_Ax1 line;
-    core::FeatureId feature = 0;
-    int index = -1;
-    TopoDS_Shape shape;
-    std::optional<gp_Pnt> point;
-
-    core::BodyKey body() const { return {feature, index}; }
-};
-
-enum class PickMode {
-    None,
-    Planes,
-    Profiles,
-    ProfilesAndLines,
-    Edges,
-    Faces,
-    Measure,
-    PressPull,
-    HolePlacement,
-    Lines,
-    AxisSources,
-    PointSources,
-};
-
 enum class VisualStyle { Shaded, ShadedWithEdges, Wireframe, VisibleEdges };
 
-std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick);
+class Scene : public PickSource {
+    Q_OBJECT
 
-class Scene {
 public:
     Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots, pick::SceneRays& rays);
-    ~Scene();
+    ~Scene() override;
     Scene(const Scene&) = delete;
     Scene& operator=(const Scene&) = delete;
+    Scene(Scene&&) = delete;
+    Scene& operator=(Scene&&) = delete;
 
     void show(const core::Document& document, const core::Model& model, const DesignSession& session);
+    const core::Model& model() const { return m_model; }
+    void setPicks(PickSource& picks) { m_source = &picks; }
     bool setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible);
     std::size_t displayedBodies() const { return m_bodies.size(); }
     void setPickMode(PickMode mode);
     PickMode pickMode() const { return m_mode; }
+    core::FeatureId editingSketch() const { return m_editingSketch; }
     void setEditingSketch(core::FeatureId sketch);
     void setVisualStyle(VisualStyle style);
     VisualStyle visualStyle() const { return m_style; }
@@ -114,12 +76,15 @@ public:
     void setHighlightedBodies(std::vector<TopoDS_Shape> shapes);
     void setPreviewBodies(std::set<core::BodyKey> keys);
 
-    std::vector<Pick> takePicks();
-    std::optional<Pick> hovered() const;
-    std::vector<Pick> selected() const;
-    bool selectHovered();
-    void clearSelection();
+    std::vector<Pick> takePicks() override;
+    std::optional<Pick> hovered() const override;
+    std::vector<Pick> selected() const override;
+    bool selectHovered() override;
+    void clearSelection() override;
     std::vector<Pick> takePreselection() { return std::exchange(m_preselection, {}); }
+
+signals:
+    void pickModeChanged();
 
 private:
     struct BodyObject {
@@ -156,6 +121,7 @@ private:
     viewer::OcctViewWidget* m_view;
     core::SnapshotCache* m_snapshots;
     pick::SceneRays* m_rays;
+    PickSource* m_source = this;
     core::Document m_document;
     core::Model m_model;
     std::set<core::FeatureId> m_hidden;

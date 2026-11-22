@@ -333,6 +333,86 @@ TEST(CpuBackend, EachStyleDrawsItsEdgesOverItsFaces)
     EXPECT_EQ(countOf(shaded, pixelOf(kEdge)) + countOf(shaded, pixelOf(kWire)), 0U) << "shaded draws no edges";
 }
 
+constexpr snapshot::Color kHover{0.2F, 0.8F, 0.3F};
+constexpr snapshot::Color kSelected{0.9F, 0.6F, 0.1F};
+
+Image highlighted(CpuBackend& backend, const snapshot::Scene& scene, const Frame& frame, ViewportStyle style,
+                  Highlight highlight)
+{
+    style.hover = kHover;
+    style.selected = kSelected;
+    ChunkSet chunks;
+    chunks.update(scene, style);
+    chunks.setHighlight(std::move(highlight));
+    Image image;
+    backend.draw(chunks.draw(frame), 1, image);
+    return image;
+}
+
+TEST(CpuBackend, AHighlightBlendsItsLitColorOverTheFace)
+{
+    const auto body = test::shared(test::bodyOf(test::box({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const camera::Camera camera = lookingDownAt({5.0, 5.0, 5.0}, {0.0, 1.0, 0.0}, 30.0);
+    const Frame frame = makeFrame(camera, {120, 120, 1.0}, {}, kCanvas);
+    CpuBackend backend(2);
+    const PickedItem top{.feature = 1, .part = 0, .kind = PickKind::Face, .index = kTopFace};
+    const auto litOf = [&](const snapshot::Color& color) {
+        const Linear shaded = lit(frame.eye, frame.eye, linearOf(vertexColor(color)), frame);
+        return std::array{toSrgb(shaded[0]) * 255.0F, toSrgb(shaded[1]) * 255.0F, toSrgb(shaded[2]) * 255.0F};
+    };
+    const auto expectPixel = [&](std::uint32_t pixel, const std::array<float, 3>& expected, const char* what) {
+        EXPECT_NEAR(channelOf(pixel, 16), expected[0], 3.0) << what;
+        EXPECT_NEAR(channelOf(pixel, 8), expected[1], 3.0) << what;
+        EXPECT_NEAR(channelOf(pixel, 0), expected[2], 3.0) << what;
+    };
+    const std::array<float, 3> base = litOf(kBody);
+    const std::array<float, 3> hover = litOf(kHover);
+    std::array<float, 3> mixed{};
+    for (std::size_t c = 0; c < mixed.size(); ++c) {
+        mixed.at(c) = (base.at(c) * (1.0F - kHoverWeight)) + (hover.at(c) * kHoverWeight);
+    }
+    expectPixel(highlighted(backend, scene, frame, kShaded, {}).at(60, 60), base, "plain");
+    expectPixel(highlighted(backend, scene, frame, kShaded, {.hovered = {top}, .selected = {}}).at(60, 60), mixed,
+                "hovered");
+    expectPixel(highlighted(backend, scene, frame, kShaded, {.hovered = {top}, .selected = {top}}).at(60, 60),
+                litOf(kSelected), "selected wins");
+
+    PickedItem side = top;
+    side.index = 0;
+    const Image other = highlighted(backend, scene, frame, kShaded, {.hovered = {side}, .selected = {}});
+    expectPixel(other.at(60, 60), base, "another face's highlight leaves the top alone");
+    ViewportStyle flat = kShaded;
+    flat.visualStyle = VisualStyle::VisibleEdges;
+    const std::uint32_t tinted =
+        highlighted(backend, scene, frame, flat, {.hovered = {}, .selected = {top}}).at(60, 60);
+    EXPECT_EQ(tinted, pixelOf(kSelected)) << "an unlit style blends the flat colors";
+}
+
+TEST(CpuBackend, AHighlightedEdgeTakesItsStateColor)
+{
+    const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));
+    const snapshot::Scene scene{.bodies = {body}, .origin = {}, .hidden = {}};
+    const Frame frame = makeFrame(orbitingAt({5.0, 5.0, 5.0}, -33.0), {240, 200, 1.0}, {}, kCanvas);
+    CpuBackend backend(2);
+    std::size_t hoveredPixels = 0;
+    std::size_t selectedPixels = 0;
+    for (std::uint32_t edge = 0; edge < body->mesh->edgeCount; ++edge) {
+        const PickedItem item{.feature = 1, .part = 0, .kind = PickKind::Edge, .index = edge};
+        const Image hovered =
+            highlighted(backend, scene, frame, edgedStyle(VisualStyle::Shaded), {.hovered = {item}, .selected = {}});
+        EXPECT_EQ(countOf(hovered, pixelOf(kEdge)), 0U) << "shaded draws only the highlighted edge";
+        hoveredPixels += countOf(hovered, pixelOf(kHover));
+        const Image selected = highlighted(backend, scene, frame, edgedStyle(VisualStyle::ShadedWithEdges),
+                                           {.hovered = {item}, .selected = {item}});
+        EXPECT_EQ(countOf(selected, pixelOf(kHover)), 0U) << "selected wins";
+        EXPECT_GT(countOf(selected, pixelOf(kEdge)), 100U) << "the other edges stay";
+        selectedPixels += countOf(selected, pixelOf(kSelected));
+    }
+    EXPECT_GT(hoveredPixels, 200U) << "the shown edges draw in the hover color";
+    EXPECT_GT(selectedPixels, 200U);
+}
+
 TEST(CpuBackend, EdgesWidenWithThePixelRatio)
 {
     const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {10.0, 10.0, 10.0})));

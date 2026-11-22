@@ -77,8 +77,8 @@ QString nameOf(const Pick& pick)
 
 } // namespace
 
-MeasurePanel::MeasurePanel(Scene& scene, viewer::OcctViewWidget* view, QWidget* parent)
-    : QWidget(parent), m_scene(scene), m_view(view)
+MeasurePanel::MeasurePanel(Scene& scene, PickSource& picks, viewer::OcctViewWidget* view, QWidget* parent)
+    : QWidget(parent), m_scene(scene), m_source(picks), m_view(view)
 {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(theme::kPanelMargins);
@@ -108,7 +108,7 @@ MeasurePanel::MeasurePanel(Scene& scene, viewer::OcctViewWidget* view, QWidget* 
     buttons->addWidget(close);
     layout->addLayout(buttons);
 
-    connect(view, &viewer::OcctViewWidget::selectionChanged, this, &MeasurePanel::onSelectionChanged);
+    connect(&picks, &PickSource::selectionChanged, this, &MeasurePanel::onSelectionChanged);
 }
 
 void MeasurePanel::start()
@@ -138,7 +138,7 @@ void MeasurePanel::onSelectionChanged()
     if (!m_active) {
         return;
     }
-    const std::vector<Pick> picks = m_scene.takePicks();
+    const std::vector<Pick> picks = m_source.takePicks();
     if (picks.empty()) {
         m_picks.clear();
     }

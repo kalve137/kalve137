@@ -110,7 +110,8 @@ int main(int argc, char** argv)
     const bool benchOrbit = mode == QLatin1String(kalve137::app::kBenchOrbitFlag);
     const bool benchChange = mode == QLatin1String(kalve137::app::kBenchChangeFlag);
     const bool benchImport = mode == QLatin1String(kalve137::app::kBenchImportFlag);
-    const bool headless = smoke || importBatch || importOne || benchOrbit || benchChange || benchImport;
+    const bool benchHover = mode == QLatin1String(kalve137::app::kBenchHoverFlag);
+    const bool headless = smoke || importBatch || importOne || benchOrbit || benchChange || benchImport || benchHover;
     QApplication::setApplicationName("Kalve 137");
     QApplication::setOrganizationName(headless ? kalve137::app::kSmokeOrganization : "Kalve 137");
     QApplication::setApplicationVersion(KALVE137_VERSION);
@@ -144,10 +145,11 @@ int main(int argc, char** argv)
                      ? kalve137::app::runImportOne(std::filesystem::path(arguments.at(2).toStdU16String()),
                                                    std::filesystem::path(arguments.at(3).toStdU16String()))
                      : 2;
-    } else if (benchOrbit || benchChange || benchImport) {
+    } else if (benchOrbit || benchChange || benchImport || benchHover) {
         constexpr qsizetype kBenchArguments = 5;
         const auto run = benchOrbit    ? kalve137::app::runBenchOrbit
                          : benchChange ? kalve137::app::runBenchChange
+                         : benchHover  ? kalve137::app::runBenchHover
                                        : kalve137::app::runBenchImport;
         result = arguments.size() == kBenchArguments
                      ? run(startup.options, std::filesystem::path(arguments.at(2).toStdU16String()),

@@ -161,7 +161,7 @@ void FeaturePanel::onSelectionChanged()
     if (!isActive()) {
         return;
     }
-    const std::vector<Pick> picks = m_scene.takePicks();
+    const std::vector<Pick> picks = m_source.takePicks();
     if (picks.empty()) {
         return;
     }

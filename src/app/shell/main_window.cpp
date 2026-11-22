@@ -25,6 +25,7 @@
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
 #include "app/view/grid_settings.h"
+#include "app/view/new_view_picker.h"
 #include "app/view/scene.h"
 #include "app/view/view_controls.h"
 #include "app/view/view_cube_arrows.h"
@@ -131,6 +132,12 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
     applyViewportTheme();
 
     m_scene = std::make_unique<Scene>(m_view, m_session->snapshots(), m_session->rays());
+    m_picks = m_scene.get();
+    if (m_rhiView != nullptr) {
+        auto* picker = new NewViewPicker(*m_rhiView, *m_session, *m_scene, this);
+        m_scene->setPicks(*picker);
+        m_picks = picker;
+    }
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
     m_cameraCommands =
         new CameraCommands(*m_view, m_rhiView, m_session->rays(), [this] { return sceneIsEmpty(); }, this);
@@ -178,8 +185,8 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         });
     }
     connect(m_cameraCommands, &CameraCommands::menuRequested, this, &MainWindow::showMarkingMenu);
-    connect(m_view, &viewer::OcctViewWidget::selectionChanged, this, &MainWindow::onViewSelection);
-    connect(m_view, &viewer::OcctViewWidget::hoverChanged, this, &MainWindow::onViewHover);
+    connect(m_picks, &PickSource::selectionChanged, this, &MainWindow::onViewSelection);
+    connect(m_picks, &PickSource::hoverChanged, this, &MainWindow::onViewHover);
     connect(m_view, &viewer::OcctViewWidget::menuRequested, this, &MainWindow::showMarkingMenu);
     connect(
         m_view, &viewer::OcctViewWidget::frameFailed, this,
@@ -692,7 +699,7 @@ void MainWindow::createOverlays()
     m_featureFrame = new QFrame;
     m_featureFrame->setObjectName("floatingPanel");
     m_featureFrame->setFixedWidth(kFeaturePanelWidth);
-    m_featurePanel = new FeaturePanel(*m_session, *m_scene, m_view, m_featureFrame);
+    m_featurePanel = new FeaturePanel(*m_session, *m_scene, *m_picks, m_view, m_featureFrame);
     auto* layout = new QVBoxLayout(m_featureFrame);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_featurePanel);
@@ -702,7 +709,7 @@ void MainWindow::createOverlays()
     m_measureFrame = new QFrame;
     m_measureFrame->setObjectName("floatingPanel");
     m_measureFrame->setFixedWidth(kFeaturePanelWidth);
-    m_measurePanel = new MeasurePanel(*m_scene, m_view, m_measureFrame);
+    m_measurePanel = new MeasurePanel(*m_scene, *m_picks, m_view, m_measureFrame);
     auto* measureLayout = new QVBoxLayout(m_measureFrame);
     measureLayout->setContentsMargins(0, 0, 0, 0);
     measureLayout->addWidget(m_measurePanel);
@@ -964,6 +971,8 @@ void MainWindow::applyNewViewStyle()
         .body = color(colors.viewport.body),
         .bodyEdge = color(colors.viewport.bodyEdge),
         .wire = color(colors.viewport.wire),
+        .hover = color(colors.viewport.hover),
+        .selected = color(colors.chrome.accent),
         .visualStyle = visual(m_preferences.visualStyle),
         .pixelRatio = devicePixelRatioF(),
     });

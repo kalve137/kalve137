@@ -53,7 +53,7 @@ QString MainWindow::idleSelectionSummary() const
 {
     std::vector<TopoDS_Shape> faceShapes;
     std::vector<TopoDS_Shape> edgeShapes;
-    for (const Pick& pick : m_scene->selected()) {
+    for (const Pick& pick : m_picks->selected()) {
         if (pick.shape.IsNull()) {
             continue;
         }
@@ -85,10 +85,10 @@ void MainWindow::startCreateSketch()
     m_measurePanel->stop();
     m_featurePanel->cancel();
     if (!m_sketchEditor->isActive()) {
-        for (const Pick& pick : m_scene->selected()) {
+        for (const Pick& pick : m_picks->selected()) {
             if (const std::optional<gp_Ax3> plane =
                     pick.kind == Pick::Kind::Face ? sketchPlaneOf(pick) : std::nullopt) {
-                m_scene->clearSelection();
+                m_picks->clearSelection();
                 createSketchOn(*plane, "Face", 0);
                 return;
             }
@@ -220,7 +220,7 @@ void MainWindow::escape()
         m_sketchEditor->cancel();
         return;
     }
-    m_scene->clearSelection();
+    m_picks->clearSelection();
     updateStatus();
 }
 
@@ -229,7 +229,7 @@ void MainWindow::onViewHover()
     if (!m_pickingPlane) {
         return;
     }
-    const std::optional<Pick> hovered = m_scene->hovered();
+    const std::optional<Pick> hovered = m_picks->hovered();
     if (const std::optional<gp_Ax3> plane = hovered ? sketchPlaneOf(*hovered) : std::nullopt) {
         m_view->setGridPlane(*plane);
     }
@@ -243,7 +243,7 @@ void MainWindow::onViewSelection()
         }
         return;
     }
-    for (const Pick& pick : m_scene->takePicks()) {
+    for (const Pick& pick : m_picks->takePicks()) {
         const std::optional<gp_Ax3> plane = sketchPlaneOf(pick);
         if (!plane) {
             statusBar()->showMessage(tr("Sketches need a flat face"), kMessageTimeoutMs);

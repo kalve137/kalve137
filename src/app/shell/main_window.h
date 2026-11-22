@@ -46,6 +46,7 @@ class CommandSearch;
 class DesignSession;
 class FeaturePanel;
 class MeasurePanel;
+class PickSource;
 class ProjectPanel;
 class Scene;
 class SketchPalette;
@@ -146,6 +147,7 @@ private:
     std::unique_ptr<viewer::OcctViewWidget> m_hiddenView;
     CameraCommands* m_cameraCommands = nullptr;
     std::unique_ptr<Scene> m_scene;
+    PickSource* m_picks = nullptr;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
     TimelineWidget* m_timeline = nullptr;
