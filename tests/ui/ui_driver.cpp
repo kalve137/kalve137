@@ -56,6 +56,7 @@
 #include <mutex>
 #include <numbers>
 #include <ranges>
+#include <string_view>
 
 namespace kalve137::uitest {
 
@@ -71,6 +72,7 @@ constexpr int kPlaneSearchStep = 8;
 constexpr int kPlaneSearchDirections = 24;
 constexpr double kParallelTolerance = 1e-6;
 constexpr int kAccentTolerance = 24;
+constexpr std::string_view kDisplayProfileCategory = "qt.gui.icc";
 
 struct Problems {
     std::mutex mutex;
@@ -121,7 +123,10 @@ QtMessageHandler g_previousHandler = nullptr;
 void onQtMessage(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
     if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
-        record("qt: " + message.toStdString());
+        const bool displayProfile = context.category != nullptr && context.category == kDisplayProfileCategory;
+        if (!displayProfile) {
+            record("qt: " + message.toStdString());
+        }
         std::fprintf(stderr, "qt %s: %s\n", type == QtFatalMsg ? "fatal" : "warning", qPrintable(message));
         std::fflush(stderr);
     }
