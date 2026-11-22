@@ -21,7 +21,9 @@ public:
     ValueEdit(core::Quantity quantity, double value, QWidget* parent = nullptr);
 
     double value() const { return m_value; }
+    core::Quantity quantity() const { return m_quantity; }
     void setValue(double value);
+    void chooseValue(double value);
     void setRange(double minimum, double maximum);
     void setDecimals(int decimals);
     void setStep(double step) { m_step = step; }

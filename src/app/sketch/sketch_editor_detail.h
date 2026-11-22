@@ -40,6 +40,7 @@ inline constexpr double kGlyphPixels = 18.0;
 inline constexpr double kInputOffsetPixels = 24.0;
 inline constexpr double kInputGapPixels = 12.0;
 inline constexpr int kValueEditorWidth = 90;
+inline constexpr int kRecentValuesPixels = 20;
 inline constexpr double kAngleArcPixels = 30.0;
 inline constexpr double kAngleReachPixels = 120.0;
 inline constexpr double kCursorMarkerScale = viewer::style::kMarkerSmall;

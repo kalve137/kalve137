@@ -33,6 +33,7 @@ class OcctViewWidget;
 namespace kalve137::app {
 
 class DesignSession;
+class RecentValuesMenu;
 class SketchInputs;
 
 class SketchEditor : public QObject {
@@ -248,6 +249,7 @@ private:
     bool m_committing = false;
 
     QLineEdit* m_valueEditor = nullptr;
+    RecentValuesMenu* m_recentValues = nullptr;
     std::function<void(double)> m_valueApply;
     std::function<sketch::Sketch(double)> m_valuePreview;
     bool m_previewingValue = false;

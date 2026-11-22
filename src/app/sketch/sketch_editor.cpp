@@ -3,6 +3,7 @@
 
 #include "app/sketch/sketch_editor.h"
 
+#include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
 #include "app/session/design_session.h"
 #include "app/sketch/sketch_editor_detail.h"
@@ -48,6 +49,13 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
     m_valueEditor->setObjectName("dimensionEditor");
     m_valueEditor->setFixedWidth(kValueEditorWidth);
     m_valueEditor->hide();
+    m_recentValues = new RecentValuesMenu(
+        m_valueEditor, [this] { return m_valueQuantity; },
+        [this](double value) {
+            m_valueEditor->setText(formatValue(value));
+            m_valueEditor->selectAll();
+            previewValue(m_valueEditor->text());
+        });
     connect(m_valueEditor, &QLineEdit::returnPressed, this, [this] {
         const std::optional<double> parsed = parseValue(m_valueEditor->text(), m_valueQuantity);
         if (!parsed) {
@@ -55,6 +63,7 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
             return;
         }
         const double value = *parsed;
+        m_recentValues->commit(value);
         std::function<void(double)> apply = std::move(m_valueApply);
         closeValueEditor();
         if (apply) {
@@ -815,14 +824,16 @@ void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quant
     m_valueQuantity = quantity;
     m_editingLabel = label;
     m_valueEditor->setText(formatValue(initial));
+    m_recentValues->reset();
     previewValue(m_valueEditor->text());
+    const int trailing = recentValues(quantity).empty() ? 0 : kRecentValuesPixels;
     QPoint at;
     if (label != 0 && m_editedLabel) {
         QFont font(fonts::families().qt);
         font.setPixelSize(static_cast<int>(kDimensionTextPixels));
         m_valueEditor->setFont(font);
         const QFontMetricsF metrics(font);
-        const double room = metrics.horizontalAdvance(QStringLiteral("0000.00")) + 2.0 * theme::kSpaceS;
+        const double room = metrics.horizontalAdvance(QStringLiteral("0000.00")) + 2.0 * theme::kSpaceS + trailing;
         const QSize size(
             static_cast<int>(std::ceil(std::max(m_editedLabel->width(), room))),
             static_cast<int>(std::ceil(std::max(m_editedLabel->height(), double(m_valueEditor->sizeHint().height())))));
@@ -832,7 +843,7 @@ void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quant
     } else {
         m_valueEditor->setFont(m_view->font());
         m_valueEditor->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        m_valueEditor->setFixedSize(kValueEditorWidth, m_valueEditor->sizeHint().height());
+        m_valueEditor->setFixedSize(kValueEditorWidth + trailing, m_valueEditor->sizeHint().height());
         at = pos.toPoint() + QPoint(static_cast<int>(kInputGapPixels), -m_valueEditor->height() - theme::kSpaceXs);
     }
     m_valueEditor->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - m_valueEditor->width())),
