@@ -25,6 +25,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Large STEP imports show up sooner since faces are meshed in parallel
 - View cube is a shaded rhombicuboctahedron with larger edge and corner targets
 - View cube hover reads clearly in both themes, labels included
+- View cube faces, edges and corners stand apart in both themes, with larger labels and solid gold on hover
 - Toolbars switch to smaller icons without labels on narrow windows, so every tool and Finish Sketch stay in reach
 - Viewport lines and grid labels follow display scaling
 

@@ -807,7 +807,9 @@ void MainWindow::applyViewportTheme()
     });
     m_view->setHighlightColors(colors.viewport.hover, colors.chrome.accent);
     m_view->setViewCubeStyle({
-        .face = colors.chrome.raised,
+        .side = colors.viewport.cubeSide,
+        .edge = colors.viewport.cubeEdge,
+        .corner = colors.viewport.cubeCorner,
         .shading = theme::isDark() ? viewer::style::kCubeShadingDark : viewer::style::kCubeShadingLight,
         .label = colors.viewport.cubeLabel,
         .hover = colors.chrome.accentFill,
