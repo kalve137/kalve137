@@ -153,7 +153,7 @@ int main(int argc, char** argv)
         kalve137::app::MainWindow window(startup.options);
         window.show();
         if (arguments.size() > 1) {
-            window.openDesignAt(std::filesystem::path(arguments.at(1).toStdU16String()));
+            window.openDesignWhenShown(std::filesystem::path(arguments.at(1).toStdU16String()));
         }
         result = app.exec();
     }
