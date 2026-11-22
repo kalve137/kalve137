@@ -134,9 +134,9 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
     m_scene = std::make_unique<Scene>(m_view, m_session->snapshots(), m_session->rays());
     m_picks = m_scene.get();
     if (m_rhiView != nullptr) {
-        auto* picker = new NewViewPicker(*m_rhiView, *m_session, *m_scene, this);
-        m_scene->setPicks(*picker);
-        m_picks = picker;
+        m_newViewPicker = new NewViewPicker(*m_rhiView, *m_session, *m_scene, m_session->rays(), this);
+        m_scene->setPicks(*m_newViewPicker);
+        m_picks = m_newViewPicker;
     }
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
     m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
@@ -808,17 +808,25 @@ void MainWindow::refreshScene()
     m_timeline->setEditing(sketch);
     const core::Document& document = m_session->document();
     std::vector<TopoDS_Shape> highlighted;
+    std::vector<core::BodyKey> highlightedKeys;
     const core::Feature* hovered = sketch == 0 ? document.find(m_timelineHighlight) : nullptr;
     if (hovered != nullptr) {
         for (const core::BodyKey& key : core::bodiesOf(m_session->model(), *hovered)) {
             if (m_session->isBodyVisible(key)) {
                 highlighted.push_back(m_session->model().body(key)->shape);
+                highlightedKeys.push_back(key);
             }
         }
     }
     m_scene->setHighlightedBodies(std::move(highlighted));
+    if (m_newViewPicker != nullptr) {
+        m_newViewPicker->setHighlightedBodies(std::move(highlightedKeys));
+    }
     const auto visible = [this](core::BodyKey key) { return m_session->isBodyVisible(key); };
-    const auto showSnapshot = [this](const snapshot::Scene& scene) { m_rhiView->setScene(scene); };
+    const auto showSnapshot = [this](const snapshot::Scene& scene, const core::Model& model) {
+        m_newViewPicker->showModel(model);
+        m_rhiView->setScene(scene);
+    };
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
     if (index >= 0 && std::cmp_less(index + 1, document.marker())) {
         core::Document context = document;
@@ -826,14 +834,14 @@ void MainWindow::refreshScene()
         const core::Model model = core::recompute(context);
         m_scene->show(context, model, *m_session);
         if (m_rhiView != nullptr) {
-            showSnapshot(m_contextSnapshots.scene(model, visible));
+            showSnapshot(m_contextSnapshots.scene(model, visible), model);
         }
         return;
     }
     m_contextSnapshots.clear();
     m_scene->show(document, m_session->model(), *m_session);
     if (m_rhiView != nullptr) {
-        showSnapshot(m_session->snapshots().scene(m_session->model(), visible));
+        showSnapshot(m_session->snapshots().scene(m_session->model(), visible), m_session->model());
     }
 }
 
@@ -848,6 +856,7 @@ void MainWindow::refreshVisibility(const std::vector<core::BodyKey>& keys, bool 
         m_scene->show(m_session->document(), m_session->model(), *m_session);
     }
     if (m_rhiView != nullptr) {
+        m_newViewPicker->showModel(m_session->model());
         m_rhiView->setScene(withVisibility(m_rhiView->scene(), m_session->model(), *m_session));
     }
 }

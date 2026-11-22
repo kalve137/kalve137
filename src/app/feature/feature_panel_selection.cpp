@@ -165,7 +165,7 @@ void FeaturePanel::onSelectionChanged()
     if (picks.empty()) {
         return;
     }
-    const QScopedValueRollback addOnly(m_addOnly, m_view->selectedByBox());
+    const QScopedValueRollback addOnly(m_addOnly, m_source.selectedByBox());
     for (const Pick& pick : picks) {
         K137_DEBUG(Input, "Feature panel pick kind {} feature {} index {}", static_cast<int>(pick.kind), pick.feature,
                    pick.index);

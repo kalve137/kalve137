@@ -33,6 +33,7 @@ add_executable(kalve137_tests
     log/log_test.cpp
     pick/ray_scene_test.cpp
     platform/crash_test.cpp
+    render/box_select_test.cpp
     render/cpu_backend_test.cpp
     render/draw_list_test.cpp
     render/edge_quad_test.cpp
@@ -83,6 +84,7 @@ gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
+    ui/box_compare_ui_test.cpp
     ui/camera_ui_test.cpp
     ui/constraint_ui_test.cpp
     ui/crash_trace.cpp
@@ -93,6 +95,7 @@ add_executable(kalve137_uitests
     ui/harness_test.cpp
     ui/edge_pair_ui_test.cpp
     ui/hero_ui_test.cpp
+    ui/highlight_pair_ui_test.cpp
     ui/line_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/new_view_ui_test.cpp
@@ -145,20 +148,33 @@ foreach(scale 125 150 175)
     )
 endforeach()
 add_test(NAME NewView.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*)
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*)
 set_tests_properties(NewView.Harness PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
 )
 set(new_view_pairs
+    FeatureTest.DrillsAHoleInTheTopFace
+    FeatureTest.FilletsAnEdge
+    FeatureTest.IdleClickSelectsAFaceAndEscapeClears
+    FeatureTest.PressPullsTheTopFace
+    FeatureTest.ShellsOpenAtTheTop
     FilesTest.SavesReopensExportsAndImports
     FilesTest.OpenSampleOpensAnUntitledCopyOfTheDodecahedron
     MenuTest.TimelineSuppressesAndUnsuppresses
+    MenuTest.TimelineFindsTheBodyInTheBrowser
+    MenuTest.TimelineHoverHighlightsTheBody
     MenuTest.BrowserHidesAndShowsABody
     MenuTest.BrowserOpensAppearance
+    MenuTest.MovesTheBlockUp
+    MenuTest.PatternsTheBlockAlongX
     PreferencesTest.ChoosingLightSwitchesLiveAndIsKept
     PreferencesTest.LightThemeShowsABodyASketchAndADialog
+    SelectTest.FilletWindowTakesEveryVisibleEdgeOfTheBlock
+    SelectTest.IdleWindowHighlightsWhatItSelects
+    SelectTest.FilletCrossingAddsWithoutDroppingEarlierEdges
+    SelectTest.WindowOverThousandsOfFacesStaysFast
 )
 list(JOIN new_view_pairs ":" new_view_filter)
 add_test(NAME NewView.Pairs COMMAND kalve137_uitests --gtest_filter=${new_view_filter})

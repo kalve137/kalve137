@@ -26,10 +26,12 @@
 #include <QVulkanInstance>
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace kalve137::render {
@@ -438,6 +440,46 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     hit->x += rect.x();
     hit->y += rect.y();
     return IdPick{.item = *item, .hit = *hit};
+}
+
+std::optional<std::vector<PickedItem>> RhiView::itemsIn(const QRect& deviceRect, bool whole, const PickKinds& kinds,
+                                                        const IdStyle& style)
+{
+    const camera::Viewport port = viewport();
+    const QRect all(0, 0, port.width, port.height);
+    const QRect band = deviceRect.intersected(all);
+    if (band.isEmpty()) {
+        return std::vector<PickedItem>{};
+    }
+    const QRect read = whole ? all : band;
+    const std::optional<IdImage> image = readIds(read, style);
+    if (!image) {
+        return std::nullopt;
+    }
+    std::unordered_set<std::uint32_t> inside;
+    std::unordered_set<std::uint32_t> outside;
+    for (int y = 0; y < image->height; ++y) {
+        for (int x = 0; x < image->width; ++x) {
+            const std::uint32_t id = image->idAt(x, y);
+            if (id == 0) {
+                continue;
+            }
+            (band.contains(x + read.x(), y + read.y()) ? inside : outside).insert(id);
+        }
+    }
+    const std::vector<std::uint64_t>& chunks = m_bodies->idChunks();
+    std::vector<PickedItem> items;
+    for (const std::uint32_t raw : inside) {
+        const PickId id = decodePickId(raw);
+        if (outside.contains(raw) || !kinds.has(id.kind) || id.chunk >= chunks.size()) {
+            continue;
+        }
+        if (const std::optional<PickedItem> item = m_chunks.itemOf(chunks[id.chunk], id.kind, id.entry)) {
+            items.push_back(*item);
+        }
+    }
+    std::ranges::sort(items);
+    return items;
 }
 
 camera::Vec3 RhiView::pointOf(int x, int y, float depth) const

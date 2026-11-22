@@ -59,7 +59,6 @@ public:
     Scene& operator=(Scene&&) = delete;
 
     void show(const core::Document& document, const core::Model& model, const DesignSession& session);
-    const core::Model& model() const { return m_model; }
     void setPicks(PickSource& picks) { m_source = &picks; }
     bool setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible);
     std::size_t displayedBodies() const { return m_bodies.size(); }
@@ -81,6 +80,7 @@ public:
     std::vector<Pick> selected() const override;
     bool selectHovered() override;
     void clearSelection() override;
+    bool selectedByBox() const override;
     std::vector<Pick> takePreselection() { return std::exchange(m_preselection, {}); }
 
 signals:

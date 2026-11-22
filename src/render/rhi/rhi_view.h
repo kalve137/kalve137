@@ -80,6 +80,8 @@ public:
     std::optional<IdPick> pickAt(QPointF position, const PickKinds& kinds, const IdStyle& style = {});
     camera::Vec3 pointOf(int x, int y, float depth) const;
     std::optional<camera::Vec3> surfaceAt(int x, int y);
+    std::optional<std::vector<PickedItem>> itemsIn(const QRect& deviceRect, bool whole, const PickKinds& kinds,
+                                                   const IdStyle& style = {});
     std::uint64_t idPasses() const { return m_idPasses; }
 
 signals:

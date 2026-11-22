@@ -7,6 +7,7 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
+#include "app/view/band_overlay.h"
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_navigation.h"
 #include "app/view/new_view_picker.h"
@@ -54,6 +55,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -976,6 +979,104 @@ TEST_F(NewViewTest, HoverAndClicksSelectThroughTheIdPass)
     EXPECT_FALSE(picker->hovered());
     session->setBodyVisible(session->model().bodies.at(0).key(), true);
     ui->settle();
+}
+
+void boxDrag(render::RhiView& canvas, QPointF from, QPointF to, Qt::KeyboardModifiers modifiers,
+             const std::function<void()>& during = {})
+{
+    const auto send = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons) {
+        QMouseEvent event(type, pos, canvas.mapToGlobal(pos), button, buttons, modifiers);
+        QApplication::sendEvent(&canvas, &event);
+    };
+    send(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+    constexpr int kSteps = 4;
+    for (int step = 1; step <= kSteps; ++step) {
+        send(QEvent::MouseMove, from + ((to - from) * step / kSteps), Qt::NoButton, Qt::LeftButton);
+    }
+    if (during) {
+        during();
+    }
+    send(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+    QApplication::processEvents();
+}
+
+std::vector<render::PickedItem> selectedItems(const render::RhiView& canvas)
+{
+    const std::set<render::PickedItem>& selected = canvas.chunks().highlight().selected;
+    return {selected.begin(), selected.end()};
+}
+
+std::size_t countOf(const std::vector<render::PickedItem>& items, render::PickKind kind)
+{
+    return static_cast<std::size_t>(
+        std::ranges::count_if(items, [kind](const render::PickedItem& item) { return item.kind == kind; }));
+}
+
+TEST_F(NewViewTest, BoxSelectsWithTheOldViewsRule)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    auto* picker = ui->window().findChild<app::NewViewPicker*>();
+    ASSERT_NE(picker, nullptr);
+    ui->window().openDesignAt(std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples" / "dodecahedron.k137");
+    ui->settle();
+    waitForCamera(*ui->window().cameraCommands());
+    auto* band = canvas->findChild<app::BandOverlay*>();
+    ASSERT_NE(band, nullptr);
+    QSignalSpy selections(picker, &app::PickSource::selectionChanged);
+    const QPointF topLeft(2.0, 2.0);
+    const QPointF topRight(canvas->width() - 2.0, 2.0);
+    const QPointF bottomRight(canvas->width() - 2.0, canvas->height() - 2.0);
+    const QPointF middle(canvas->width() / 2.0, canvas->height() / 2.0);
+
+    bool bandShown = false;
+    boxDrag(*canvas, topLeft, bottomRight, Qt::NoModifier, [&] { bandShown = band->isVisible(); });
+    EXPECT_TRUE(bandShown) << "the band shows while dragging";
+    EXPECT_FALSE(band->isVisible()) << "and goes on release";
+    EXPECT_EQ(selections.count(), 1);
+    const std::vector<render::PickedItem> all = selectedItems(*canvas);
+    EXPECT_EQ(all, picker->boxItems(topLeft, bottomRight));
+    EXPECT_EQ(countOf(all, render::PickKind::Face), 6U) << "a window over the view takes the faces in sight";
+    EXPECT_GT(countOf(all, render::PickKind::Edge), 0U);
+    EXPECT_LT(all.size(), 6U + 30U) << "hidden faces and edges stay out";
+    const std::optional<std::vector<render::PickedItem>> ids = picker->boxIdItems(topLeft, bottomRight);
+    ASSERT_TRUE(ids);
+    EXPECT_EQ(countOf(*ids, render::PickKind::Face), countOf(all, render::PickKind::Face));
+
+    boxDrag(*canvas, topRight, middle, Qt::NoModifier);
+    const std::vector<render::PickedItem> crossed = selectedItems(*canvas);
+    EXPECT_EQ(crossed, picker->boxItems(topRight, middle));
+    EXPECT_FALSE(crossed.empty()) << "a crossing to the middle touches the faces there";
+    EXPECT_LT(crossed.size(), all.size());
+    EXPECT_TRUE(std::ranges::includes(all, crossed));
+
+    boxDrag(*canvas, topLeft, middle, Qt::ShiftModifier);
+    std::vector<render::PickedItem> added = crossed;
+    for (const render::PickedItem& item : picker->boxItems(topLeft, middle)) {
+        if (!std::ranges::binary_search(crossed, item)) {
+            added.push_back(item);
+        }
+    }
+    std::ranges::sort(added);
+    EXPECT_EQ(selectedItems(*canvas), added) << "Shift adds to the selection";
+
+    boxDrag(*canvas, middle, bottomRight, Qt::NoModifier);
+    EXPECT_EQ(selectedItems(*canvas), added) << "a drag from a face boxes nothing";
+
+    ui->trigger("Fillet");
+    QApplication::processEvents();
+    std::vector<render::PickedItem> seen;
+    std::ranges::copy_if(all, std::back_inserter(seen),
+                         [](const render::PickedItem& item) { return item.kind == render::PickKind::Edge; });
+    EXPECT_EQ(picker->boxItems(topLeft, bottomRight), seen)
+        << "fillet boxes the same edges, though its preview gives the old view a model of its own";
+    const qsizetype before = selections.count();
+    boxDrag(*canvas, topLeft, bottomRight, Qt::NoModifier);
+    EXPECT_EQ(selections.count(), before + 1) << "the fillet panel takes the boxed edges";
+    ui->key(Qt::Key_Escape);
+    QApplication::processEvents();
 }
 
 TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)

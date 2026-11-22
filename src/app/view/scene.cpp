@@ -480,6 +480,11 @@ void Scene::clearSelection()
     m_view->redraw();
 }
 
+bool Scene::selectedByBox() const
+{
+    return m_view->selectedByBox();
+}
+
 std::optional<Pick> Scene::hovered() const
 {
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();

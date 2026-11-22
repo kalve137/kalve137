@@ -23,6 +23,7 @@ public:
     virtual std::vector<Pick> takePicks() = 0;
     virtual bool selectHovered() = 0;
     virtual void clearSelection() = 0;
+    virtual bool selectedByBox() const = 0;
 
 signals:
     void hoverChanged();

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/shell/startup_options.h"
 #include "core/document.h"
 
 #include <gp_Pnt.hxx>
@@ -57,6 +58,7 @@ bool paintsAccent(QWidget& button);
 class UiDriver {
 public:
     UiDriver();
+    explicit UiDriver(const app::StartupOptions& options);
     ~UiDriver();
     UiDriver(const UiDriver&) = delete;
     UiDriver& operator=(const UiDriver&) = delete;
@@ -64,6 +66,8 @@ public:
     app::MainWindow& window() { return *m_window; }
     viewer::OcctViewWidget& view() { return *m_view; }
     render::RhiView* newView() { return m_newView; }
+    QWidget* canvas() const;
+    QImage canvasImage();
     app::DesignSession& session() { return *m_session; }
     const core::Document& document() const;
 
@@ -108,7 +112,6 @@ public:
     nlohmann::json state() const;
 
 private:
-    QWidget* canvas() const;
     void keepActive();
     void sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,
                    Qt::KeyboardModifiers modifiers);

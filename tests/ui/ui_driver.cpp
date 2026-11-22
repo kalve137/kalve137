@@ -403,7 +403,9 @@ bool paintsAccent(QWidget& button)
            kAccentTolerance;
 }
 
-UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>(app::startupFromEnvironment()))
+UiDriver::UiDriver() : UiDriver(app::startupFromEnvironment()) {}
+
+UiDriver::UiDriver(const app::StartupOptions& options) : m_window(std::make_unique<app::MainWindow>(options))
 {
     std::error_code ignored;
     std::filesystem::remove_all(shotFolder(), ignored);
@@ -517,6 +519,10 @@ QPointF UiDriver::originPlane(core::OriginPlane plane)
 {
     const gp_Dir normal = core::originPlane(plane).Direction();
     const QPointF origin = at(gp::Origin());
+    if (m_view == nullptr) {
+        ADD_FAILURE() << "The new view doesn't pick origin planes yet";
+        return origin;
+    }
     for (int radius = kPlaneSearchStep; radius <= kOriginPlanePixels; radius += kPlaneSearchStep) {
         for (int step = 0; step < kPlaneSearchDirections; ++step) {
             const double angle = 2.0 * std::numbers::pi * step / kPlaneSearchDirections;
@@ -548,6 +554,12 @@ QWidget* UiDriver::canvas() const
         return m_view;
     }
     return m_newView;
+}
+
+QImage UiDriver::canvasImage()
+{
+    settle();
+    return m_view != nullptr ? m_view->grabFramebuffer() : m_newView->grabFramebuffer();
 }
 
 void UiDriver::sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,

@@ -46,6 +46,7 @@ class CommandSearch;
 class DesignSession;
 class FeaturePanel;
 class MeasurePanel;
+class NewViewPicker;
 class PickSource;
 class ProjectPanel;
 class Scene;
@@ -67,6 +68,7 @@ public:
     viewer::OcctViewWidget* oldView() const { return m_view; }
     render::RhiView* newView() const { return m_rhiView; }
     CameraCommands* cameraCommands() const { return m_cameraCommands; }
+    PickSource* picks() const { return m_picks; }
 
 protected:
     bool event(QEvent* event) override;
@@ -148,6 +150,7 @@ private:
     CameraCommands* m_cameraCommands = nullptr;
     std::unique_ptr<Scene> m_scene;
     PickSource* m_picks = nullptr;
+    NewViewPicker* m_newViewPicker = nullptr;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
     TimelineWidget* m_timeline = nullptr;
