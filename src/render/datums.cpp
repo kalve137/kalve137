@@ -119,6 +119,35 @@ public:
         }
     }
 
+    void addPoints(const Datums& datums)
+    {
+        if (datums.originPoint) {
+            include({});
+            m_geometry.markers.push_back({.anchor = {},
+                                          .shape = MarkerShape::Ball,
+                                          .scale = MarkerScale::Medium,
+                                          .color = datums.originPointColor,
+                                          .flags = kMarkerTopmost,
+                                          .pick = 0});
+        }
+        for (std::size_t index = 0; index < datums.points.size(); ++index) {
+            const DatumPoint& point = datums.points[index];
+            include(point.anchor);
+            const DatumKey key{.kind = DatumKind::Point, .id = point.id};
+            const Encoded shown =
+                highlighted(encodedOf(m_planeColor), m_marks.hovered == key, m_marks.selected.contains(key));
+            const auto entry = static_cast<std::uint32_t>(index);
+            const bool pickable = entry < kDatumEntries;
+            m_geometry.markers.push_back(
+                {.anchor = point.anchor,
+                 .shape = MarkerShape::RingPlus,
+                 .scale = MarkerScale::Medium,
+                 .color = {.red = shown[0], .green = shown[1], .blue = shown[2], .alpha = 1.0F},
+                 .flags = static_cast<std::uint8_t>(kMarkerTopmost | (pickable ? kMarkerPickable : 0)),
+                 .pick = pickable ? encodePickId(kMarkerChunk, PickKind::Point, entry) : 0});
+        }
+    }
+
 private:
     Position place(const camera::Vec3& point) const { return relativePosition({point.x, point.y, point.z}, m_origin); }
 
@@ -193,11 +222,18 @@ DatumGeometry buildDatums(const Datums& datums, const camera::Camera& camera, co
                        geometry.originFills, geometry.originLines, geometry.idOriginFills, geometry.idOriginOutlines);
     builder.addAxes(datums.originAxes, DatumKind::OriginAxis, originAxesAt, 0.0, kOriginAxisPixels, kDotDashPattern,
                     geometry.originLines, geometry.idOriginLines);
+    builder.addPoints(datums);
     return geometry;
 }
 
-std::optional<DatumKey> datumAt(const Datums& datums, std::uint32_t entry)
+std::optional<DatumKey> datumAt(const Datums& datums, std::uint32_t chunk, std::uint32_t entry)
 {
+    if (chunk == kMarkerChunk) {
+        if (entry < datums.points.size()) {
+            return DatumKey{.kind = DatumKind::Point, .id = datums.points[entry].id};
+        }
+        return std::nullopt;
+    }
     std::size_t index = entry;
     if (index < datums.originPlanes.size()) {
         return DatumKey{.kind = DatumKind::OriginPlane, .id = datums.originPlanes[index].id};
@@ -228,6 +264,8 @@ bool contains(const Datums& datums, const DatumKey& key)
         return holds(datums.planes, key.id);
     case DatumKind::Axis:
         return holds(datums.axes, key.id);
+    case DatumKind::Point:
+        return holds(datums.points, key.id);
     }
     return false;
 }
@@ -235,7 +273,11 @@ bool contains(const Datums& datums, const DatumKey& key)
 std::vector<camera::Vec3> datumAnchors(const Datums& datums)
 {
     std::vector<camera::Vec3> anchors;
-    anchors.reserve(datums.originPlanes.size() + datums.originAxes.size() + datums.planes.size() + datums.axes.size());
+    anchors.reserve(datums.originPlanes.size() + datums.originAxes.size() + datums.planes.size() + datums.axes.size() +
+                    datums.points.size() + 1);
+    if (datums.originPoint) {
+        anchors.emplace_back();
+    }
     for (const DatumPlane& plane : datums.originPlanes) {
         anchors.push_back(plane.anchor);
     }
@@ -247,6 +289,9 @@ std::vector<camera::Vec3> datumAnchors(const Datums& datums)
     }
     for (const DatumAxis& axis : datums.axes) {
         anchors.push_back(axis.anchor);
+    }
+    for (const DatumPoint& point : datums.points) {
+        anchors.push_back(point.anchor);
     }
     return anchors;
 }

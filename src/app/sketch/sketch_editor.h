@@ -3,8 +3,12 @@
 
 #pragma once
 
+#include "camera/camera.h"
 #include "core/document.h"
 #include "core/expression.h"
+#include "render/annotations.h"
+#include "render/sketches.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "sketch/solver.h"
 
@@ -25,13 +29,19 @@
 
 class QLineEdit;
 class QTimer;
+class QWidget;
 
 namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class RhiView;
+}
+
 namespace kalve137::app {
 
+class BandOverlay;
 class DesignSession;
 class RecentValuesMenu;
 class SketchInputs;
@@ -67,7 +77,16 @@ public:
         Fix,
     };
 
-    SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, QObject* parent = nullptr);
+    struct Hit {
+        enum class Kind { None, Point, Curve, Constraint };
+        Kind kind = Kind::None;
+        sketch::Id id = 0;
+
+        bool operator==(const Hit&) const = default;
+    };
+
+    SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, render::RhiView* newView,
+                 QObject* parent = nullptr);
     ~SketchEditor() override;
 
     void begin(core::FeatureId sketch);
@@ -98,6 +117,10 @@ public:
     void setDisplay(const Display& display);
     void setGridSnap(bool snap) { m_gridSnap = snap; }
     void setMoveIncrement(double increment) { m_moveIncrement = increment; }
+    void setCameraInput(bool camera) { m_cameraInput = camera; }
+    bool hasCameraInput() const { return m_cameraInput; }
+    Hit hitAt(QPointF pos) const;
+    void redraw();
 
 signals:
     void toolChanged();
@@ -117,10 +140,18 @@ private:
         std::optional<sketch::Vec2> extendedFrom;
     };
 
-    struct Hit {
-        enum class Kind { None, Point, Curve, Constraint };
-        Kind kind = Kind::None;
-        sketch::Id id = 0;
+    struct Projection {
+        camera::Camera camera;
+        camera::Viewport viewport;
+    };
+
+    struct ViewItems {
+        snapshot::SketchProfiles profiles;
+        std::vector<render::SketchStroke> halos;
+        std::vector<render::SketchStroke> lines;
+        std::vector<render::SketchTriangle> arrows;
+        std::vector<render::MarkerItem> markers;
+        render::Annotations annotations;
     };
 
     struct PendingDimension {
@@ -141,6 +172,11 @@ private:
     const core::SketchFeature* feature() const;
     const sketch::Sketch& current() const;
     gp_Ax3 plane() const;
+    QWidget* canvas() const;
+    std::optional<Projection> projection() const;
+    double worldPerPixel() const;
+    QPointF toScreen(const gp_Pnt& point) const;
+    double gridStep() const;
     std::optional<sketch::Vec2> toSketch(QPointF pos) const;
     double tolerance() const;
 
@@ -150,8 +186,10 @@ private:
     Hit geometryAt(sketch::Vec2 pos) const;
     Hit curveAt(sketch::Vec2 pos) const;
     std::optional<sketch::Id> cornerAt(sketch::Vec2 pos) const;
-    Hit hitAt(QPointF pos) const;
+    std::optional<sketch::Id> constraintAt(QPointF pos) const;
     std::optional<sketch::Id> detectedConstraint() const;
+    std::optional<sketch::Id> constraintOnScreen(QPointF pos) const;
+    QRectF labelRect(const sketch::DimensionLayout& layout) const;
 
     void clickLine(Snap snap);
     void clickRectangle(Snap snap);
@@ -208,16 +246,24 @@ private:
     void resetProgress();
     void dropDrag();
 
-    void redraw();
     void redrawPreview();
     void clearObjects(std::vector<Handle(AIS_InteractiveObject)>& objects);
     void showUnder(const Handle(AIS_InteractiveObject)& halo);
+    void drawSketch(const sketch::Sketch& sketch, const std::set<sketch::Id>& conflicted);
     void drawConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
+    void drawViewSketch(const sketch::Sketch& sketch, const std::set<sketch::Id>& conflicted);
+    void drawViewConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
+    void clearView();
+    void publish();
+    void onCameraChanged();
     void show(const Handle(AIS_InteractiveObject)& object, std::vector<Handle(AIS_InteractiveObject)>& into,
               bool selectable);
 
     DesignSession& m_session;
     viewer::OcctViewWidget* m_view;
+    render::RhiView* m_newView;
+    bool m_cameraInput = false;
+    BandOverlay* m_band = nullptr;
     core::FeatureId m_sketchId = 0;
     Tool m_tool = Tool::Select;
     sketch::SolveResult m_solve;
@@ -274,6 +320,9 @@ private:
     std::vector<Handle(AIS_InteractiveObject)> m_objects;
     std::vector<Handle(AIS_InteractiveObject)> m_preview;
     std::map<const AIS_InteractiveObject*, sketch::Id> m_constraintObjects;
+    ViewItems m_viewItems;
+    std::vector<render::SketchStroke> m_viewPreview;
+    std::vector<render::MarkerItem> m_viewPreviewMarkers;
 };
 
 } // namespace kalve137::app

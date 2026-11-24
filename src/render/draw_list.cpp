@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 
 namespace kalve137::render {
@@ -45,7 +46,64 @@ std::uint8_t toByte(float value)
     return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0F, 1.0F) * kByte));
 }
 
+constexpr unsigned kByteBits = 8;
+constexpr std::uint32_t kLowByte = 0xFFU;
+
+struct MarkerSizes {
+    double ring = 0.0;
+    double cross = 0.0;
+    double dot = 0.0;
+};
+
+MarkerSizes sizesOf(MarkerScale scale)
+{
+    switch (scale) {
+    case MarkerScale::Small:
+        return {.ring = kMarkerSmallRing, .cross = kMarkerSmallCross, .dot = kMarkerSmallDot};
+    case MarkerScale::Medium:
+        return {.ring = kMarkerMediumRing, .cross = kMarkerMediumCross, .dot = kMarkerMediumDot};
+    case MarkerScale::Large:
+        return {.ring = kMarkerLargeRing, .cross = kMarkerLargeCross, .dot = kMarkerLargeDot};
+    }
+    return {};
+}
+
 } // namespace
+
+Marker placeMarker(const MarkerItem& item, const snapshot::Point& origin)
+{
+    const MarkerSizes sizes = sizesOf(item.scale);
+    Marker marker;
+    marker.position = relativePosition({item.anchor.x, item.anchor.y, item.anchor.z}, origin);
+    marker.color = vertexColor(item.color);
+    for (std::size_t i = 0; i < marker.pick.size(); ++i) {
+        marker.pick.at(i) = static_cast<std::uint8_t>((item.pick >> (kByteBits * i)) & kLowByte);
+    }
+    marker.ring = static_cast<float>(sizes.ring);
+    marker.cross = static_cast<float>(sizes.cross);
+    marker.dot = static_cast<float>(sizes.dot);
+    marker.style = {static_cast<std::uint8_t>(item.shape), item.flags, 0, 0};
+    return marker;
+}
+
+MarkerShape shapeOf(const Marker& marker)
+{
+    return static_cast<MarkerShape>(marker.style[0]);
+}
+
+std::uint8_t flagsOf(const Marker& marker)
+{
+    return marker.style[1];
+}
+
+std::uint32_t pickOf(const Marker& marker)
+{
+    std::uint32_t pick = 0;
+    for (std::size_t i = 0; i < marker.pick.size(); ++i) {
+        pick |= static_cast<std::uint32_t>(marker.pick.at(i)) << (kByteBits * i);
+    }
+    return pick;
+}
 
 std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene)
 {
@@ -72,6 +130,20 @@ std::optional<camera::Box> sceneBounds(const snapshot::Scene& scene)
                       std::min(bounds.min.z, box.min.z)};
         bounds.max = {std::max(bounds.max.x, box.max.x), std::max(bounds.max.y, box.max.y),
                       std::max(bounds.max.z, box.max.z)};
+    }
+    return bounds;
+}
+
+std::optional<camera::Box> sketchBounds(std::span<const snapshot::Sketch> sketches)
+{
+    std::optional<camera::Box> bounds;
+    for (const snapshot::Sketch& sketch : sketches) {
+        for (const snapshot::SketchCurve& curve : sketch.curves) {
+            for (const snapshot::Point& point : curve.points) {
+                const camera::Vec3 at{point[0], point[1], point[2]};
+                bounds = unite(bounds, camera::Box{at, at});
+            }
+        }
     }
     return bounds;
 }

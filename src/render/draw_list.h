@@ -4,10 +4,12 @@
 #pragma once
 
 #include "camera/camera.h"
+#include "render/annotations.h"
 #include "render/positions.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 #include "snapshot/mesh.h"
+#include "snapshot/sketch.h"
 
 #include <array>
 #include <cstdint>
@@ -151,6 +153,66 @@ struct DatumDraw {
     bool empty() const { return fills.empty() && lines.empty() && originFills.empty() && originLines.empty(); }
 };
 
+enum class MarkerShape : std::uint8_t { Ball, Ring, Plus, RingPlus, Star };
+enum class MarkerScale : std::uint8_t { Small, Medium, Large };
+inline constexpr std::uint8_t kMarkerTopmost = 1;
+inline constexpr std::uint8_t kMarkerPickable = 2;
+
+struct Marker {
+    Position position{};
+    VertexColor color{};
+    std::array<std::uint8_t, 4> pick{};
+    float ring = 0.0F;
+    float cross = 0.0F;
+    float dot = 0.0F;
+    std::array<std::uint8_t, 4> style{};
+
+    bool operator==(const Marker&) const = default;
+};
+static_assert(sizeof(Marker) == 36);
+
+struct MarkerItem {
+    camera::Vec3 anchor;
+    MarkerShape shape = MarkerShape::Ball;
+    MarkerScale scale = MarkerScale::Small;
+    snapshot::Color color;
+    std::uint8_t flags = kMarkerTopmost;
+    std::uint32_t pick = 0;
+
+    bool operator==(const MarkerItem&) const = default;
+};
+
+Marker placeMarker(const MarkerItem& item, const snapshot::Point& origin);
+MarkerShape shapeOf(const Marker& marker);
+std::uint8_t flagsOf(const Marker& marker);
+std::uint32_t pickOf(const Marker& marker);
+
+struct MarkerDraw {
+    std::uint64_t revision = 0;
+    std::span<const Marker> markers;
+
+    bool empty() const { return markers.empty(); }
+};
+
+struct SketchDraw {
+    std::uint64_t revision = 0;
+    std::span<const DatumLine> curves;
+    std::span<const OverlayVertex> profiles;
+    std::span<const DatumLine> idCurves;
+    std::span<const OverlayVertex> idProfiles;
+
+    bool empty() const { return curves.empty() && profiles.empty(); }
+};
+
+struct ActiveSketchDraw {
+    std::uint64_t revision = 0;
+    std::span<const OverlayVertex> profiles;
+    std::span<const DatumLine> lines;
+    std::span<const OverlayVertex> arrows;
+
+    bool empty() const { return profiles.empty() && lines.empty() && arrows.empty(); }
+};
+
 std::optional<std::array<double, 3>> planeDepth(const std::array<double, 16>& viewProjection,
                                                 const std::array<float, 4>& plane);
 
@@ -168,6 +230,10 @@ struct DrawList {
     HighlightDraw highlight;
     GridDraw grid;
     DatumDraw datums;
+    MarkerDraw markers;
+    SketchDraw sketches;
+    ActiveSketchDraw activeSketch;
+    AnnotationDraw annotations;
 };
 
 using Encoded = std::array<float, 3>;
@@ -191,6 +257,7 @@ std::optional<PixelRect> haloBounds(const DrawList& list);
 
 std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene);
 std::optional<camera::Box> sceneBounds(const snapshot::Scene& scene);
+std::optional<camera::Box> sketchBounds(std::span<const snapshot::Sketch> sketches);
 camera::Camera fitToScene(camera::Camera camera, const snapshot::Scene& scene);
 
 Frame makeFrame(const camera::Camera& camera, const camera::Viewport& viewport, const snapshot::Point& origin,

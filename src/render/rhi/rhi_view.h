@@ -4,13 +4,16 @@
 #pragma once
 
 #include "camera/camera.h"
+#include "render/annotations.h"
 #include "render/chunk_set.h"
 #include "render/datums.h"
 #include "render/graphics_api.h"
 #include "render/grid_overlay.h"
 #include "render/pick_id.h"
+#include "render/sketches.h"
 #include "render/style.h"
 #include "snapshot/body.h"
+#include "snapshot/sketch.h"
 
 #include <QPointF>
 #include <QRect>
@@ -21,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <vector>
 
 class QLabel;
 class QRhiCommandBuffer;
@@ -45,6 +49,7 @@ struct IdPick {
     PickedItem item;
     IdHit hit;
     std::optional<DatumKey> datum;
+    std::optional<SketchKey> sketch;
 };
 
 StartProblem startProblem(const DeviceProbe& probe);
@@ -72,14 +77,33 @@ public:
     void setDatumMarks(DatumMarks marks);
     const DatumMarks& datumMarks() const { return m_datumMarks; }
     DatumDraw datumDraw() const;
+    void setMarkers(std::vector<MarkerItem> markers);
+    const std::vector<MarkerItem>& markers() const { return m_markers; }
+    MarkerDraw markerDraw() const;
     std::optional<camera::Box> fitBounds(double emptyHalfSize) const;
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
     const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
+    void setSketches(std::vector<snapshot::Sketch> sketches);
+    const std::vector<snapshot::Sketch>& sketches() const { return m_sketches; }
+    void setSketchLook(SketchLook look);
+    const SketchLook& sketchLook() const { return m_sketchLook; }
+    void setSketchMarks(SketchMarks marks);
+    const SketchGeometry& sketchGeometry() const { return m_sketchGeometry; }
+    SketchDraw sketchDraw() const;
+    void setActiveSketch(ActiveSketch sketch);
+    const ActiveSketch& activeSketch() const { return m_activeSketch; }
+    ActiveSketchDraw activeSketchDraw() const;
+    void setAnnotations(Annotations annotations);
+    const Annotations& annotations() const { return m_annotations; }
+    AnnotationDraw annotationDraw() const;
+    void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
+    void setLeftButtonCaptured(bool captured) { m_leftCaptured = captured; }
+    bool isLeftButtonCaptured() const { return m_leftCaptured; }
     camera::Viewport viewport() const;
     Frame frame() const;
 
@@ -103,6 +127,7 @@ signals:
     void ready();
     void resized();
     void sceneChanged();
+    void cameraChanged();
     void mouseLeft();
     void mousePressed(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
                       Qt::KeyboardModifiers modifiers);
@@ -110,6 +135,9 @@ signals:
                        Qt::KeyboardModifiers modifiers);
     void mouseMoved(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
     void wheelTurned(QPointF position, double notches);
+    void capturedPress(QPointF position, Qt::KeyboardModifiers modifiers);
+    void capturedRelease(QPointF position);
+    void capturedDoubleClick(QPointF position);
 
 protected:
     void initialize(QRhiCommandBuffer* buffer) override;
@@ -118,6 +146,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void leaveEvent(QEvent* event) override;
@@ -127,6 +156,9 @@ private:
 
     void updateChunks();
     void refreshDatums();
+    void refreshSketches();
+    void refreshAnnotations();
+    void refreshActiveSketch();
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
     bool ensureIdTargets(QSize size);
     QRhiTexture* resolvedTexture() const;
@@ -137,12 +169,29 @@ private:
     ViewportStyle m_style;
     snapshot::Scene m_scene;
     std::optional<camera::Box> m_bounds;
+    std::vector<snapshot::Sketch> m_sketches;
+    std::optional<camera::Box> m_sketchBounds;
+    SketchLook m_sketchLook;
+    SketchMarks m_sketchMarks;
+    SketchGeometry m_sketchGeometry;
+    std::uint64_t m_sketchRevision = 0;
+    ActiveSketch m_activeSketch;
+    std::optional<camera::Box> m_activeBounds;
+    ActiveGeometry m_activeGeometry;
+    std::uint64_t m_activeRevision = 0;
     camera::Camera m_camera;
     GridOverlay m_grid;
     Datums m_datums;
     DatumMarks m_datumMarks;
     DatumGeometry m_datumGeometry;
     std::uint64_t m_datumRevision = 0;
+    std::vector<MarkerItem> m_markers;
+    std::vector<Marker> m_markerGeometry;
+    std::uint64_t m_markerRevision = 0;
+    Annotations m_annotations;
+    PlacedAnnotations m_placedAnnotations;
+    std::uint64_t m_annotationRevision = 0;
+    QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
     std::unique_ptr<IdTargets> m_ids;
@@ -157,6 +206,7 @@ private:
     double m_updateMs = 0.0;
     bool m_ready = false;
     bool m_failed = false;
+    bool m_leftCaptured = false;
 };
 
 } // namespace kalve137::render

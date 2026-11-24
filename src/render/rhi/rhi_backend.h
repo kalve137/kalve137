@@ -7,6 +7,7 @@
 #include "render/pick_id.h"
 
 #include <QSize>
+#include <QString>
 
 #include <array>
 #include <cstddef>
@@ -31,6 +32,8 @@ class QRhiViewport;
 
 namespace kalve137::render {
 
+class GlyphAtlas;
+
 class RhiBackend {
 public:
     explicit RhiBackend(QRhi* rhi);
@@ -53,6 +56,8 @@ public:
     std::size_t chunkCount() const { return m_chunks.size(); }
     std::uint64_t meshUploads() const { return m_meshUploads; }
     std::uint64_t paletteUploads() const { return m_paletteUploads; }
+    void setTextFamily(const QString& family);
+    std::uint32_t annotationQuads() const { return m_annotations.quads.count; }
 
 private:
     struct Release {
@@ -135,7 +140,45 @@ private:
         Owned<QRhiShaderResourceBindings> idBindings;
         Owned<QRhiShaderResourceBindings> originIdBindings;
     };
-    enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, None };
+    struct MarkerGpu {
+        std::uint64_t revision = 0;
+        Geometry depth;
+        Geometry top;
+        Geometry ids;
+        Geometry sketchIds;
+        Owned<QRhiShaderResourceBindings> depthBindings;
+        Owned<QRhiShaderResourceBindings> topBindings;
+        Owned<QRhiBuffer> pick;
+        Owned<QRhiShaderResourceBindings> idBindings;
+    };
+    struct SketchGpu {
+        std::uint64_t revision = 0;
+        Geometry curves;
+        Geometry profiles;
+        Geometry idCurves;
+        Geometry idProfiles;
+        Owned<QRhiShaderResourceBindings> curveBindings;
+        Owned<QRhiShaderResourceBindings> profileBindings;
+        Owned<QRhiBuffer> pick;
+        Owned<QRhiShaderResourceBindings> idCurveBindings;
+        Owned<QRhiShaderResourceBindings> idProfileBindings;
+    };
+    struct ActiveGpu {
+        std::uint64_t revision = 0;
+        Geometry profiles;
+        Geometry lines;
+        Geometry arrows;
+        Owned<QRhiShaderResourceBindings> fillBindings;
+        Owned<QRhiShaderResourceBindings> lineBindings;
+    };
+    struct AnnotationGpu {
+        std::uint64_t revision = 0;
+        std::uint64_t atlasRevision = 0;
+        Geometry quads;
+        Owned<QRhiTexture> atlas;
+        Owned<QRhiShaderResourceBindings> bindings;
+    };
+    enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, Markers, Annotations, None };
     enum class Depth { Off, LessOrEqual, Greater, Write, Reset };
     enum class Blend { Opaque, Mask, Constant, Alpha, Hidden };
     struct PipelineSpec {
@@ -158,6 +201,8 @@ private:
     Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const;
     Owned<QRhiGraphicsPipeline> idPipeline(QRhiRenderPassDescriptor* pass, PickKind kind, bool cull) const;
     Owned<QRhiShaderResourceBindings> idBindingsFor(QRhiTexture* palette, QRhiBuffer* pick) const;
+    Owned<QRhiShaderResourceBindings> idBindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms,
+                                                     QRhiBuffer* pick) const;
     bool refreshIds(Gpu& gpu, std::uint32_t place, double edgeWidth, double pointWidth,
                     QRhiResourceUpdateBatch* updates);
     void writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* updates);
@@ -174,6 +219,13 @@ private:
     void drawDatums(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     void drawOrigin(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     void drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    bool refreshMarkers(const MarkerDraw& markers, QRhiResourceUpdateBatch* updates);
+    bool refreshSketches(const SketchDraw& sketches, QRhiResourceUpdateBatch* updates);
+    bool createSketchShared();
+    bool refreshActiveSketch(const ActiveSketchDraw& sketch, QRhiResourceUpdateBatch* updates);
+    void drawActiveSketch(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    bool refreshAnnotations(const AnnotationDraw& annotations, double ratio, QRhiResourceUpdateBatch* updates);
+    bool uploadAtlas(QRhiResourceUpdateBatch* updates);
     void drawFill(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
                   const Geometry& fill, const QRhiViewport& viewport) const;
     bool upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
@@ -188,6 +240,7 @@ private:
     QRhi* m_rhi;
     Owned<QRhiBuffer> m_uniforms;
     Owned<QRhiBuffer> m_originUniforms;
+    Owned<QRhiBuffer> m_sketchUniforms;
     Owned<QRhiBuffer> m_corners;
     Owned<QRhiSampler> m_sampler;
     Owned<QRhiTexture> m_layoutTexture;
@@ -211,9 +264,22 @@ private:
     Owned<QRhiGraphicsPipeline> m_originFill;
     Owned<QRhiGraphicsPipeline> m_originLines;
     Owned<QRhiGraphicsPipeline> m_depthReset;
+    Owned<QRhiGraphicsPipeline> m_markerDepth;
+    Owned<QRhiGraphicsPipeline> m_markerTop;
+    Owned<QRhiGraphicsPipeline> m_sketchCurves;
+    Owned<QRhiGraphicsPipeline> m_sketchProfiles;
+    Owned<QRhiGraphicsPipeline> m_activeFills;
+    Owned<QRhiGraphicsPipeline> m_activeLines;
+    Owned<QRhiGraphicsPipeline> m_annotationQuads;
+    QString m_textFamily = QStringLiteral("Roboto");
+    std::unique_ptr<GlyphAtlas> m_atlas;
+    AnnotationGpu m_annotations;
     HighlightGpu m_highlight;
     GridGpu m_grid;
     DatumGpu m_datums;
+    MarkerGpu m_markers;
+    SketchGpu m_sketches;
+    ActiveGpu m_active;
     bool m_hiddenPass = false;
     bool m_wireFill = false;
     bool m_postNeeded = false;
@@ -229,8 +295,14 @@ private:
     Owned<QRhiGraphicsPipeline> m_idDatumFill;
     Owned<QRhiGraphicsPipeline> m_idDatumLines;
     Owned<QRhiGraphicsPipeline> m_idReset;
+    Owned<QRhiGraphicsPipeline> m_idMarkers;
+    Owned<QRhiGraphicsPipeline> m_idSketchProfiles;
     bool m_idPlanes = false;
     bool m_idAxes = false;
+    bool m_idMarkersShown = false;
+    bool m_idSketchLines = false;
+    bool m_idSketchPoints = false;
+    bool m_idProfiles = false;
     std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
     std::vector<const Gpu*> m_edgeCalls;

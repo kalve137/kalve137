@@ -71,6 +71,10 @@ public:
     VisualStyle visualStyle() const { return m_style; }
     void restyle();
     void setHighlightedProfiles(std::set<std::pair<core::FeatureId, std::size_t>> profiles);
+    const std::set<std::pair<core::FeatureId, std::size_t>>& highlightedProfiles() const
+    {
+        return m_highlightedProfiles;
+    }
     void setHighlightedEdges(std::vector<TopoDS_Edge> edges);
     void setHighlightedFaces(std::vector<TopoDS_Face> faces);
     void setHighlightedBodies(std::vector<TopoDS_Shape> shapes);

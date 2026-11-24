@@ -302,7 +302,10 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
             table << stem << '\t' << old->right() << '\t' << fresh->right() << '\t' << old->top() << '\t'
                   << fresh->top() << '\t' << fresh->width() << '\n';
             const double ratio = shots.viewport.pixelRatio;
-            EXPECT_NEAR(fresh->width(), render::kOriginAxisPixels * ratio, kSpanTolerance * ratio) << stem;
+            const double origin = screenOf(shots.camera, shots.viewport, {}).x() * ratio;
+            EXPECT_NEAR(fresh->right() + 1.0 - origin, render::kOriginAxisPixels * ratio, kSpanTolerance * ratio)
+                << stem;
+            EXPECT_NEAR(fresh->left(), old->left(), kEndTolerance) << stem << ": the origin point reaches where it did";
             EXPECT_NEAR(fresh->right(), old->right(), kEndTolerance) << stem << ": the X axis ends where it did";
             EXPECT_NEAR(fresh->top(), old->top(), kEndTolerance) << stem << ": the Y axis ends where it did";
         }

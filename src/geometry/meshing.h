@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <TopoDS_Shape.hxx>
+#include "snapshot/chord.h"
 
-#include <numbers>
+#include <TopoDS_Shape.hxx>
 
 namespace kalve137::geometry {
 
-inline constexpr double kDisplayDeviationCoefficient = 0.001;
-inline constexpr double kDisplayDeviationAngle = 20.0 * std::numbers::pi / 180.0;
+inline constexpr double kDisplayDeviationCoefficient = snapshot::kDeviationCoefficient;
+inline constexpr double kDisplayDeviationAngle = snapshot::kDeviationAngle;
 
 double displayDeflection(const TopoDS_Shape& shape);
 

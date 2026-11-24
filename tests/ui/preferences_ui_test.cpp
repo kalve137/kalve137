@@ -174,27 +174,28 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
     ui = std::make_unique<UiDriver>();
     ui->trigger("Open Sample");
     const std::filesystem::path folder = ui->save("light body").parent_path();
-    if (ui->newView() != nullptr) {
-        GTEST_SKIP() << "The new view has no view cube and no view clicks yet";
-    }
-    const QRectF cube = ui->view().viewCubeRect();
-    const auto saveCube = [&](const std::string& name) {
+    const bool oldView = ui->newView() == nullptr;
+    const auto saveCube = [&](const QRectF& cube, const std::string& name) {
         const QRect area = cube.toAlignedRect().adjusted(-kCubeMargin, -kCubeMargin, kCubeMargin, kCubeMargin);
         const QPoint corner = ui->view().mapTo(ui->view().window(), area.topLeft());
         ui->shot().copy(QRect(corner, area.size())).save(QString::fromStdU16String((folder / name).u16string()));
     };
     const auto saveCubeHovers = [&](const std::string& theme) {
-        saveCube(theme + " view cube.png");
+        if (!oldView) {
+            return;
+        }
+        const QRectF cube = ui->view().viewCubeRect();
+        saveCube(cube, theme + " view cube.png");
         const auto hover = [&](const QPointF& offset, const std::string& part) {
             ui->move(cube.center() + QPointF(offset.x() * cube.width(), offset.y() * cube.height()));
-            saveCube(theme + " view cube " + part + ".png");
+            saveCube(cube, theme + " view cube " + part + ".png");
         };
         hover(QPointF(), "hover");
         hover(kCubeEdgeOffset, "edge");
         hover(kCubeFaceOffset, "face");
     };
     saveCubeHovers("light");
-    ui->move(ui->centerOf(&ui->view()));
+    ui->move(ui->centerOf(ui->canvas()));
 
     ui->trigger("Create Sketch");
     ui->click(ui->originPlane(core::OriginPlane::XY));
@@ -218,7 +219,7 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
     EXPECT_FALSE(app::theme::isDark());
 
     app::theme::setScheme(app::theme::Scheme::Dark);
-    ui->move(ui->centerOf(&ui->view()));
+    ui->move(ui->centerOf(ui->canvas()));
     saveCubeHovers("dark");
 }
 

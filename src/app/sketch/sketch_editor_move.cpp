@@ -11,8 +11,6 @@
 #include "sketch/solver.h"
 #include "viewer/box_band.h"
 #include "viewer/grid.h"
-#include "viewer/occt_view_widget.h"
-
 #include <QPointF>
 
 #include <algorithm>
@@ -121,7 +119,7 @@ void SketchEditor::placeMoveInputs(const sketch::Sketch& s)
     double top = std::numeric_limits<double>::infinity();
     double bottom = -std::numeric_limits<double>::infinity();
     const auto extend = [&](Vec2 p) {
-        const QPointF screen = m_view->toScreen(sketch::toWorld(ax, p));
+        const QPointF screen = toScreen(sketch::toWorld(ax, p));
         right = std::max(right, screen.x());
         top = std::min(top, screen.y());
         bottom = std::max(bottom, screen.y());

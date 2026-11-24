@@ -37,12 +37,14 @@ add_executable(kalve137_tests
     render/cpu_backend_test.cpp
     render/datums_test.cpp
     render/draw_list_test.cpp
+    render/annotations_test.cpp
     render/edge_quad_test.cpp
     render/grid_overlay_test.cpp
     render/grid_test.cpp
     render/pick_id_test.cpp
     render/positions_test.cpp
     render/shaders_test.cpp
+    render/sketches_test.cpp
     render/start_problem_test.cpp
     render/test_meshes.h
     sketch/build_test.cpp
@@ -51,6 +53,7 @@ add_executable(kalve137_tests
     sketch/edit_test.cpp
     sketch/select_test.cpp
     sketch/sketch_test.cpp
+    sketch/snapshot_test.cpp
     viewer/camera_guard_test.cpp
     viewer/grid_test.cpp
     viewer/view_turn_test.cpp
@@ -87,6 +90,7 @@ gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
+    ui/badge_pair_ui_test.cpp
     ui/box_compare_ui_test.cpp
     ui/camera_ui_test.cpp
     ui/constraint_ui_test.cpp
@@ -101,6 +105,7 @@ add_executable(kalve137_uitests
     ui/hero_ui_test.cpp
     ui/highlight_pair_ui_test.cpp
     ui/line_ui_test.cpp
+    ui/marker_pair_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/new_view_ui_test.cpp
     ui/pair_shots.cpp
@@ -110,10 +115,12 @@ add_executable(kalve137_uitests
     ui/recent_values_ui_test.cpp
     ui/scenario.cpp
     ui/select_ui_test.cpp
+    ui/sketch_input_ui_test.cpp
     ui/sketch_move_ui_test.cpp
     ui/scenario.h
     ui/screen_ui_test.cpp
     ui/shading_pair_ui_test.cpp
+    ui/sketch_pair_ui_test.cpp
     ui/ui_driver.cpp
     ui/ui_driver.h
     ui/ui_main.cpp
@@ -153,8 +160,25 @@ foreach(scale 125 150 175)
     )
 endforeach()
 add_test(NAME NewView.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*:GridPairTest.*)
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*:GridPairTest.*:MarkerPairTest.*)
 set_tests_properties(NewView.Harness PROPERTIES
+    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
+    LABELS ui
+    RUN_SERIAL TRUE
+)
+set(new_view_sketch
+    ConstraintTest.*
+    DimensionTest.*
+    LineTest.*
+    ScreenTest.FloorFitsTheWindowAndBothToolbars
+    SelectTest.SketchWindowTakesTheWholeRectangle
+    SelectTest.SketchCrossingTakesWhatItTouches
+    SketchMoveTest.*
+    WorkflowTest.*
+)
+list(JOIN new_view_sketch ":" new_view_sketch_filter)
+add_test(NAME NewView.Sketch COMMAND kalve137_uitests --gtest_filter=${new_view_sketch_filter})
+set_tests_properties(NewView.Sketch PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
@@ -174,12 +198,16 @@ set(new_view_pairs
     MenuTest.BrowserOpensAppearance
     MenuTest.MovesTheBlockUp
     MenuTest.PatternsTheBlockAlongX
+    PlanePairTest.*
     PreferencesTest.ChoosingLightSwitchesLiveAndIsKept
     PreferencesTest.LightThemeShowsABodyASketchAndADialog
     SelectTest.FilletWindowTakesEveryVisibleEdgeOfTheBlock
     SelectTest.IdleWindowHighlightsWhatItSelects
     SelectTest.FilletCrossingAddsWithoutDroppingEarlierEdges
     SelectTest.WindowOverThousandsOfFacesStaysFast
+    SketchPairTest.*
+    SketchInputTest.*
+    BadgePairTest.*
 )
 list(JOIN new_view_pairs ":" new_view_filter)
 add_test(NAME NewView.Pairs COMMAND kalve137_uitests --gtest_filter=${new_view_filter})

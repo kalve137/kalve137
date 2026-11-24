@@ -64,6 +64,7 @@ constexpr quint32 kPositionStride = sizeof(Position);
 constexpr quint32 kOverlayLineStride = sizeof(OverlayLine);
 constexpr quint32 kOverlayVertexStride = sizeof(OverlayVertex);
 constexpr quint32 kDatumLineStride = sizeof(DatumLine);
+constexpr quint32 kMarkerStride = sizeof(Marker);
 constexpr float kWindowDepthUnit = 1.0F / static_cast<float>(1 << 24);
 constexpr int kPostCorners = 3;
 
@@ -107,10 +108,6 @@ void RhiBackend::Release::operator()(QRhiResource* resource) const
     }
 }
 
-RhiBackend::RhiBackend(QRhi* rhi) : m_rhi(rhi) {}
-
-RhiBackend::~RhiBackend() = default;
-
 RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::bindingsFor(QRhiTexture* palette) const
 {
     return bindingsWith(palette, m_uniforms.get());
@@ -122,16 +119,23 @@ RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::bindingsWith(QRhiTextu
     bindings->setBindings(
         {QRhiShaderResourceBinding::uniformBuffer(
              0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, uniforms),
-         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, palette,
-                                                   m_sampler.get())});
+         QRhiShaderResourceBinding::sampledTexture(
+             1, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, palette,
+             m_sampler.get())});
     return bindings->create() ? std::move(bindings) : nullptr;
 }
 
 RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::idBindingsFor(QRhiTexture* palette, QRhiBuffer* pick) const
 {
+    return idBindingsWith(palette, m_uniforms.get(), pick);
+}
+
+RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::idBindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms,
+                                                                         QRhiBuffer* pick) const
+{
     Owned<QRhiShaderResourceBindings> bindings(m_rhi->newShaderResourceBindings());
     bindings->setBindings(
-        {QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, m_uniforms.get()),
+        {QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, uniforms),
          QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, palette, m_sampler.get()),
          QRhiShaderResourceBinding::uniformBuffer(2, QRhiShaderResourceBinding::VertexStage, pick)});
     return bindings->create() ? std::move(bindings) : nullptr;
@@ -176,13 +180,39 @@ bool RhiBackend::createShared()
     }
     m_datums.idBindings = idBindingsFor(m_layoutTexture.get(), m_datums.pick.get());
     m_datums.originIdBindings = idBindingsFor(m_layoutTexture.get(), m_datums.originPick.get());
-    return m_layout != nullptr && m_idLayout != nullptr && m_grid.washBindings != nullptr &&
-           m_grid.lineBindings != nullptr && m_haloBindings != nullptr && m_maskBindings != nullptr &&
-           m_goldBindings != nullptr && m_hiddenFaceBindings.at(0) != nullptr &&
+    m_markers.depthBindings = bindingsFor(m_layoutTexture.get());
+    m_markers.topBindings = bindingsFor(m_layoutTexture.get());
+    m_markers.pick.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(PickUniforms)));
+    if (!m_markers.pick->create()) {
+        return false;
+    }
+    m_markers.idBindings = idBindingsFor(m_layoutTexture.get(), m_markers.pick.get());
+    return createSketchShared() && m_markers.depthBindings != nullptr && m_markers.topBindings != nullptr &&
+           m_markers.idBindings != nullptr && m_layout != nullptr && m_idLayout != nullptr &&
+           m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr && m_haloBindings != nullptr &&
+           m_maskBindings != nullptr && m_goldBindings != nullptr && m_hiddenFaceBindings.at(0) != nullptr &&
            m_hiddenFaceBindings.at(1) != nullptr && m_hiddenEdgeBindings != nullptr &&
            m_datums.fillBindings != nullptr && m_datums.lineBindings != nullptr &&
            m_datums.originFillBindings != nullptr && m_datums.originLineBindings != nullptr &&
            m_datums.resetBindings != nullptr && m_datums.idBindings != nullptr && m_datums.originIdBindings != nullptr;
+}
+
+bool RhiBackend::createSketchShared()
+{
+    m_sketchUniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
+    m_sketches.pick.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(PickUniforms)));
+    if (!m_sketchUniforms->create() || !m_sketches.pick->create()) {
+        return false;
+    }
+    m_sketches.curveBindings = bindingsWith(m_layoutTexture.get(), m_sketchUniforms.get());
+    m_sketches.profileBindings = bindingsFor(m_layoutTexture.get());
+    m_sketches.idCurveBindings = idBindingsWith(m_layoutTexture.get(), m_sketchUniforms.get(), m_sketches.pick.get());
+    m_sketches.idProfileBindings = idBindingsWith(m_layoutTexture.get(), m_sketchUniforms.get(), m_sketches.pick.get());
+    m_active.fillBindings = bindingsFor(m_layoutTexture.get());
+    m_active.lineBindings = bindingsFor(m_layoutTexture.get());
+    return m_sketches.curveBindings != nullptr && m_sketches.profileBindings != nullptr &&
+           m_sketches.idCurveBindings != nullptr && m_sketches.idProfileBindings != nullptr &&
+           m_active.fillBindings != nullptr && m_active.lineBindings != nullptr;
 }
 
 RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull,
@@ -350,6 +380,30 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
                               {1, 5, QRhiVertexInputAttribute::Float, offsetof(DatumLine, pattern)}});
         result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
         break;
+    case Input::Markers:
+        layout.setBindings({QRhiVertexInputBinding(kCornerStride),
+                            QRhiVertexInputBinding(kMarkerStride, QRhiVertexInputBinding::PerInstance)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0},
+                              {1, 1, QRhiVertexInputAttribute::Float3, offsetof(Marker, position)},
+                              {1, 2, QRhiVertexInputAttribute::UNormByte4, offsetof(Marker, color)},
+                              {1, 3, QRhiVertexInputAttribute::UNormByte4, offsetof(Marker, pick)},
+                              {1, 4, QRhiVertexInputAttribute::Float3, offsetof(Marker, ring)},
+                              {1, 5, QRhiVertexInputAttribute::UNormByte4, offsetof(Marker, style)}});
+        result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        break;
+    case Input::Annotations:
+        layout.setBindings({QRhiVertexInputBinding(kCornerStride),
+                            QRhiVertexInputBinding(sizeof(AnnotationQuad), QRhiVertexInputBinding::PerInstance)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0},
+                              {1, 1, QRhiVertexInputAttribute::Float3, offsetof(AnnotationQuad, position)},
+                              {1, 2, QRhiVertexInputAttribute::Float2, offsetof(AnnotationQuad, corner)},
+                              {1, 3, QRhiVertexInputAttribute::Float4, offsetof(AnnotationQuad, frame)},
+                              {1, 4, QRhiVertexInputAttribute::UNormByte4, offsetof(AnnotationQuad, color)},
+                              {1, 5, QRhiVertexInputAttribute::UNormByte4, offsetof(AnnotationQuad, border)},
+                              {1, 6, QRhiVertexInputAttribute::UNormByte4, offsetof(AnnotationQuad, style)},
+                              {1, 7, QRhiVertexInputAttribute::Float2, offsetof(AnnotationQuad, shape)}});
+        result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        break;
     case Input::OverlayFill:
         layout.setBindings({QRhiVertexInputBinding(kOverlayVertexStride)});
         layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, offsetof(OverlayVertex, position)},
@@ -474,8 +528,13 @@ bool RhiBackend::setIdTarget(QRhiRenderPassDescriptor* pass)
     m_idDatumLines = make(
         {"id_datum_line.vert", "id_datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Opaque, false, 2});
     m_idReset = make({"post.vert", "id_depth_reset.frag", Input::None, Depth::Reset, 0, 0.0F, Blend::Hidden, false, 2});
+    m_idMarkers =
+        make({"id_marker.vert", "id_datum.frag", Input::Markers, Depth::Off, 0, 0.0F, Blend::Opaque, false, 2});
+    m_idSketchProfiles =
+        make({"id_datum_fill.vert", "id_datum.frag", Input::OverlayFill, Depth::Off, 0, 0.0F, Blend::Opaque, false, 2});
     return std::ranges::none_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; }) &&
-           m_idDatumFill != nullptr && m_idDatumLines != nullptr && m_idReset != nullptr;
+           m_idDatumFill != nullptr && m_idDatumLines != nullptr && m_idReset != nullptr && m_idMarkers != nullptr &&
+           m_idSketchProfiles != nullptr;
 }
 
 bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
@@ -496,6 +555,13 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_originFill.reset();
     m_originLines.reset();
     m_depthReset.reset();
+    m_markerDepth.reset();
+    m_markerTop.reset();
+    m_sketchCurves.reset();
+    m_sketchProfiles.reset();
+    m_activeFills.reset();
+    m_activeLines.reset();
+    m_annotationQuads.reset();
     if (!createShared()) {
         K137_ERROR(Viewer, "The new view could not create its shared GPU resources");
         return false;
@@ -529,10 +595,26 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_originFill = overlayPipeline("grid_fill.vert", Input::OverlayFill, 0, 0.0F);
     m_originLines = make({"datum_line.vert", "datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Alpha});
     m_depthReset = make({"post.vert", "depth_reset.frag", Input::None, Depth::Reset, 0, 0.0F, Blend::Hidden});
-    return m_edges != nullptr && m_halo != nullptr && m_maskFill != nullptr && m_goldFill != nullptr &&
-           m_hiddenFaces.at(0) != nullptr && m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr &&
-           m_gridWash != nullptr && m_gridLines != nullptr && m_datumFill != nullptr && m_datumLines != nullptr &&
-           m_originFill != nullptr && m_originLines != nullptr && m_depthReset != nullptr;
+    m_markerDepth = make({"marker.vert", "marker.frag", Input::Markers, Depth::LessOrEqual, 0, 0.0F, Blend::Alpha});
+    m_markerTop = make({"marker.vert", "marker.frag", Input::Markers, Depth::Off, 0, 0.0F, Blend::Alpha});
+    m_sketchCurves =
+        pipelineFor({"datum_line.vert", "datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Alpha}, pass,
+                    samples, m_sketches.curveBindings.get());
+    m_sketchProfiles =
+        make({"grid_fill.vert", "grid.frag", Input::OverlayFill, Depth::Off, 0, 0.0F, Blend::Alpha, false, 1, clamped});
+    m_activeFills = pipelineFor(
+        {"grid_fill.vert", "grid.frag", Input::OverlayFill, Depth::Off, 0, 0.0F, Blend::Alpha, false, 1, clamped}, pass,
+        samples, m_active.fillBindings.get());
+    m_activeLines = pipelineFor({"datum_line.vert", "datum.frag", Input::DatumLines, Depth::Off, 0, 0.0F, Blend::Alpha},
+                                pass, samples, m_active.lineBindings.get());
+    m_annotationQuads =
+        make({"annotation.vert", "annotation.frag", Input::Annotations, Depth::Off, 0, 0.0F, Blend::Alpha});
+    return m_annotationQuads != nullptr && m_activeFills != nullptr && m_activeLines != nullptr &&
+           m_sketchCurves != nullptr && m_sketchProfiles != nullptr && m_edges != nullptr && m_halo != nullptr &&
+           m_maskFill != nullptr && m_goldFill != nullptr && m_hiddenFaces.at(0) != nullptr &&
+           m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr && m_gridWash != nullptr &&
+           m_gridLines != nullptr && m_datumFill != nullptr && m_datumLines != nullptr && m_originFill != nullptr &&
+           m_originLines != nullptr && m_depthReset != nullptr && m_markerDepth != nullptr && m_markerTop != nullptr;
 }
 
 bool RhiBackend::refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
@@ -652,7 +734,7 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
     uniforms.look = {look.ambient, look.diffuse, look.shininess, 0.0F};
     uniforms.specular = {look.specular[0], look.specular[1], look.specular[2], 0.0F};
     uniforms.options = {list.lit ? 1.0F : 0.0F, list.highlightedEdgesOnly ? 1.0F : 0.0F,
-                        m_rhi->isYUpInFramebuffer() ? 1.0F : 0.0F, 0.0F};
+                        m_rhi->isYUpInFramebuffer() ? 1.0F : 0.0F, m_rhi->isYUpInNDC() ? 1.0F : 0.0F};
     uniforms.edge = {list.edgeColor.red, list.edgeColor.green, list.edgeColor.blue, 1.0F};
     uniforms.target = {static_cast<float>(frame.width), static_cast<float>(frame.height),
                        static_cast<float>(list.edgeWidth * list.pixelRatio),
@@ -690,6 +772,9 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
                                  static_cast<float>((*onPlane)[2]), 1.0F};
     }
     updates->updateDynamicBuffer(m_uniforms.get(), 0, sizeof(Uniforms), &uniforms);
+    Uniforms sketch = uniforms;
+    sketch.overlayBias = {};
+    updates->updateDynamicBuffer(m_sketchUniforms.get(), 0, sizeof(Uniforms), &sketch);
     Uniforms origin = uniforms;
     origin.viewProjection = uniforms.wideViewProjection;
     origin.overlayBias = {};
@@ -807,6 +892,78 @@ bool RhiBackend::refreshDatums(const DatumDraw& datums, QRhiResourceUpdateBatch*
     return uploaded;
 }
 
+bool RhiBackend::refreshMarkers(const MarkerDraw& markers, QRhiResourceUpdateBatch* updates)
+{
+    if (markers.revision == m_markers.revision) {
+        return true;
+    }
+    m_markers.revision = 0;
+    std::vector<Marker> depth;
+    std::vector<Marker> top;
+    std::vector<Marker> ids;
+    std::vector<Marker> sketchIds;
+    for (const Marker& marker : markers.markers) {
+        const std::uint8_t flags = flagsOf(marker);
+        ((flags & kMarkerTopmost) != 0 ? top : depth).push_back(marker);
+        if ((flags & kMarkerPickable) != 0) {
+            (decodePickId(pickOf(marker)).chunk == kSketchChunk ? sketchIds : ids).push_back(marker);
+        }
+    }
+    const auto send = [&](const std::vector<Marker>& items, Geometry& geometry) {
+        return uploadInto(items.data(), items.size() * sizeof(Marker), items.size(), geometry, updates);
+    };
+    const bool uploaded = send(depth, m_markers.depth) && send(top, m_markers.top) && send(ids, m_markers.ids) &&
+                          send(sketchIds, m_markers.sketchIds);
+    if (uploaded) {
+        m_markers.revision = markers.revision;
+    }
+    return uploaded;
+}
+
+bool RhiBackend::refreshSketches(const SketchDraw& sketches, QRhiResourceUpdateBatch* updates)
+{
+    if (sketches.revision == m_sketches.revision) {
+        return true;
+    }
+    m_sketches.revision = 0;
+    const bool uploaded = uploadInto(sketches.curves.data(), sketches.curves.size_bytes(), sketches.curves.size(),
+                                     m_sketches.curves, updates) &&
+                          uploadInto(sketches.profiles.data(), sketches.profiles.size_bytes(), sketches.profiles.size(),
+                                     m_sketches.profiles, updates) &&
+                          uploadInto(sketches.idCurves.data(), sketches.idCurves.size_bytes(), sketches.idCurves.size(),
+                                     m_sketches.idCurves, updates) &&
+                          uploadInto(sketches.idProfiles.data(), sketches.idProfiles.size_bytes(),
+                                     sketches.idProfiles.size(), m_sketches.idProfiles, updates);
+    if (uploaded) {
+        m_sketches.revision = sketches.revision;
+    }
+    return uploaded;
+}
+
+bool RhiBackend::refreshActiveSketch(const ActiveSketchDraw& sketch, QRhiResourceUpdateBatch* updates)
+{
+    if (sketch.revision == m_active.revision) {
+        return true;
+    }
+    m_active.revision = 0;
+    const bool uploaded =
+        uploadInto(sketch.profiles.data(), sketch.profiles.size_bytes(), sketch.profiles.size(), m_active.profiles,
+                   updates) &&
+        uploadInto(sketch.lines.data(), sketch.lines.size_bytes(), sketch.lines.size(), m_active.lines, updates) &&
+        uploadInto(sketch.arrows.data(), sketch.arrows.size_bytes(), sketch.arrows.size(), m_active.arrows, updates);
+    if (uploaded) {
+        m_active.revision = sketch.revision;
+    }
+    return uploaded;
+}
+
+void RhiBackend::drawActiveSketch(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
+{
+    drawFill(buffer, m_activeFills.get(), m_active.fillBindings.get(), m_active.profiles, viewport);
+    drawLines(buffer, m_activeLines.get(), m_active.lineBindings.get(), m_active.lines, viewport);
+    drawFill(buffer, m_activeFills.get(), m_active.fillBindings.get(), m_active.arrows, viewport);
+}
+
 bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
 {
     m_calls.clear();
@@ -826,6 +983,22 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     }
     if (!refreshDatums(list.datums, updates)) {
         K137_ERROR(Viewer, "The new view could not create the GPU resources for its planes and axes");
+        return false;
+    }
+    if (!refreshMarkers(list.markers, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its points");
+        return false;
+    }
+    if (!refreshSketches(list.sketches, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its sketches");
+        return false;
+    }
+    if (!refreshActiveSketch(list.activeSketch, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for the sketch being edited");
+        return false;
+    }
+    if (!refreshAnnotations(list.annotations, list.frame.pixelRatio, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its badges and labels");
         return false;
     }
     m_hiddenPass = list.highlight.hidden;
@@ -856,7 +1029,7 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     }
     std::erase_if(m_chunks, [](const auto& item) { return !item.second.used; });
     std::ranges::stable_partition(m_calls, [](const Call& call) { return call.cull; });
-    m_biased = list.edges;
+    m_biased = list.edges || m_sketches.curves.count > 0;
     if (!complete) {
         K137_ERROR(Viewer, "The new view could not create the GPU resources for every chunk");
     }
@@ -900,8 +1073,13 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     m_idChunks.clear();
     m_idPlanes = false;
     m_idAxes = false;
+    m_idMarkersShown = false;
+    m_idSketchLines = false;
+    m_idSketchPoints = false;
+    m_idProfiles = false;
     if (std::ranges::any_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; }) ||
-        m_idDatumFill == nullptr || m_idDatumLines == nullptr || m_idReset == nullptr) {
+        m_idDatumFill == nullptr || m_idDatumLines == nullptr || m_idReset == nullptr || m_idMarkers == nullptr ||
+        m_idSketchProfiles == nullptr) {
         return false;
     }
     writeUniforms(list, updates);
@@ -955,6 +1133,31 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
         updates->updateDynamicBuffer(m_datums.pick.get(), 0, sizeof(PickUniforms), &construction);
         updates->updateDynamicBuffer(m_datums.originPick.get(), 0, sizeof(PickUniforms), &origin);
     }
+    if (style.sketchLines || style.profiles) {
+        if (refreshSketches(list.sketches, updates)) {
+            m_idSketchLines = style.sketchLines && m_sketches.idCurves.count > 0;
+            m_idProfiles = style.profiles && m_sketches.idProfiles.count > 0;
+        } else {
+            K137_ERROR(Viewer, "The new view could not create the id pass resources for its sketches");
+            complete = false;
+        }
+        PickUniforms sketches;
+        sketches.pick = {kSketchChunk << kPickChunkShift, 0, 0, 0};
+        updates->updateDynamicBuffer(m_sketches.pick.get(), 0, sizeof(PickUniforms), &sketches);
+    }
+    if (style.markers || style.sketchPoints) {
+        if (refreshMarkers(list.markers, updates)) {
+            m_idMarkersShown = style.markers && m_markers.ids.count > 0;
+            m_idSketchPoints = style.sketchPoints && m_markers.sketchIds.count > 0;
+        } else {
+            K137_ERROR(Viewer, "The new view could not create the id pass resources for its points");
+            complete = false;
+        }
+        PickUniforms markers;
+        markers.widths = {static_cast<float>(style.markerWidth * list.pixelRatio),
+                          m_rhi->isClipDepthZeroToOne() ? 1.0F : 0.0F, 0.0F, 0.0F};
+        updates->updateDynamicBuffer(m_markers.pick.get(), 0, sizeof(PickUniforms), &markers);
+    }
     if (!complete) {
         K137_ERROR(Viewer, "The new view could not create the id pass resources for every chunk");
     }
@@ -987,7 +1190,19 @@ void RhiBackend::drawIds(QRhiCommandBuffer* buffer, QSize size) const
         buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data());
         buffer->draw(kEdgeCorners, point ? call.gpu->pointCount : call.gpu->segmentCount);
     }
+    if (m_idSketchLines) {
+        drawLines(buffer, m_idDatumLines.get(), m_sketches.idCurveBindings.get(), m_sketches.idCurves, viewport);
+    }
+    if (m_idProfiles) {
+        drawFill(buffer, m_idSketchProfiles.get(), m_sketches.idProfileBindings.get(), m_sketches.idProfiles, viewport);
+    }
     drawDatumIds(buffer, viewport);
+    if (m_idMarkersShown) {
+        drawLines(buffer, m_idMarkers.get(), m_markers.idBindings.get(), m_markers.ids, viewport);
+    }
+    if (m_idSketchPoints) {
+        drawLines(buffer, m_idMarkers.get(), m_markers.idBindings.get(), m_markers.sketchIds, viewport);
+    }
 }
 
 void RhiBackend::drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
@@ -1064,7 +1279,13 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
                       m_highlight.selectedFaces, viewport, kHiddenFaceWeight);
         drawLines(buffer, m_hiddenEdges.get(), m_hiddenEdgeBindings.get(), m_highlight.selectedEdges, viewport);
     }
+    drawLines(buffer, m_sketchCurves.get(), m_sketches.curveBindings.get(), m_sketches.curves, viewport);
+    drawLines(buffer, m_markerDepth.get(), m_markers.depthBindings.get(), m_markers.depth, viewport);
     drawOrigin(buffer, viewport);
+    drawFill(buffer, m_sketchProfiles.get(), m_sketches.profileBindings.get(), m_sketches.profiles, viewport);
+    drawActiveSketch(buffer, viewport);
+    drawLines(buffer, m_markerTop.get(), m_markers.topBindings.get(), m_markers.top, viewport);
+    drawLines(buffer, m_annotationQuads.get(), m_annotations.bindings.get(), m_annotations.quads, viewport);
 }
 
 void RhiBackend::drawGrid(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const

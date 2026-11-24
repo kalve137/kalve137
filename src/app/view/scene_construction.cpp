@@ -92,6 +92,8 @@ render::Datums Scene::datums() const
                                          .direction = direction,
                                          .color = colorOf(color)});
         }
+        datums.originPoint = true;
+        datums.originPointColor = colorOf(colors.viewport.originPoint);
     }
     for (const auto& [id, plane] : m_model.planes) {
         if (m_hidden.contains(id)) {
@@ -111,6 +113,12 @@ render::Datums Scene::datums() const
                                .anchor = vecOf(axis.Location().XYZ()),
                                .direction = vecOf(axis.Direction().XYZ()),
                                .color = datums.planeColor});
+    }
+    for (const auto& [id, location] : m_model.points) {
+        if (m_hidden.contains(id)) {
+            continue;
+        }
+        datums.points.push_back({.id = static_cast<std::uint64_t>(id), .anchor = vecOf(location.XYZ())});
     }
     return datums;
 }

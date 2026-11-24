@@ -105,7 +105,7 @@ TEST_F(SelectTest, SketchCrossingTakesWhatItTouches)
     EXPECT_TRUE(ui->selectionText().startsWith("1 Sketch Curve")) << ui->selectionText().toStdString();
 
     ui->key(Qt::Key_Escape);
-    ui->drag(right - reach, right + reach);
+    ui->drag(ui->at(gp_Pnt(-15, 1, 0)), ui->at(gp_Pnt(12, -1, 0)));
     EXPECT_TRUE(ui->selectionText().isEmpty()) << ui->selectionText().toStdString();
 }
 

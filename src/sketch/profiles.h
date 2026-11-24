@@ -4,6 +4,8 @@
 #pragma once
 
 #include "sketch/sketch.h"
+#include "sketch/snapshot.h"
+#include "snapshot/sketch.h"
 
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -26,5 +28,10 @@ std::vector<TopoDS_Face> findProfiles(const Sketch& sketch, const gp_Ax3& plane)
 std::optional<Vec2> interiorPoint(const TopoDS_Face& face, const gp_Ax3& plane);
 
 std::optional<std::size_t> profileAt(const std::vector<TopoDS_Face>& profiles, const gp_Ax3& plane, Vec2 p);
+
+Placement placementOf(const gp_Ax3& plane);
+snapshot::SketchProfiles profileTriangles(const std::vector<TopoDS_Face>& profiles, double deflection);
+snapshot::Sketch snapshotOf(const Sketch& sketch, const gp_Ax3& plane, const std::vector<TopoDS_Face>& profiles,
+                            int feature = 0);
 
 } // namespace kalve137::sketch

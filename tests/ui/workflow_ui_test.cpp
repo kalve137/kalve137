@@ -199,8 +199,8 @@ void zoomOnGridLine(UiDriver& ui)
 
 void expectSolidAlongGridLine(UiDriver& ui, const QColor& line)
 {
-    const QImage frame = ui.view().grabFramebuffer();
-    const qreal ratio = ui.view().devicePixelRatioF();
+    const QImage frame = ui.canvasImage();
+    const qreal ratio = ui.canvas()->devicePixelRatioF();
     int sampled = 0;
     int solid = 0;
     for (int i = 0; i <= kLineSamples; ++i) {

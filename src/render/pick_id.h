@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace kalve137::render {
@@ -18,17 +19,26 @@ struct PickKinds {
     bool points = false;
     bool planes = false;
     bool axes = false;
+    bool markers = false;
+    bool sketchLines = false;
+    bool sketchPoints = false;
+    bool profiles = false;
 
     bool has(PickKind kind) const;
     bool allows(std::uint32_t id) const;
-    bool any() const { return faces || edges || points || planes || axes; }
+    bool any() const
+    {
+        return faces || edges || points || planes || axes || markers || sketchLines || sketchPoints || profiles;
+    }
     bool operator==(const PickKinds&) const = default;
 };
 
 inline constexpr std::uint32_t kPickChunks = 1U << 14;
+inline constexpr std::uint32_t kSketchChunk = kPickChunks - 4;
+inline constexpr std::uint32_t kMarkerChunk = kPickChunks - 3;
 inline constexpr std::uint32_t kOriginChunk = kPickChunks - 2;
 inline constexpr std::uint32_t kDatumChunk = kPickChunks - 1;
-inline constexpr std::uint32_t kBodyChunks = kOriginChunk;
+inline constexpr std::uint32_t kBodyChunks = kSketchChunk;
 inline constexpr unsigned kPickKindShift = 16;
 inline constexpr unsigned kPickChunkShift = 18;
 
@@ -43,6 +53,7 @@ PickId decodePickId(std::uint32_t id);
 
 inline constexpr double kPickEdgeWidth = 1.5;
 inline constexpr double kPickPointWidth = 6.0;
+inline constexpr double kPickMarkerWidth = 12.0;
 inline constexpr int kPickTolerance = 4;
 inline constexpr int kDatumPickTolerance = 2;
 
@@ -50,8 +61,13 @@ struct IdStyle {
     bool points = false;
     bool planes = false;
     bool axes = false;
+    bool markers = false;
+    bool sketchLines = false;
+    bool sketchPoints = false;
+    bool profiles = false;
     double edgeWidth = kPickEdgeWidth;
     double pointWidth = kPickPointWidth;
+    double markerWidth = kPickMarkerWidth;
 
     bool operator==(const IdStyle&) const = default;
 };
@@ -78,6 +94,6 @@ struct IdHit {
 };
 
 std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
-                                 int datumRadius = 0);
+                                 int datumRadius = 0, std::span<const std::uint32_t> exactIds = {});
 
 } // namespace kalve137::render
