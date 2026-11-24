@@ -53,8 +53,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: C:\vcpkg-cache
-          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count the vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 count -Path C:\vcpkg-cache
 
       - name: Bootstrap vcpkg
         run: |
@@ -63,7 +67,11 @@ jobs:
           git -C $env:VCPKG_ROOT checkout $env:VCPKG_COMMIT
           & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
 
+      - name: Start the vcpkg build log tail
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-start -VcpkgRoot $env:VCPKG_ROOT
+
       - name: Build
+        id: build
         run: |
           . ./scripts/dev-shell.ps1
           $extra = @()
@@ -78,12 +86,35 @@ jobs:
           cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Stop the vcpkg build log tail
+        if: always()
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-windows
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan the vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 save-plan -Path C:\vcpkg-cache
+
       - name: Save the vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
           path: C:\vcpkg-cache
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
       - name: Install software OpenGL
         run: |
@@ -137,8 +168,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: /home/runner/vcpkg-cache
-          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count the vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: bash scripts/ci-vcpkg-cache.sh count -Path /home/runner/vcpkg-cache
 
       - name: Bootstrap vcpkg
         run: |
@@ -147,7 +182,11 @@ jobs:
           git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
+      - name: Start the vcpkg build log tail
+        run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
+
       - name: Build
+        id: build
         run: |
           extra=()
           if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
@@ -159,12 +198,35 @@ jobs:
           cmake --preset linux-release "${extra[@]}"
           cmake --build --preset linux-release
 
+      - name: Stop the vcpkg build log tail
+        if: always()
+        run: bash scripts/ci-vcpkg-cache.sh tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-linux
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan the vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /home/runner/vcpkg-cache
+
       - name: Save the vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
           path: /home/runner/vcpkg-cache
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
       - name: Test without a window
         env:
@@ -211,8 +273,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: /Users/runner/vcpkg-cache
-          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count the vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: bash scripts/ci-vcpkg-cache.sh count -Path /Users/runner/vcpkg-cache
 
       - name: Bootstrap vcpkg
         run: |
@@ -221,7 +287,11 @@ jobs:
           git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
+      - name: Start the vcpkg build log tail
+        run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
+
       - name: Build
+        id: build
         run: |
           extra=()
           if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
@@ -233,12 +303,35 @@ jobs:
           cmake --preset macos-release "${extra[@]}"
           cmake --build --preset macos-release
 
+      - name: Stop the vcpkg build log tail
+        if: always()
+        run: bash scripts/ci-vcpkg-cache.sh tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-macos
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan the vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /Users/runner/vcpkg-cache
+
       - name: Save the vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
           path: /Users/runner/vcpkg-cache
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
       - name: Test without a window
         env:
