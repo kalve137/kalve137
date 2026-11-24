@@ -10,6 +10,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRep_Tool.hxx>
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <NCollection_List.hxx>
@@ -131,6 +132,21 @@ std::string profileSuffix(const SketchState& state, const std::vector<TopoDS_Fac
     return index ? "/p" + std::to_string(*index) : std::string();
 }
 
+std::vector<std::string> namesAroundVertex(const geometry::FaceNames& names,
+                                           const NCollection_List<TopoDS_Shape>& faces)
+{
+    std::vector<std::string> around;
+    for (const TopoDS_Shape& face : faces) {
+        std::string name = names.primary(face);
+        if (name.empty()) {
+            return {};
+        }
+        around.push_back(std::move(name));
+    }
+    std::ranges::sort(around);
+    return around;
+}
+
 std::optional<gp_Pln> planeOf(const TopoDS_Face& face)
 {
     const BRepAdaptor_Surface surface(face);
@@ -225,6 +241,17 @@ TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point)
 TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point)
 {
     return {point, body.faceNames.edgeNames(body.shape, edge)};
+}
+
+TopoRef vertexRef(const Body& body, const TopoDS_Vertex& vertex)
+{
+    TopoRef ref{BRep_Tool::Pnt(vertex), {}};
+    AncestorMap vertexFaces;
+    TopExp::MapShapesAndUniqueAncestors(body.shape, TopAbs_VERTEX, TopAbs_FACE, vertexFaces);
+    if (const NCollection_List<TopoDS_Shape>* faces = vertexFaces.Seek(vertex)) {
+        ref.names = namesAroundVertex(body.faceNames, *faces);
+    }
+    return ref;
 }
 
 void FaceLookup::clear()
@@ -361,6 +388,32 @@ std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRe
         }
     }
     return std::nullopt;
+}
+
+std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref)
+{
+    std::optional<VertexHit> named;
+    double namedDistance = std::numeric_limits<double>::max();
+    std::optional<VertexHit> near;
+    double nearDistance = kRefTolerance;
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
+        AncestorMap vertexFaces;
+        TopExp::MapShapesAndUniqueAncestors(bodies[i].shape, TopAbs_VERTEX, TopAbs_FACE, vertexFaces);
+        for (int v = 1; v <= vertexFaces.Extent(); ++v) {
+            const TopoDS_Vertex& vertex = TopoDS::Vertex(vertexFaces.FindKey(v));
+            const double distance = ref.point.Distance(BRep_Tool::Pnt(vertex));
+            if (!ref.names.empty() && distance < namedDistance &&
+                namesAroundVertex(bodies[i].faceNames, vertexFaces(v)) == ref.names) {
+                named = VertexHit{i, vertex};
+                namedDistance = distance;
+            }
+            if (distance <= nearDistance) {
+                near = VertexHit{i, vertex};
+                nearDistance = distance;
+            }
+        }
+    }
+    return named ? named : near;
 }
 
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref)

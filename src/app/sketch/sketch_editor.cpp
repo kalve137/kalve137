@@ -11,6 +11,7 @@
 #include "app/theme/fonts.h"
 #include "app/theme/theme.h"
 #include "app/view/band_overlay.h"
+#include "core/projection.h"
 
 #include "geometry/shapes.h"
 #include "log/log.h"
@@ -139,7 +140,9 @@ void SketchEditor::begin(core::FeatureId sketch)
         m_sketchId = 0;
         return;
     }
+    seed();
     m_tool = Tool::Select;
+    m_repick = 0;
     m_view->setLeftButtonCaptured(true);
     if (m_newView != nullptr) {
         m_newView->setLeftButtonCaptured(true);
@@ -161,6 +164,8 @@ void SketchEditor::end()
     clearObjects(m_objects);
     clearObjects(m_preview);
     m_sketchId = 0;
+    m_before.reset();
+    m_repick = 0;
     canvas()->unsetCursor();
     m_view->setLeftButtonCaptured(false);
     if (m_newView != nullptr) {
@@ -179,6 +184,8 @@ void SketchEditor::setTool(Tool tool)
     closeValueEditor();
     resetProgress();
     m_tool = tool;
+    m_repick = 0;
+    setModelPicking(tool == Tool::Project);
     if (drawsGeometry(tool)) {
         canvas()->setCursor(Qt::CrossCursor);
     } else {
@@ -331,6 +338,9 @@ QString SketchEditor::hint() const
                    ? tr("Click a curve to offset it with the curves joined to it")
                    : tr("Type the distance and Enter, move the cursor to the other side or type a negative "
                         "distance to flip");
+    case Tool::Project:
+        return m_repick != 0 ? tr("Click the edge or vertex the selected curve should follow, Esc to cancel")
+                             : tr("Click edges, vertices or faces to project them, Esc to finish");
     case Tool::Dimension:
         return m_pending ? tr("Click to place the dimension, Esc to cancel")
                          : tr("Click a line, circle, arc or two points, then click to place");
@@ -440,6 +450,7 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -474,7 +485,38 @@ const core::SketchFeature* SketchEditor::feature() const
 
 const sketch::Sketch& SketchEditor::current() const
 {
-    return feature()->sketch;
+    return m_current;
+}
+
+void SketchEditor::seed()
+{
+    const core::SketchFeature* data = feature();
+    m_current = data->sketch;
+    const auto state = m_session.model().sketches.find(m_sketchId);
+    if (state == m_session.model().sketches.end()) {
+        return;
+    }
+    const sketch::Sketch& solved = state->second.solved;
+    const auto copyPoint = [&](Id id) {
+        const sketch::Point* from = solved.point(id);
+        sketch::Point* to = m_current.point(id);
+        if (from != nullptr && to != nullptr) {
+            to->pos = from->pos;
+        }
+    };
+    for (const core::Projection& link : data->projections) {
+        if (link.curve == 0) {
+            copyPoint(link.point);
+            continue;
+        }
+        sketch::Curve* curve = m_current.curve(link.curve);
+        const sketch::Curve* from = solved.curve(link.curve);
+        if (curve == nullptr || from == nullptr) {
+            continue;
+        }
+        curve->radius = from->radius;
+        std::ranges::for_each(curve->points, copyPoint);
+    }
 }
 
 const sketch::Sketch& SketchEditor::shownSketch() const
@@ -554,6 +596,8 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         break;
     case Tool::Offset:
         clickOffset(pos, *p);
+        break;
+    case Tool::Project:
         break;
     case Tool::Dimension:
         clickDimension(pos, hitAt(pos));
@@ -659,6 +703,7 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -734,7 +779,9 @@ void SketchEditor::onSessionChanged()
         emit finished();
         return;
     }
+    seed();
     if (!m_committing) {
+        m_before.reset();
         closeValueEditor();
         resetProgress();
         dropDrag();
@@ -843,7 +890,9 @@ bool SketchEditor::commit(const QString& label, sketch::Sketch candidate)
     const QScopedValueRollback committing(m_committing, true);
     m_session.edit(label, [id, &candidate](core::Document& document) {
         if (core::Feature* f = document.find(id)) {
-            std::get<core::SketchFeature>(f->data).sketch = std::move(candidate);
+            auto& data = std::get<core::SketchFeature>(f->data);
+            data.sketch = std::move(candidate);
+            core::dropBrokenProjections(data);
         }
     });
     return true;

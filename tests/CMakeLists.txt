@@ -22,6 +22,7 @@ add_executable(kalve137_tests
     core/feature_test.cpp
     core/history_test.cpp
     core/naming_test.cpp
+    core/projection_test.cpp
     core/sample_test.cpp
     core/shape_store_test.cpp
     core/snapshot_cache_test.cpp
@@ -125,6 +126,7 @@ add_executable(kalve137_uitests
     ui/screen_ui_test.cpp
     ui/shading_pair_ui_test.cpp
     ui/sketch_pair_ui_test.cpp
+    ui/sketch_project_ui_test.cpp
     ui/ui_driver.cpp
     ui/ui_driver.h
     ui/ui_main.cpp
@@ -175,6 +177,7 @@ set(new_view_sketch
     DimensionTest.*
     LineTest.*
     OffsetTest.*
+    ProjectTest.*
     ScreenTest.FloorFitsTheWindowAndBothToolbars
     SelectTest.SketchWindowTakesTheWholeRectangle
     SelectTest.SketchCrossingTakesWhatItTouches
@@ -214,6 +217,7 @@ set(new_view_pairs
     SketchPairTest.*
     SketchInputTest.*
     BadgePairTest.*
+    ProjectPairTest.*
 )
 list(JOIN new_view_pairs ":" new_view_filter)
 add_test(NAME NewView.Pairs COMMAND kalve137_uitests --gtest_filter=${new_view_filter})

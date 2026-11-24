@@ -3,6 +3,7 @@
 
 #include "core/serialization.h"
 
+#include "core/projection.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
 
@@ -64,16 +65,20 @@ json sketchToJson(const sketch::Sketch& s)
 {
     json points = json::array();
     for (const auto& [id, p] : s.points()) {
-        points.push_back({{"id", id}, {"x", p.pos.x}, {"y", p.pos.y}, {"fixed", p.fixed}});
+        json point = {{"id", id}, {"x", p.pos.x}, {"y", p.pos.y}, {"fixed", p.fixed}};
+        if (p.projected) {
+            point["projected"] = true;
+        }
+        points.push_back(std::move(point));
     }
     json curves = json::array();
     for (const auto& [id, c] : s.curves()) {
-        curves.push_back({{"id", id},
-                          {"kind", sketch::toString(c.kind)},
-                          {"points", c.points},
-                          {"radius", c.radius},
-                          {"construction", c.construction},
-                          {"fixed", c.fixed}});
+        json curve = {{"id", id},           {"kind", sketch::toString(c.kind)}, {"points", c.points},
+                      {"radius", c.radius}, {"construction", c.construction},   {"fixed", c.fixed}};
+        if (c.projected) {
+            curve["projected"] = true;
+        }
+        curves.push_back(std::move(curve));
     }
     json constraints = json::array();
     for (const auto& [id, c] : s.constraints()) {
@@ -93,8 +98,9 @@ sketch::Sketch sketchFrom(const json& j)
 {
     sketch::Sketch s;
     for (const json& p : j.at("points")) {
-        s.insertPoint(p.at("id").get<int>(),
-                      {{p.at("x").get<double>(), p.at("y").get<double>()}, p.value("fixed", false)});
+        s.insertPoint(
+            p.at("id").get<int>(),
+            {{p.at("x").get<double>(), p.at("y").get<double>()}, p.value("fixed", false), p.value("projected", false)});
     }
     for (const json& c : j.at("curves")) {
         const auto kind = sketch::curveKindFromString(c.at("kind").get<std::string>());
@@ -107,6 +113,7 @@ sketch::Sketch sketchFrom(const json& j)
         curve.radius = c.value("radius", 0.0);
         curve.construction = c.value("construction", false);
         curve.fixed = c.value("fixed", false);
+        curve.projected = c.value("projected", false);
         s.insertCurve(c.at("id").get<int>(), std::move(curve));
     }
     for (const json& c : j.at("constraints")) {
@@ -181,6 +188,33 @@ std::vector<TopoRef> refsFrom(const json& j)
             continue;
         }
         result.push_back({pointFrom(ref.at("point")), ref.value("names", std::vector<std::string>())});
+    }
+    return result;
+}
+
+json projectionsToJson(const std::vector<Projection>& projections)
+{
+    json result = json::array();
+    for (const Projection& link : projections) {
+        json entry = {{"kind", toString(link.kind)}, {"ref", refsToJson({link.ref}).front()}};
+        if (link.curve != 0) {
+            entry["curve"] = link.curve;
+        }
+        if (link.point != 0) {
+            entry["point"] = link.point;
+        }
+        result.push_back(std::move(entry));
+    }
+    return result;
+}
+
+std::vector<Projection> projectionsFrom(const json& j)
+{
+    std::vector<Projection> result;
+    for (const json& entry : j) {
+        result.push_back({enumFrom(entry.at("kind"), projectionKindFromString, "projection kind"),
+                          entry.value("curve", 0), entry.value("point", 0),
+                          refsFrom(json::array({entry.at("ref")})).front()});
     }
     return result;
 }
@@ -365,6 +399,9 @@ json dataToJson(const FeatureData& data, ShapeStore& shapes)
                 if (f.face) {
                     result["face"] = refsToJson({*f.face}).front();
                 }
+                if (!f.projections.empty()) {
+                    result["projections"] = projectionsToJson(f.projections);
+                }
                 return result;
             },
             [](const PlaneFeature& f) -> json { return planeFeatureToJson(f); },
@@ -467,6 +504,12 @@ FeatureData dataFrom(const std::string& type, const json& j, ShapeStore& shapes)
             f.face = refsFrom(json::array({j.at("face")})).front();
         }
         f.sketch = sketchFrom(j.at("sketch"));
+        if (const auto projections = j.find("projections"); projections != j.end()) {
+            f.projections = projectionsFrom(*projections);
+        }
+        if (const std::optional<std::string> problem = validateProjections(f)) {
+            throw std::runtime_error("A sketch in the design is damaged: " + *problem);
+        }
         return f;
     }
     if (type == "plane") {

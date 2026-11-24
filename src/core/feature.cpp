@@ -142,6 +142,22 @@ std::optional<PlaneKind> planeKindFromString(std::string_view name)
     return enumFromString(name, {PlaneKind::Offset, PlaneKind::Angle, PlaneKind::Midplane});
 }
 
+std::string_view toString(ProjectionKind kind)
+{
+    switch (kind) {
+    case ProjectionKind::Edge:
+        return "edge";
+    case ProjectionKind::Vertex:
+        return "vertex";
+    }
+    return {};
+}
+
+std::optional<ProjectionKind> projectionKindFromString(std::string_view name)
+{
+    return enumFromString(name, {ProjectionKind::Edge, ProjectionKind::Vertex});
+}
+
 std::string_view toString(AxisSource source)
 {
     switch (source) {

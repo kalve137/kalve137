@@ -6,6 +6,7 @@
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/expression.h"
+#include "core/recompute.h"
 #include "render/annotations.h"
 #include "render/sketches.h"
 #include "sketch/dimension_layout.h"
@@ -46,6 +47,7 @@ class BandOverlay;
 class DesignSession;
 class RecentValuesMenu;
 class SketchInputs;
+struct Pick;
 
 class SketchEditor : public QObject {
     Q_OBJECT
@@ -68,6 +70,7 @@ public:
         Fillet,
         Mirror,
         Offset,
+        Project,
         Dimension,
         Coincident,
         Horizontal,
@@ -105,6 +108,10 @@ public:
     void startTypedMove();
     void deleteSelection();
     void toggleConstruction();
+    void projectPick(const Pick& pick);
+    void breakLinks();
+    void pickAgain();
+    bool picksModel() const { return isActive() && m_tool == Tool::Project; }
 
     QString hint() const;
     QString solveSummary() const;
@@ -176,6 +183,14 @@ private:
 
     const core::SketchFeature* feature() const;
     const sketch::Sketch& current() const;
+    void seed();
+    void setModelPicking(bool picking);
+    const core::Model& modelBefore();
+    std::optional<QString> project(const Pick& pick);
+    std::optional<QString> repick(const Pick& pick);
+    void commitFeature(const QString& label, core::SketchFeature data);
+    std::vector<std::size_t> linksOf(const std::set<sketch::Id>& ids) const;
+    std::set<sketch::Id> lostProjections() const;
     gp_Ax3 plane() const;
     QWidget* canvas() const;
     std::optional<Projection> projection() const;
@@ -315,6 +330,9 @@ private:
     sketch::Vec2 m_dragLabelGrab;
     sketch::Vec2 m_dragLabelStart;
     bool m_draggingLabel = false;
+    sketch::Sketch m_current;
+    std::optional<core::Model> m_before;
+    sketch::Id m_repick = 0;
     std::optional<sketch::Sketch> m_dragStart;
     std::optional<sketch::Sketch> m_dragPreview;
     bool m_committing = false;

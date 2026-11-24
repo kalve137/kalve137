@@ -237,6 +237,12 @@ void MainWindow::onViewHover()
 
 void MainWindow::onViewSelection()
 {
+    if (m_projectPicking) {
+        for (const Pick& pick : m_picks->takePicks()) {
+            m_sketchEditor->projectPick(pick);
+        }
+        return;
+    }
     if (!m_pickingPlane) {
         if (!m_featurePanel->isActive() && !m_sketchEditor->isActive()) {
             updateStatus();

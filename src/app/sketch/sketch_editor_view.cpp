@@ -23,6 +23,7 @@
 
 #include <cmath>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -53,6 +54,7 @@ void SketchEditor::drawViewSketch(const sketch::Sketch& shown, const std::set<Id
     m_viewItems = {};
     m_viewItems.profiles = std::move(snapshot.profiles);
     const snapshot::Color halo = colorOf(colors.viewport.halo);
+    const std::set<Id> lost = lostProjections();
     for (snapshot::SketchCurve& curve : snapshot.curves) {
         const Id id = curve.id;
         if (curve.construction && !m_display.construction && !m_selection.contains(id)) {
@@ -63,7 +65,10 @@ void SketchEditor::drawViewSketch(const sketch::Sketch& shown, const std::set<Id
         if (curve.construction) {
             color = colors.viewport.sketchConstruction;
         }
-        if (conflicted.contains(id)) {
+        if (const sketch::Curve* source = shown.curve(id); source != nullptr && source->projected) {
+            color = colors.viewport.sketchProjected;
+        }
+        if (conflicted.contains(id) || lost.contains(id)) {
             color = colors.chrome.conflict;
         }
         if (m_selection.contains(id)) {
@@ -89,6 +94,9 @@ void SketchEditor::drawViewSketch(const sketch::Sketch& shown, const std::set<Id
                                                                       : colors.viewport.sketchFree;
         if ((point.flags & snapshot::kSketchPointOrigin) != 0) {
             color = colors.viewport.annotation;
+        }
+        if (const sketch::Point* source = shown.point(id); source != nullptr && source->projected) {
+            color = lost.contains(id) ? colors.chrome.conflict : colors.viewport.sketchProjected;
         }
         if (m_selection.contains(id) || m_hover == id) {
             color = colors.chrome.accent;

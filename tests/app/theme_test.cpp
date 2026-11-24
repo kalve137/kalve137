@@ -128,6 +128,7 @@ void expectFloors(const Palette& palette)
         {"sketchFree", v.sketchFree, {{"canvas", v.canvas}, {"halo", v.halo}}, kGraphic},
         {"sketchConstrained", v.sketchConstrained, {{"canvas", v.canvas}, {"halo", v.halo}}, kGraphic},
         {"sketchConstruction", v.sketchConstruction, {{"canvas", v.canvas}, {"halo", v.halo}}, kGraphic},
+        {"sketchProjected", v.sketchProjected, {{"canvas", v.canvas}, {"halo", v.halo}}, kGraphic},
         {"annotation", v.annotation, {{"canvas", v.canvas}, {"halo", v.halo}}, kText},
         {"gridLabel", v.gridLabel, {{"canvas", v.canvas}}, kText},
     };

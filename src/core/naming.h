@@ -13,6 +13,7 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Vertex.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -34,6 +35,7 @@ std::vector<BodyKey> bodiesOf(const Model& model, const Feature& feature);
 
 TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point);
 TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point);
+TopoRef vertexRef(const Body& body, const TopoDS_Vertex& vertex);
 
 struct FaceHit {
     std::size_t body = 0;
@@ -43,6 +45,11 @@ struct FaceHit {
 struct EdgeHit {
     std::size_t body = 0;
     TopoDS_Edge edge;
+};
+
+struct VertexHit {
+    std::size_t body = 0;
+    TopoDS_Vertex vertex;
 };
 
 class FaceLookup {
@@ -67,6 +74,7 @@ private:
 std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face);
 std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup = nullptr);
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref);
+std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref);
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref);
 
 geometry::FaceNames nameExtrusion(const TopoDS_Shape& tool, FeatureId id, const SketchState& state,

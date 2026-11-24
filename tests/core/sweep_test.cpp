@@ -3,6 +3,7 @@
 
 #include "core/document.h"
 #include "core/naming.h"
+#include "core/projection.h"
 #include "core/recompute.h"
 #include "core/serialization.h"
 #include "core/undo_stack.h"
@@ -14,7 +15,11 @@
 
 #include <BRepBndLib.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
 
 #include <nlohmann/json.hpp>
 
@@ -153,6 +158,19 @@ std::vector<Step> everyKindSteps()
             sides.push_back(id);
         }
         sketch::addOffset(data.sketch, sides, 2.0);
+        const Model model = recompute(doc);
+        const Body& block = model.bodies.front();
+        for (const gp_Pnt& at : {gp_Pnt(20, 0, 0), gp_Pnt(30, 12, 10), gp_Pnt(40, 0, 5)}) {
+            const TopoDS_Edge edge = *geometry::findEdge(block.shape, at, 1e-6);
+            addProjectedEdge(data, *projectEdge(edge, data.plane), edgeRef(block, edge, at));
+        }
+        for (TopExp_Explorer it(block.shape, TopAbs_VERTEX); it.More(); it.Next()) {
+            const TopoDS_Vertex& vertex = TopoDS::Vertex(it.Current());
+            if (BRep_Tool::Pnt(vertex).Distance(gp_Pnt(40, 20, 0)) < 1e-6) {
+                addProjectedVertex(data, *projectVertex(vertex, data.plane), vertexRef(block, vertex));
+                break;
+            }
+        }
         doc.add(std::move(data));
     });
     return steps;
@@ -743,4 +761,42 @@ TEST(Sweep, VersionEightFixtureLoadsItsOffset)
     ASSERT_NE(offset, s.constraints().end());
     EXPECT_EQ(sketch::offsetPairs(offset->second).size(), 4U);
     EXPECT_DOUBLE_EQ(offset->second.value, 2.0);
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsProjections)
+{
+    ShapeStore shapes;
+    const Document loaded = fromJson(readFile(kFixtures / "every-kind-v8.k137"), shapes);
+    const SketchFeature& data = std::get<SketchFeature>(loaded.features().back().data);
+    const sketch::Sketch& s = data.sketch;
+    ASSERT_EQ(data.projections.size(), 4U);
+    const auto at = [&](sketch::Id point) { return s.point(point)->pos; };
+    const auto near = [](sketch::Vec2 a, sketch::Vec2 b) { return sketch::distance(a, b) < 1e-6; };
+
+    const Projection& bottom = data.projections[0];
+    EXPECT_EQ(bottom.kind, ProjectionKind::Edge);
+    ASSERT_NE(s.curve(bottom.curve), nullptr);
+    EXPECT_EQ(s.curve(bottom.curve)->kind, sketch::CurveKind::Line);
+    const std::vector<sketch::Id>& ends = s.curve(bottom.curve)->points;
+    EXPECT_TRUE((near(at(ends[0]), {-2, 0}) && near(at(ends[1]), {40, 0})) ||
+                (near(at(ends[0]), {40, 0}) && near(at(ends[1]), {-2, 0})));
+
+    const Projection& rim = data.projections[1];
+    ASSERT_NE(s.curve(rim.curve), nullptr);
+    EXPECT_EQ(s.curve(rim.curve)->kind, sketch::CurveKind::Circle);
+    EXPECT_NEAR(s.curve(rim.curve)->radius, 2.0, 1e-6);
+    EXPECT_TRUE(near(at(s.curve(rim.curve)->points[0]), {30, 10}));
+
+    const Projection& upright = data.projections[2];
+    EXPECT_EQ(upright.kind, ProjectionKind::Edge);
+    EXPECT_EQ(upright.curve, 0);
+    EXPECT_TRUE(near(at(upright.point), {40, 0}));
+
+    const Projection& corner = data.projections[3];
+    EXPECT_EQ(corner.kind, ProjectionKind::Vertex);
+    EXPECT_TRUE(near(at(corner.point), {40, 20}));
+    EXPECT_EQ(corner.ref.names.size(), 3U);
+    for (const Projection& link : {bottom, rim, upright}) {
+        EXPECT_EQ(link.ref.names.size(), 2U);
+    }
 }

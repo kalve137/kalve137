@@ -197,6 +197,9 @@ private:
     QAction* m_measure = nullptr;
     QAction* m_finishSketch = nullptr;
     QAction* m_construction = nullptr;
+    QAction* m_breakLink = nullptr;
+    QAction* m_pickAgain = nullptr;
+    bool m_projectPicking = false;
     QAction* m_delete = nullptr;
     QAction* m_showOrigin = nullptr;
     QAction* m_repeat = nullptr;

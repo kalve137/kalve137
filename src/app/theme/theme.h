@@ -66,6 +66,7 @@ struct ViewportColors {
     QColor sketchFree;
     QColor sketchConstrained;
     QColor sketchConstruction;
+    QColor sketchProjected;
     QColor annotation;
 };
 
