@@ -7,6 +7,7 @@
 #include "app/view/pick_source.h"
 #include "core/document.h"
 #include "core/recompute.h"
+#include "render/datums.h"
 
 #include <AIS_DisplayMode.hxx>
 #include <AIS_InteractiveObject.hxx>
@@ -82,9 +83,11 @@ public:
     void clearSelection() override;
     bool selectedByBox() const override;
     std::vector<Pick> takePreselection() { return std::exchange(m_preselection, {}); }
+    render::Datums datums() const;
 
 signals:
     void pickModeChanged();
+    void rebuilt();
 
 private:
     struct BodyObject {

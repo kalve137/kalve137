@@ -169,6 +169,16 @@ std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
     return {};
 }
 
+bool planesPickable(PickMode mode)
+{
+    return mode == PickMode::Planes;
+}
+
+bool axesPickable(PickMode mode)
+{
+    return mode == PickMode::Lines || mode == PickMode::ProfilesAndLines || mode == PickMode::Faces;
+}
+
 Quantity_Color scene_detail::occt(const geometry::Color& color)
 {
     return Quantity_Color(color.red, color.green, color.blue, Quantity_TOC_sRGB);
@@ -587,6 +597,7 @@ void Scene::rebuild()
                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count(),
                m_objects.size(), m_bodies.size(), reused, toString(m_mode));
     m_view->redraw();
+    emit rebuilt();
 }
 
 void Scene::showSketches()

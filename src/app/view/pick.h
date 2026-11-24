@@ -61,5 +61,7 @@ enum class PickMode {
 
 std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick);
 std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching);
+bool planesPickable(PickMode mode);
+bool axesPickable(PickMode mode);
 
 } // namespace kalve137::app

@@ -21,7 +21,7 @@ Clip mixed(const Clip& a, const Clip& b, double t)
 } // namespace
 
 std::optional<Clip> expandEdge(const Clip& start, const Clip& end, int corner, double widthPixels, double width,
-                               double height)
+                               double height, Cap cap)
 {
     if (start[3] < kNearW && end[3] < kNearW) {
         return std::nullopt;
@@ -45,7 +45,7 @@ std::optional<Clip> expandEdge(const Clip& start, const Clip& end, int corner, d
     }
     const bool atEnd = corner >= 2;
     const double side = corner % 2 == 0 ? -1.0 : 1.0;
-    const double along = atEnd ? 1.0 : -1.0;
+    const double along = cap == Cap::Butt ? 0.0 : (atEnd ? 1.0 : -1.0);
     const double half = widthPixels * 0.5;
     const double offsetX = ((-dy * side) + (dx * along)) * half;
     const double offsetY = ((dx * side) + (dy * along)) * half;

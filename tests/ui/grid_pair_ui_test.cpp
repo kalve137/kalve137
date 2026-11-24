@@ -21,6 +21,8 @@
 #include <QImage>
 #include <QPointF>
 #include <QPolygonF>
+#include <QRect>
+#include <QSize>
 #include <QString>
 #include <QTest>
 
@@ -53,6 +55,8 @@ constexpr int kGoldTolerance = 40;
 constexpr int kEdgeTolerance = 40;
 constexpr double kReach = 400.0;
 constexpr double kSmallBody = 5.0;
+constexpr QSize kRimCrop{64, 48};
+constexpr int kRimZoom = 8;
 
 using Aim = std::function<void(app::MainWindow&)>;
 
@@ -283,6 +287,47 @@ TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
                 table << stem << '\t' << inside << '\n';
                 EXPECT_EQ(inside, 0U) << stem << ": the grid shows through the body";
             }
+        }
+    }
+}
+
+TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
+{
+    if (app::startupFromEnvironment().view != app::ViewKind::New) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    if (!start()) {
+        GTEST_SKIP() << "The new view did not start";
+    }
+    load(blockDocument());
+    std::ofstream table(m_folder / "rim.tsv");
+    table << "view\trim pixels changed by the grid\n";
+    const camera::Vec3 center{0.0, 0.0, kBlockHeight / 2.0};
+    const camera::Vec3 corner{kBlockWidth / 2.0, kBlockDepth / 2.0, 0.0};
+    for (const double elevation : {30.0, 12.0, 4.0}) {
+        const std::string stem = std::format("rim {}", elevation);
+        const Shots shots = shoot(orbit(center, 30.0, elevation, 90.0, camera::Projection::Perspective), stem);
+        const QImage plain = withoutGrid(*m_new);
+        ASSERT_EQ(plain.size(), shots.fresh.size()) << stem;
+        std::size_t rim = 0;
+        for (int y = 0; y < plain.height(); ++y) {
+            for (int x = 0; x < plain.width(); ++x) {
+                const QRgb was = plain.pixel(x, y);
+                if (gapOf(was, shots.fresh.pixel(x, y)) > kChange && gapOf(was, shots.background.rgb()) > kChange &&
+                    nearColor(plain, x, y, shots.background.rgb(), kRim)) {
+                    ++rim;
+                }
+            }
+        }
+        table << stem << '\t' << rim << '\n';
+        EXPECT_LT(rim, static_cast<std::size_t>(plain.width())) << stem << ": the rim stays a thin seam";
+        const QPointF at = screenOf(shots.camera, shots.viewport, corner) * shots.viewport.pixelRatio;
+        const QRect around(static_cast<int>(at.x()) - (kRimCrop.width() / 2),
+                           static_cast<int>(at.y()) - (kRimCrop.height() / 2), kRimCrop.width(), kRimCrop.height());
+        for (const auto& [image, side] : {std::pair{&shots.old, "old"}, std::pair{&shots.fresh, "new"}}) {
+            image->copy(around)
+                .scaled(kRimCrop * kRimZoom, Qt::IgnoreAspectRatio, Qt::FastTransformation)
+                .save(QString::fromStdString((m_folder / std::format("{}-{}-zoom.png", stem, side)).string()));
         }
     }
 }

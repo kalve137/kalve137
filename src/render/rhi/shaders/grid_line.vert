@@ -92,4 +92,7 @@ void main()
     } else {
         depthAndW = vec2(body.z, body.w);
     }
+    if (overlayScale.z > 0.5) {
+        gl_Position.z = depthAndW.x / depthAndW.y * gl_Position.w;
+    }
 }

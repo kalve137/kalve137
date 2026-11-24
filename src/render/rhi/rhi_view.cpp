@@ -269,11 +269,63 @@ void RhiView::setGrid(const GridSettings& settings)
     update();
 }
 
+void RhiView::setDatums(Datums datums)
+{
+    if (datums == m_datums) {
+        return;
+    }
+    m_datums = std::move(datums);
+    refreshDatums();
+    m_idsFresh = false;
+    update();
+}
+
+void RhiView::setDatumMarks(DatumMarks marks)
+{
+    if (marks == m_datumMarks) {
+        return;
+    }
+    m_datumMarks = std::move(marks);
+    refreshDatums();
+    update();
+}
+
+DatumDraw RhiView::datumDraw() const
+{
+    return {.revision = m_datumRevision,
+            .fills = m_datumGeometry.fills,
+            .lines = m_datumGeometry.lines,
+            .originFills = m_datumGeometry.originFills,
+            .originLines = m_datumGeometry.originLines,
+            .idFills = m_datumGeometry.idFills,
+            .idOutlines = m_datumGeometry.idOutlines,
+            .idLines = m_datumGeometry.idLines,
+            .idOriginFills = m_datumGeometry.idOriginFills,
+            .idOriginOutlines = m_datumGeometry.idOriginOutlines,
+            .idOriginLines = m_datumGeometry.idOriginLines};
+}
+
+std::optional<camera::Box> RhiView::fitBounds(double emptyHalfSize) const
+{
+    return fitBox(m_bounds, datumAnchors(m_datums), emptyHalfSize);
+}
+
+void RhiView::refreshDatums()
+{
+    DatumGeometry geometry = buildDatums(m_datums, m_camera, viewport(), m_scene.origin, m_datumMarks);
+    const bool same = geometry.drawsLike(m_datumGeometry);
+    m_datumGeometry = std::move(geometry);
+    if (!same) {
+        ++m_datumRevision;
+    }
+}
+
 void RhiView::setScene(snapshot::Scene scene)
 {
     m_scene = std::move(scene);
     m_bounds = render::sceneBounds(m_scene);
     m_camera.fitDepth(m_bounds);
+    refreshDatums();
     updateChunks();
     emit sceneChanged();
 }
@@ -375,7 +427,9 @@ std::optional<IdImage> RhiView::readIds(const QRect& deviceRect, const IdStyle& 
     }
     if (!m_idsFresh || style != m_idStyle) {
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
-        const DrawList list = m_chunks.pickList(makeFrame(m_camera, port, m_scene.origin, m_style.background));
+        refreshDatums();
+        DrawList list = m_chunks.pickList(frame());
+        list.datums = datumDraw();
         m_idsFresh = m_bodies->prepareIds(list, style, updates);
         m_idStyle = style;
         buffer->beginPass(targets.target.get(), QColor(0, 0, 0, 0), {1.0F, 0}, updates);
@@ -445,11 +499,21 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     if (!image) {
         return std::nullopt;
     }
-    std::optional<IdHit> hit = resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds);
+    std::optional<IdHit> hit = resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds,
+                                           static_cast<int>(std::lround(kDatumPickTolerance * ratio)));
     if (!hit) {
         return std::nullopt;
     }
+    hit->x += rect.x();
+    hit->y += rect.y();
     const PickId id = decodePickId(hit->id);
+    if (id.chunk >= kBodyChunks) {
+        const std::optional<DatumKey> datum = datumAt(m_datums, id.entry);
+        if (!datum) {
+            return std::nullopt;
+        }
+        return IdPick{.item = {}, .hit = *hit, .datum = datum};
+    }
     const std::vector<std::uint64_t>& chunks = m_bodies->idChunks();
     if (id.chunk >= chunks.size()) {
         return std::nullopt;
@@ -458,9 +522,7 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     if (!item) {
         return std::nullopt;
     }
-    hit->x += rect.x();
-    hit->y += rect.y();
-    return IdPick{.item = *item, .hit = *hit};
+    return IdPick{.item = *item, .hit = *hit, .datum = std::nullopt};
 }
 
 std::optional<std::vector<PickedItem>> RhiView::itemsIn(const QRect& deviceRect, bool whole, const PickKinds& kinds,
@@ -492,7 +554,7 @@ std::optional<std::vector<PickedItem>> RhiView::itemsIn(const QRect& deviceRect,
     std::vector<PickedItem> items;
     for (const std::uint32_t raw : inside) {
         const PickId id = decodePickId(raw);
-        if (outside.contains(raw) || !kinds.has(id.kind) || id.chunk >= chunks.size()) {
+        if (outside.contains(raw) || id.chunk >= kBodyChunks || !kinds.has(id.kind) || id.chunk >= chunks.size()) {
             continue;
         }
         if (const std::optional<PickedItem> item = m_chunks.itemOf(chunks[id.chunk], id.kind, id.entry)) {
@@ -514,7 +576,7 @@ camera::Vec3 RhiView::pointOf(int x, int y, float depth) const
 
 std::optional<camera::Vec3> RhiView::surfaceAt(int x, int y)
 {
-    const std::optional<IdImage> image = readIds(QRect(x, y, 1, 1));
+    const std::optional<IdImage> image = readIds(QRect(x, y, 1, 1), m_idStyle);
     if (!image || image->ids.empty() || image->ids[0] == 0) {
         return std::nullopt;
     }
@@ -590,6 +652,7 @@ void RhiView::setCamera(const camera::Camera& camera)
 {
     m_camera = camera;
     m_camera.fitDepth(m_bounds);
+    refreshDatums();
     m_idsFresh = false;
     update();
 }
@@ -604,7 +667,7 @@ Frame RhiView::frame() const
 {
     const camera::Viewport port = viewport();
     Frame frame = makeFrame(m_camera, port, m_scene.origin, m_style.background);
-    widenFrame(frame, m_camera, port, m_scene.origin, unite(m_bounds, m_grid.bounds()));
+    widenFrame(frame, m_camera, port, m_scene.origin, unite(unite(m_bounds, m_grid.bounds()), m_datumGeometry.bounds));
     return frame;
 }
 
@@ -655,8 +718,10 @@ void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
         updates = rhi()->nextResourceUpdateBatch();
         const camera::Viewport port = viewport();
         m_grid.update(m_camera, port, m_scene.origin);
+        refreshDatums();
         DrawList list = m_chunks.draw(frame());
         list.grid = m_grid.draw(m_camera, port);
+        list.datums = datumDraw();
         if (!m_bodies->prepare(list, updates)) {
             fail();
         }

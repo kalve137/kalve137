@@ -69,6 +69,7 @@ public:
     render::RhiView* newView() const { return m_rhiView; }
     CameraCommands* cameraCommands() const { return m_cameraCommands; }
     PickSource* picks() const { return m_picks; }
+    Scene* scene() const { return m_scene.get(); }
 
 protected:
     bool event(QEvent* event) override;

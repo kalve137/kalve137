@@ -63,6 +63,7 @@ struct Uniforms {
 constexpr quint32 kPositionStride = sizeof(Position);
 constexpr quint32 kOverlayLineStride = sizeof(OverlayLine);
 constexpr quint32 kOverlayVertexStride = sizeof(OverlayVertex);
+constexpr quint32 kDatumLineStride = sizeof(DatumLine);
 constexpr float kWindowDepthUnit = 1.0F / static_cast<float>(1 << 24);
 constexpr int kPostCorners = 3;
 
@@ -112,10 +113,15 @@ RhiBackend::~RhiBackend() = default;
 
 RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::bindingsFor(QRhiTexture* palette) const
 {
+    return bindingsWith(palette, m_uniforms.get());
+}
+
+RhiBackend::Owned<QRhiShaderResourceBindings> RhiBackend::bindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms) const
+{
     Owned<QRhiShaderResourceBindings> bindings(m_rhi->newShaderResourceBindings());
     bindings->setBindings(
         {QRhiShaderResourceBinding::uniformBuffer(
-             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_uniforms.get()),
+             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, uniforms),
          QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::VertexStage, palette,
                                                    m_sampler.get())});
     return bindings->create() ? std::move(bindings) : nullptr;
@@ -137,11 +143,13 @@ bool RhiBackend::createShared()
         return true;
     }
     m_uniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
+    m_originUniforms.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
     m_corners.reset(m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(kCorners)));
     m_sampler.reset(m_rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
                                       QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
     m_layoutTexture.reset(m_rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-    if (!m_uniforms->create() || !m_corners->create() || !m_sampler->create() || !m_layoutTexture->create()) {
+    if (!m_uniforms->create() || !m_originUniforms->create() || !m_corners->create() || !m_sampler->create() ||
+        !m_layoutTexture->create()) {
         return false;
     }
     m_cornersUploaded = false;
@@ -156,10 +164,25 @@ bool RhiBackend::createShared()
         bindings = bindingsFor(m_layoutTexture.get());
     }
     m_hiddenEdgeBindings = bindingsFor(m_layoutTexture.get());
+    m_datums.fillBindings = bindingsFor(m_layoutTexture.get());
+    m_datums.lineBindings = bindingsFor(m_layoutTexture.get());
+    m_datums.originFillBindings = bindingsWith(m_layoutTexture.get(), m_originUniforms.get());
+    m_datums.originLineBindings = bindingsWith(m_layoutTexture.get(), m_originUniforms.get());
+    m_datums.resetBindings = bindingsFor(m_layoutTexture.get());
+    m_datums.pick.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(PickUniforms)));
+    m_datums.originPick.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(PickUniforms)));
+    if (!m_datums.pick->create() || !m_datums.originPick->create()) {
+        return false;
+    }
+    m_datums.idBindings = idBindingsFor(m_layoutTexture.get(), m_datums.pick.get());
+    m_datums.originIdBindings = idBindingsFor(m_layoutTexture.get(), m_datums.originPick.get());
     return m_layout != nullptr && m_idLayout != nullptr && m_grid.washBindings != nullptr &&
            m_grid.lineBindings != nullptr && m_haloBindings != nullptr && m_maskBindings != nullptr &&
            m_goldBindings != nullptr && m_hiddenFaceBindings.at(0) != nullptr &&
-           m_hiddenFaceBindings.at(1) != nullptr && m_hiddenEdgeBindings != nullptr;
+           m_hiddenFaceBindings.at(1) != nullptr && m_hiddenEdgeBindings != nullptr &&
+           m_datums.fillBindings != nullptr && m_datums.lineBindings != nullptr &&
+           m_datums.originFillBindings != nullptr && m_datums.originLineBindings != nullptr &&
+           m_datums.resetBindings != nullptr && m_datums.idBindings != nullptr && m_datums.originIdBindings != nullptr;
 }
 
 RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull,
@@ -316,6 +339,17 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
                               {1, 5, QRhiVertexInputAttribute::Float, offsetof(OverlayLine, width)}});
         result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
         break;
+    case Input::DatumLines:
+        layout.setBindings({QRhiVertexInputBinding(kCornerStride),
+                            QRhiVertexInputBinding(kDatumLineStride, QRhiVertexInputBinding::PerInstance)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0},
+                              {1, 1, QRhiVertexInputAttribute::Float3, offsetof(DatumLine, start)},
+                              {1, 2, QRhiVertexInputAttribute::Float3, offsetof(DatumLine, end)},
+                              {1, 3, QRhiVertexInputAttribute::UNormByte4, offsetof(DatumLine, color)},
+                              {1, 4, QRhiVertexInputAttribute::Float, offsetof(DatumLine, width)},
+                              {1, 5, QRhiVertexInputAttribute::Float, offsetof(DatumLine, pattern)}});
+        result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        break;
     case Input::OverlayFill:
         layout.setBindings({QRhiVertexInputBinding(kOverlayVertexStride)});
         layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, offsetof(OverlayVertex, position)},
@@ -329,11 +363,23 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
     result->setVertexInputLayout(layout);
     result->setCullMode(QRhiGraphicsPipeline::None);
     result->setDepthTest(spec.depth != Depth::Off);
-    result->setDepthWrite(false);
-    result->setDepthOp(spec.depth == Depth::Greater ? QRhiGraphicsPipeline::Greater
-                                                    : QRhiGraphicsPipeline::LessOrEqual);
+    result->setDepthWrite(spec.depth == Depth::Write || spec.depth == Depth::Reset);
+    switch (spec.depth) {
+    case Depth::Greater:
+        result->setDepthOp(QRhiGraphicsPipeline::Greater);
+        break;
+    case Depth::Reset:
+        result->setDepthOp(QRhiGraphicsPipeline::Always);
+        break;
+    case Depth::Off:
+    case Depth::LessOrEqual:
+    case Depth::Write:
+        result->setDepthOp(QRhiGraphicsPipeline::LessOrEqual);
+        break;
+    }
     result->setDepthBias(spec.biasUnits);
     result->setSlopeScaledDepthBias(spec.biasSlope);
+    result->setDepthClamp(spec.clamp);
     QRhiGraphicsPipeline::TargetBlend blend;
     switch (spec.blend) {
     case Blend::Opaque:
@@ -359,8 +405,12 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
         blend.srcAlpha = QRhiGraphicsPipeline::Zero;
         blend.dstAlpha = QRhiGraphicsPipeline::One;
         break;
+    case Blend::Hidden:
+        blend.colorWrite = {};
+        break;
     }
-    result->setTargetBlends({blend});
+    const std::vector<QRhiGraphicsPipeline::TargetBlend> blends(static_cast<std::size_t>(spec.targets), blend);
+    result->setTargetBlends(blends.begin(), blends.end());
     if (spec.scissor) {
         result->setFlags(QRhiGraphicsPipeline::UsesScissor);
     }
@@ -418,7 +468,14 @@ bool RhiBackend::setIdTarget(QRhiRenderPassDescriptor* pass)
     m_idPipelines.at(0) = idPipeline(pass, PickKind::Face, false);
     m_idPipelines.at(1) = idPipeline(pass, PickKind::Face, true);
     m_idPipelines.at(2) = idPipeline(pass, PickKind::Edge, false);
-    return std::ranges::none_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; });
+    const auto make = [&](const PipelineSpec& spec) { return pipelineFor(spec, pass, 1, m_idLayout.get()); };
+    m_idDatumFill = make(
+        {"id_datum_fill.vert", "id_datum.frag", Input::OverlayFill, Depth::Write, 0, 0.0F, Blend::Opaque, false, 2});
+    m_idDatumLines = make(
+        {"id_datum_line.vert", "id_datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Opaque, false, 2});
+    m_idReset = make({"post.vert", "id_depth_reset.frag", Input::None, Depth::Reset, 0, 0.0F, Blend::Hidden, false, 2});
+    return std::ranges::none_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; }) &&
+           m_idDatumFill != nullptr && m_idDatumLines != nullptr && m_idReset != nullptr;
 }
 
 bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
@@ -434,6 +491,11 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_hiddenEdges.reset();
     m_gridWash.reset();
     m_gridLines.reset();
+    m_datumFill.reset();
+    m_datumLines.reset();
+    m_originFill.reset();
+    m_originLines.reset();
+    m_depthReset.reset();
     if (!createShared()) {
         K137_ERROR(Viewer, "The new view could not create its shared GPU resources");
         return false;
@@ -454,11 +516,23 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_hiddenFaces.at(1) =
         make({"layer.vert", "layer.frag", Input::Positions, Depth::Greater, 0, 0.0F, Blend::Constant});
     m_hiddenEdges = make({"dash.vert", "dash.frag", Input::Lines, Depth::Greater, 0, 0.0F, Blend::Opaque});
-    m_gridWash = make({"grid_fill.vert", "grid.frag", Input::OverlayFill, Depth::LessOrEqual, 0, 0.0F, Blend::Alpha});
-    m_gridLines = make({"grid_line.vert", "grid.frag", Input::OverlayLines, Depth::LessOrEqual, 0, 0.0F, Blend::Alpha});
+    const bool clamped = m_rhi->isFeatureSupported(QRhi::DepthClamp);
+    const char* overlay = clamped ? "grid.frag" : "grid_depth.frag";
+    const auto overlayPipeline = [&](const char* vertex, Input input, int units, float slope) {
+        return make({vertex, overlay, input, Depth::LessOrEqual, clamped ? units : 0, clamped ? slope : 0.0F,
+                     Blend::Alpha, false, 1, clamped});
+    };
+    m_gridWash = overlayPipeline("grid_fill.vert", Input::OverlayFill, kGridWashBiasUnits, kGridWashBiasSlope);
+    m_gridLines = overlayPipeline("grid_line.vert", Input::OverlayLines, kGridBiasUnits, kGridBiasSlope);
+    m_datumFill = overlayPipeline("grid_fill.vert", Input::OverlayFill, kGridWashBiasUnits, kGridWashBiasSlope);
+    m_datumLines = make({"datum_line.vert", "datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Alpha});
+    m_originFill = overlayPipeline("grid_fill.vert", Input::OverlayFill, 0, 0.0F);
+    m_originLines = make({"datum_line.vert", "datum.frag", Input::DatumLines, Depth::Write, 0, 0.0F, Blend::Alpha});
+    m_depthReset = make({"post.vert", "depth_reset.frag", Input::None, Depth::Reset, 0, 0.0F, Blend::Hidden});
     return m_edges != nullptr && m_halo != nullptr && m_maskFill != nullptr && m_goldFill != nullptr &&
            m_hiddenFaces.at(0) != nullptr && m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr &&
-           m_gridWash != nullptr && m_gridLines != nullptr;
+           m_gridWash != nullptr && m_gridLines != nullptr && m_datumFill != nullptr && m_datumLines != nullptr &&
+           m_originFill != nullptr && m_originLines != nullptr && m_depthReset != nullptr;
 }
 
 bool RhiBackend::refreshMesh(const Chunk& chunk, Gpu& gpu, QRhiResourceUpdateBatch* updates)
@@ -595,7 +669,9 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
     uniforms.overlay = {shift[0], shift[1], shift[2], m_rhi->isClipDepthZeroToOne() ? 1.0F : 0.0F};
     uniforms.overlayBias = {kGridBiasSlope, static_cast<float>(kGridBiasUnits) * kWindowDepthUnit, kGridWashBiasSlope,
                             static_cast<float>(kGridWashBiasUnits) * kWindowDepthUnit};
-    uniforms.overlayScale = {static_cast<float>(list.pixelRatio), 0.0F, 0.0F, 0.0F};
+    uniforms.overlayScale = {static_cast<float>(list.pixelRatio),
+                             static_cast<float>(kDatumDashPixels * list.pixelRatio),
+                             m_rhi->isFeatureSupported(QRhi::DepthClamp) ? 1.0F : 0.0F, 0.0F};
     const QMatrix4x4 correction = m_rhi->clipSpaceCorrMatrix();
     std::array<double, 16> exactClip{};
     for (int column = 0; column < 4; ++column) {
@@ -614,6 +690,10 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
                                  static_cast<float>((*onPlane)[2]), 1.0F};
     }
     updates->updateDynamicBuffer(m_uniforms.get(), 0, sizeof(Uniforms), &uniforms);
+    Uniforms origin = uniforms;
+    origin.viewProjection = uniforms.wideViewProjection;
+    origin.overlayBias = {};
+    updates->updateDynamicBuffer(m_originUniforms.get(), 0, sizeof(Uniforms), &origin);
 }
 
 bool RhiBackend::upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
@@ -696,6 +776,37 @@ bool RhiBackend::refreshGrid(const GridDraw& grid, QRhiResourceUpdateBatch* upda
     return uploaded;
 }
 
+bool RhiBackend::refreshDatums(const DatumDraw& datums, QRhiResourceUpdateBatch* updates)
+{
+    if (datums.revision == m_datums.revision) {
+        return true;
+    }
+    m_datums.revision = 0;
+    const bool uploaded =
+        uploadInto(datums.fills.data(), datums.fills.size_bytes(), datums.fills.size(), m_datums.fills, updates) &&
+        uploadInto(datums.lines.data(), datums.lines.size_bytes(), datums.lines.size(), m_datums.lines, updates) &&
+        uploadInto(datums.originFills.data(), datums.originFills.size_bytes(), datums.originFills.size(),
+                   m_datums.originFills, updates) &&
+        uploadInto(datums.originLines.data(), datums.originLines.size_bytes(), datums.originLines.size(),
+                   m_datums.originLines, updates) &&
+        uploadInto(datums.idFills.data(), datums.idFills.size_bytes(), datums.idFills.size(), m_datums.idFills,
+                   updates) &&
+        uploadInto(datums.idOutlines.data(), datums.idOutlines.size_bytes(), datums.idOutlines.size(),
+                   m_datums.idOutlines, updates) &&
+        uploadInto(datums.idLines.data(), datums.idLines.size_bytes(), datums.idLines.size(), m_datums.idLines,
+                   updates) &&
+        uploadInto(datums.idOriginFills.data(), datums.idOriginFills.size_bytes(), datums.idOriginFills.size(),
+                   m_datums.idOriginFills, updates) &&
+        uploadInto(datums.idOriginOutlines.data(), datums.idOriginOutlines.size_bytes(), datums.idOriginOutlines.size(),
+                   m_datums.idOriginOutlines, updates) &&
+        uploadInto(datums.idOriginLines.data(), datums.idOriginLines.size_bytes(), datums.idOriginLines.size(),
+                   m_datums.idOriginLines, updates);
+    if (uploaded) {
+        m_datums.revision = datums.revision;
+    }
+    return uploaded;
+}
+
 bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
 {
     m_calls.clear();
@@ -711,6 +822,10 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     }
     if (!refreshGrid(list.grid, updates)) {
         K137_ERROR(Viewer, "The new view could not create the GPU resources for its grid");
+        return false;
+    }
+    if (!refreshDatums(list.datums, updates)) {
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its planes and axes");
         return false;
     }
     m_hiddenPass = list.highlight.hidden;
@@ -783,7 +898,10 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
 {
     m_idCalls.clear();
     m_idChunks.clear();
-    if (std::ranges::any_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; })) {
+    m_idPlanes = false;
+    m_idAxes = false;
+    if (std::ranges::any_of(m_idPipelines, [](const auto& pipeline) { return pipeline == nullptr; }) ||
+        m_idDatumFill == nullptr || m_idDatumLines == nullptr || m_idReset == nullptr) {
         return false;
     }
     writeUniforms(list, updates);
@@ -793,9 +911,9 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     bool complete = true;
     std::vector<IdCall> edges;
     std::vector<IdCall> points;
-    const std::size_t places = std::min<std::size_t>(list.chunks.size(), kPickChunks);
+    const std::size_t places = std::min<std::size_t>(list.chunks.size(), kBodyChunks);
     if (places < list.chunks.size() && !std::exchange(m_toldPickLimit, true)) {
-        K137_WARN(Viewer, "The new view picks in its first {} chunks only and the scene has {}", kPickChunks,
+        K137_WARN(Viewer, "The new view picks in its first {} chunks only and the scene has {}", kBodyChunks,
                   list.chunks.size());
     }
     for (std::size_t place = 0; place < places; ++place) {
@@ -822,6 +940,21 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     std::erase_if(m_chunks, [](const auto& item) { return !item.second.used; });
     m_idCalls.insert(m_idCalls.end(), edges.begin(), edges.end());
     m_idCalls.insert(m_idCalls.end(), points.begin(), points.end());
+    if (style.planes || style.axes) {
+        if (refreshDatums(list.datums, updates)) {
+            m_idPlanes = style.planes;
+            m_idAxes = style.axes;
+        } else {
+            K137_ERROR(Viewer, "The new view could not create the id pass resources for its planes and axes");
+            complete = false;
+        }
+        PickUniforms construction;
+        construction.pick = {kDatumChunk << kPickChunkShift, 0, 0, 0};
+        PickUniforms origin;
+        origin.pick = {kOriginChunk << kPickChunkShift, 1, 0, 0};
+        updates->updateDynamicBuffer(m_datums.pick.get(), 0, sizeof(PickUniforms), &construction);
+        updates->updateDynamicBuffer(m_datums.originPick.get(), 0, sizeof(PickUniforms), &origin);
+    }
     if (!complete) {
         K137_ERROR(Viewer, "The new view could not create the id pass resources for every chunk");
     }
@@ -853,6 +986,34 @@ void RhiBackend::drawIds(QRhiCommandBuffer* buffer, QSize size) const
             QRhiCommandBuffer::VertexInput(point ? call.gpu->points.get() : call.gpu->segments.get(), 0)};
         buffer->setVertexInput(0, static_cast<int>(inputs.size()), inputs.data());
         buffer->draw(kEdgeCorners, point ? call.gpu->pointCount : call.gpu->segmentCount);
+    }
+    drawDatumIds(buffer, viewport);
+}
+
+void RhiBackend::drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
+{
+    if (m_idAxes) {
+        drawLines(buffer, m_idDatumLines.get(), m_datums.idBindings.get(), m_datums.idLines, viewport);
+    }
+    if (m_idPlanes) {
+        drawFill(buffer, m_idDatumFill.get(), m_datums.idBindings.get(), m_datums.idFills, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.idBindings.get(), m_datums.idOutlines, viewport);
+    }
+    const bool originAxes = m_idAxes && m_datums.idOriginLines.count > 0;
+    const bool originPlanes = m_idPlanes && m_datums.idOriginFills.count > 0;
+    if (!originAxes && !originPlanes) {
+        return;
+    }
+    buffer->setGraphicsPipeline(m_idReset.get());
+    buffer->setViewport(viewport);
+    buffer->setShaderResources(m_idLayout.get());
+    buffer->draw(kPostCorners);
+    if (originAxes) {
+        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdBindings.get(), m_datums.idOriginLines, viewport);
+    }
+    if (originPlanes) {
+        drawFill(buffer, m_idDatumFill.get(), m_datums.originIdBindings.get(), m_datums.idOriginFills, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdBindings.get(), m_datums.idOriginOutlines, viewport);
     }
 }
 
@@ -896,25 +1057,54 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
         }
     }
     drawGrid(buffer, viewport);
+    drawDatums(buffer, viewport);
     if (m_hiddenPass) {
         const std::size_t hidden = m_biased ? 1 : 0;
         drawTriangles(buffer, m_hiddenFaces.at(hidden).get(), m_hiddenFaceBindings.at(hidden).get(),
                       m_highlight.selectedFaces, viewport, kHiddenFaceWeight);
         drawLines(buffer, m_hiddenEdges.get(), m_hiddenEdgeBindings.get(), m_highlight.selectedEdges, viewport);
     }
+    drawOrigin(buffer, viewport);
 }
 
 void RhiBackend::drawGrid(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
 {
-    if (m_grid.wash.count > 0) {
-        buffer->setGraphicsPipeline(m_gridWash.get());
-        buffer->setViewport(viewport);
-        buffer->setShaderResources(m_grid.washBindings.get());
-        const QRhiCommandBuffer::VertexInput input(m_grid.wash.buffer.get(), 0);
-        buffer->setVertexInput(0, 1, &input);
-        buffer->draw(m_grid.wash.count);
-    }
+    drawFill(buffer, m_gridWash.get(), m_grid.washBindings.get(), m_grid.wash, viewport);
     drawLines(buffer, m_gridLines.get(), m_grid.lineBindings.get(), m_grid.lines, viewport);
+}
+
+void RhiBackend::drawDatums(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
+{
+    drawLines(buffer, m_datumLines.get(), m_datums.lineBindings.get(), m_datums.lines, viewport);
+    drawFill(buffer, m_datumFill.get(), m_datums.fillBindings.get(), m_datums.fills, viewport);
+}
+
+void RhiBackend::drawOrigin(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
+{
+    if (m_datums.originFills.count == 0 && m_datums.originLines.count == 0) {
+        return;
+    }
+    buffer->setGraphicsPipeline(m_depthReset.get());
+    buffer->setViewport(viewport);
+    buffer->setShaderResources(m_datums.resetBindings.get());
+    buffer->draw(kPostCorners);
+    drawLines(buffer, m_originLines.get(), m_datums.originLineBindings.get(), m_datums.originLines, viewport);
+    drawFill(buffer, m_originFill.get(), m_datums.originFillBindings.get(), m_datums.originFills, viewport);
+}
+
+void RhiBackend::drawFill(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline,
+                          QRhiShaderResourceBindings* bindings, const Geometry& fill,
+                          const QRhiViewport& viewport) const
+{
+    if (fill.count == 0) {
+        return;
+    }
+    buffer->setGraphicsPipeline(pipeline);
+    buffer->setViewport(viewport);
+    buffer->setShaderResources(bindings);
+    const QRhiCommandBuffer::VertexInput input(fill.buffer.get(), 0);
+    buffer->setVertexInput(0, 1, &input);
+    buffer->draw(fill.count);
 }
 
 void RhiBackend::drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline,

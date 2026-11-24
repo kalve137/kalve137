@@ -143,6 +143,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         m_newViewPicker = new NewViewPicker(*m_rhiView, *m_session, *m_scene, m_session->rays(), this);
         m_scene->setPicks(*m_newViewPicker);
         m_picks = m_newViewPicker;
+        connect(m_scene.get(), &Scene::rebuilt, this, [this] { m_rhiView->setDatums(m_scene->datums()); });
     }
     m_sketchEditor = new SketchEditor(*m_session, m_view, this);
     m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
@@ -980,6 +981,9 @@ void MainWindow::applyNewViewStyle()
         .pixelRatio = devicePixelRatioF(),
     });
     syncNewViewGrid();
+    if (m_scene != nullptr) {
+        m_rhiView->setDatums(m_scene->datums());
+    }
 }
 
 void MainWindow::syncNewViewGrid()

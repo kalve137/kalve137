@@ -21,6 +21,7 @@
 #include "pick/scene_rays.h"
 #include "render/chunk_set.h"
 #include "render/cpu_backend.h"
+#include "render/datums.h"
 #include "render/draw_list.h"
 #include "render/graphics_api.h"
 #include "render/pick_id.h"
@@ -146,6 +147,7 @@ render::Image cpuOf(const render::RhiView& canvas)
     chunks.setHighlight(canvas.chunks().highlight());
     render::DrawList list = chunks.draw(canvas.frame());
     list.grid = canvas.grid().draw(canvas.camera(), canvas.viewport());
+    list.datums = canvas.datumDraw();
     render::CpuBackend backend;
     render::Image cpu;
     backend.draw(list, 2, cpu);
@@ -649,6 +651,52 @@ TEST_F(NewViewTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
         view.setViewportStyle(canvas->viewportStyle());
         view.setScene(scene);
         expectGridLikeTheCpuBackend(view, shown, std::string(render::graphicsApiName(api)), *ui);
+    }
+}
+
+TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const GridHidden gridOff(*canvas);
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({-20.0, -10.0, 0.0}, {20.0, 10.0, 15.0}), {}, 1));
+    const snapshot::Scene scene{.bodies = {box}, .origin = {}, .hidden = {}};
+    const snapshot::Color plane{0.9F, 0.6F, 0.4F};
+    const render::Datums datums{
+        .originPlanes = {{.id = 0, .anchor = {}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 1.0, 0.0}},
+                         {.id = 0, .anchor = {}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 0.0, 1.0}},
+                         {.id = 0, .anchor = {}, .u = {0.0, 1.0, 0.0}, .v = {0.0, 0.0, 1.0}}},
+        .originAxes = {{.id = 0, .anchor = {}, .direction = {1.0, 0.0, 0.0}, .color = {0.85F, 0.3F, 0.3F}},
+                       {.id = 0, .anchor = {}, .direction = {0.0, 1.0, 0.0}, .color = {0.3F, 0.7F, 0.3F}},
+                       {.id = 0, .anchor = {}, .direction = {0.0, 0.0, 1.0}, .color = {0.3F, 0.5F, 0.9F}}},
+        .planes = {{.id = 1, .anchor = {0.0, 0.0, 7.5}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 1.0, 0.0}}},
+        .axes = {{.id = 2, .anchor = {30.0, 0.0, 0.0}, .direction = {0.0, 1.0, 0.0}, .color = plane}},
+        .planeColor = plane};
+    const camera::Camera camera = obliqueAt({0.0, 0.0, 7.5}, 120.0);
+    const auto check = [&](render::RhiView& view, const std::string& name) {
+        view.setScene(scene);
+        view.setCamera(camera);
+        const QImage plain = grabbed(view);
+        view.setDatums(datums);
+        expectShown(view, plain, name);
+    };
+    check(*canvas, "main");
+    canvas->setDatums({});
+
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
+        }
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        const GridHidden hidden(view);
+        check(view, std::string(render::graphicsApiName(api)));
     }
 }
 

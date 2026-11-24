@@ -100,6 +100,8 @@ struct HighlightDraw {
 struct OverlayVertex {
     Position position{};
     VertexColor color{};
+
+    bool operator==(const OverlayVertex&) const = default;
 };
 static_assert(sizeof(OverlayVertex) == 16);
 
@@ -122,6 +124,33 @@ struct GridDraw {
     bool empty() const { return wash.empty() && lines.empty(); }
 };
 
+struct DatumLine {
+    Position start{};
+    Position end{};
+    VertexColor color{};
+    float width = 0.0F;
+    float pattern = 0.0F;
+
+    bool operator==(const DatumLine&) const = default;
+};
+static_assert(sizeof(DatumLine) == 36);
+
+struct DatumDraw {
+    std::uint64_t revision = 0;
+    std::span<const OverlayVertex> fills;
+    std::span<const DatumLine> lines;
+    std::span<const OverlayVertex> originFills;
+    std::span<const DatumLine> originLines;
+    std::span<const OverlayVertex> idFills;
+    std::span<const DatumLine> idOutlines;
+    std::span<const DatumLine> idLines;
+    std::span<const OverlayVertex> idOriginFills;
+    std::span<const DatumLine> idOriginOutlines;
+    std::span<const DatumLine> idOriginLines;
+
+    bool empty() const { return fills.empty() && lines.empty() && originFills.empty() && originLines.empty(); }
+};
+
 std::optional<std::array<double, 3>> planeDepth(const std::array<double, 16>& viewProjection,
                                                 const std::array<float, 4>& plane);
 
@@ -138,6 +167,7 @@ struct DrawList {
     double edgeWidth = 0.0;
     HighlightDraw highlight;
     GridDraw grid;
+    DatumDraw datums;
 };
 
 using Encoded = std::array<float, 3>;

@@ -113,9 +113,31 @@ private:
         Owned<QRhiShaderResourceBindings> washBindings;
         Owned<QRhiShaderResourceBindings> lineBindings;
     };
-    enum class Input { Lines, Positions, OverlayLines, OverlayFill, None };
-    enum class Depth { Off, LessOrEqual, Greater };
-    enum class Blend { Opaque, Mask, Constant, Alpha };
+    struct DatumGpu {
+        std::uint64_t revision = 0;
+        Geometry fills;
+        Geometry lines;
+        Geometry originFills;
+        Geometry originLines;
+        Geometry idFills;
+        Geometry idOutlines;
+        Geometry idLines;
+        Geometry idOriginFills;
+        Geometry idOriginOutlines;
+        Geometry idOriginLines;
+        Owned<QRhiShaderResourceBindings> fillBindings;
+        Owned<QRhiShaderResourceBindings> lineBindings;
+        Owned<QRhiShaderResourceBindings> originFillBindings;
+        Owned<QRhiShaderResourceBindings> originLineBindings;
+        Owned<QRhiShaderResourceBindings> resetBindings;
+        Owned<QRhiBuffer> pick;
+        Owned<QRhiBuffer> originPick;
+        Owned<QRhiShaderResourceBindings> idBindings;
+        Owned<QRhiShaderResourceBindings> originIdBindings;
+    };
+    enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, None };
+    enum class Depth { Off, LessOrEqual, Greater, Write, Reset };
+    enum class Blend { Opaque, Mask, Constant, Alpha, Hidden };
     struct PipelineSpec {
         const char* vertex = nullptr;
         const char* fragment = nullptr;
@@ -125,10 +147,13 @@ private:
         float biasSlope = 0.0F;
         Blend blend = Blend::Opaque;
         bool scissor = false;
+        int targets = 1;
+        bool clamp = false;
     };
 
     bool createShared();
     Owned<QRhiShaderResourceBindings> bindingsFor(QRhiTexture* palette) const;
+    Owned<QRhiShaderResourceBindings> bindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms) const;
     Owned<QRhiGraphicsPipeline> facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull, bool biased) const;
     Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const;
     Owned<QRhiGraphicsPipeline> idPipeline(QRhiRenderPassDescriptor* pass, PickKind kind, bool cull) const;
@@ -145,6 +170,12 @@ private:
     bool refreshHighlight(const HighlightDraw& highlight, QRhiResourceUpdateBatch* updates);
     bool refreshGrid(const GridDraw& grid, QRhiResourceUpdateBatch* updates);
     void drawGrid(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    bool refreshDatums(const DatumDraw& datums, QRhiResourceUpdateBatch* updates);
+    void drawDatums(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    void drawOrigin(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    void drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    void drawFill(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
+                  const Geometry& fill, const QRhiViewport& viewport) const;
     bool upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
                 QRhiResourceUpdateBatch* updates);
     bool uploadInto(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
@@ -156,6 +187,7 @@ private:
 
     QRhi* m_rhi;
     Owned<QRhiBuffer> m_uniforms;
+    Owned<QRhiBuffer> m_originUniforms;
     Owned<QRhiBuffer> m_corners;
     Owned<QRhiSampler> m_sampler;
     Owned<QRhiTexture> m_layoutTexture;
@@ -174,8 +206,14 @@ private:
     Owned<QRhiShaderResourceBindings> m_hiddenEdgeBindings;
     Owned<QRhiGraphicsPipeline> m_gridWash;
     Owned<QRhiGraphicsPipeline> m_gridLines;
+    Owned<QRhiGraphicsPipeline> m_datumFill;
+    Owned<QRhiGraphicsPipeline> m_datumLines;
+    Owned<QRhiGraphicsPipeline> m_originFill;
+    Owned<QRhiGraphicsPipeline> m_originLines;
+    Owned<QRhiGraphicsPipeline> m_depthReset;
     HighlightGpu m_highlight;
     GridGpu m_grid;
+    DatumGpu m_datums;
     bool m_hiddenPass = false;
     bool m_wireFill = false;
     bool m_postNeeded = false;
@@ -188,6 +226,11 @@ private:
     Owned<QRhiGraphicsPipeline> m_post;
     Owned<QRhiShaderResourceBindings> m_idLayout;
     std::array<Owned<QRhiGraphicsPipeline>, 3> m_idPipelines;
+    Owned<QRhiGraphicsPipeline> m_idDatumFill;
+    Owned<QRhiGraphicsPipeline> m_idDatumLines;
+    Owned<QRhiGraphicsPipeline> m_idReset;
+    bool m_idPlanes = false;
+    bool m_idAxes = false;
     std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
     std::vector<const Gpu*> m_edgeCalls;

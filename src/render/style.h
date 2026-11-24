@@ -5,6 +5,8 @@
 
 #include "snapshot/color.h"
 
+#include <cstdint>
+
 namespace kalve137::render {
 
 enum class VisualStyle { Shaded, ShadedWithEdges, Wireframe, VisibleEdges };
@@ -29,12 +31,25 @@ inline constexpr float kWireFaceWeight = 0.15F;
 
 inline constexpr double kGridLineWidth = 1.0;
 inline constexpr double kGridAxisWidth = 1.5;
+inline constexpr double kGridLineStrength = 1.0;
 inline constexpr float kGridWashAlpha = 0.45F;
 inline constexpr float kGridBiasSlope = kFaceBiasSlope + 1.0F;
 inline constexpr int kGridBiasUnits = kFaceBiasUnits + 1;
 inline constexpr float kGridWashBiasSlope = 2.0F;
 inline constexpr int kGridWashBiasUnits = 4;
 inline constexpr int kGridWashSegments = 96;
+
+inline constexpr double kOriginPlanePixels = 80.0;
+inline constexpr double kOriginAxisPixels = 104.0;
+inline constexpr double kConstructionPlanePixels = 120.0;
+inline constexpr double kConstructionAxisPixels = 160.0;
+inline constexpr float kDatumPlaneAlpha = 0.45F;
+inline constexpr double kDatumOutlineWidth = 1.0;
+inline constexpr double kDatumAxisWidth = 2.0;
+inline constexpr double kDatumDashPixels = 1.0;
+inline constexpr std::uint32_t kSolidPattern = 0xFFFFU;
+inline constexpr std::uint32_t kDashPattern = 0xFFC0U;
+inline constexpr std::uint32_t kDotDashPattern = 0xFF18U;
 
 struct ViewportStyle {
     snapshot::Color background;
