@@ -467,7 +467,7 @@ protected:
 
 TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -523,7 +523,7 @@ TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
 
 TEST_F(BadgePairTest, BadgesAndLabelsFollowTheCameraHereAndOnOpenGl)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

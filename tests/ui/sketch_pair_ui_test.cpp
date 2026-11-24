@@ -306,7 +306,7 @@ protected:
 
 TEST_F(SketchPairTest, IdleCurvesDrawOnTheFaceAndTheFloorLikeTheOldView)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -362,7 +362,7 @@ TEST_F(SketchPairTest, IdleCurvesDrawOnTheFaceAndTheFloorLikeTheOldView)
 
 TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -409,7 +409,7 @@ TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
 
 TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -450,7 +450,7 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
 
 TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -488,7 +488,7 @@ TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
 
 TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -542,7 +542,7 @@ TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
 
 TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -645,7 +645,7 @@ TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
 
 TEST_F(SketchPairTest, SketchesKeepDrawingAcrossCameraMovesHereAndOnOpenGl)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

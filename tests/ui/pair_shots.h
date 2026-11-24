@@ -41,7 +41,7 @@ struct Shots {
 inline constexpr const char* kViewportDidNotStart = "The viewport did not start on a device that can run it";
 
 std::filesystem::path pairFolder(const std::string& suite);
-std::optional<std::string> newViewMissing();
+std::optional<std::string> viewportMissing();
 std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view);
 QAction* actionNamed(app::MainWindow& window, const QString& text);
 void showOnlyBodies(app::MainWindow& window, const QString& style);

@@ -170,7 +170,7 @@ void sizeCanvas(MainWindow& window, QSize requested)
     QApplication::processEvents();
 }
 
-bool showForBench(MainWindow& window, bool newView, QSize requested)
+bool showForBench(MainWindow& window, bool useViewport, QSize requested)
 {
     hideChrome(window);
     const QScreen* screen = window.screen();
@@ -183,14 +183,15 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
     } else {
         window.show();
     }
-    if (newView && window.viewport() == nullptr) {
+    if (useViewport && window.viewport() == nullptr) {
         K137_ERROR(App, "The bench view did not start");
         return false;
     }
     const bool ready = waitFor([&] {
-        return newView ? window.viewport()->isReady() || window.viewport()->hasFailed() : window.oldView()->isReady();
+        return useViewport ? window.viewport()->isReady() || window.viewport()->hasFailed()
+                           : window.oldView()->isReady();
     });
-    if (!ready || (newView && window.viewport()->hasFailed())) {
+    if (!ready || (useViewport && window.viewport()->hasFailed())) {
         K137_ERROR(App, "The bench view did not start");
         return false;
     }
@@ -198,7 +199,7 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
     return true;
 }
 
-QJsonObject benchHeader(MainWindow& window, bool newView, const std::filesystem::path& design, const QString& size)
+QJsonObject benchHeader(MainWindow& window, bool useViewport, const std::filesystem::path& design, const QString& size)
 {
     const QSize actual = window.centralWidget()->size() * window.devicePixelRatioF();
     const QScreen* screen = window.screen();
@@ -207,10 +208,10 @@ QJsonObject benchHeader(MainWindow& window, bool newView, const std::filesystem:
         {"on_screen", !window.testAttribute(Qt::WA_DontShowOnScreen)},
         {"full_screen", window.isFullScreen()},
         {"screen", QStringLiteral("%1x%2").arg(shown.width()).arg(shown.height())},
-        {"view", newView ? "new" : "old"},
-        {"backend", newView ? window.viewport()->backendName() : QStringLiteral("OpenGL")},
-        {"device", newView ? window.viewport()->deviceName() : window.oldView()->deviceName()},
-        {"samples", newView ? window.viewport()->sampleCount() : window.oldView()->sampleCount()},
+        {"view", useViewport ? "new" : "old"},
+        {"backend", useViewport ? window.viewport()->backendName() : QStringLiteral("OpenGL")},
+        {"device", useViewport ? window.viewport()->deviceName() : window.oldView()->deviceName()},
+        {"samples", useViewport ? window.viewport()->sampleCount() : window.oldView()->sampleCount()},
         {"qt", QString::fromLatin1(qVersion())},
         {"design", QString::fromStdU16String(design.parent_path().filename().u16string())},
         {"requested", size},

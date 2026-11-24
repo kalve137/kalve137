@@ -282,7 +282,7 @@ protected:
 
 TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -316,7 +316,7 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
 
 TEST_F(PlanePairTest, AConstructionPlaneCuttingABodyCoversTheOldViewsArea)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -344,7 +344,7 @@ TEST_F(PlanePairTest, AConstructionPlaneCuttingABodyCoversTheOldViewsArea)
 
 TEST_F(PlanePairTest, PlanesAndAxesFarFromASmallBodyCoverTheOldViewsArea)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -366,7 +366,7 @@ TEST_F(PlanePairTest, PlanesAndAxesFarFromASmallBodyCoverTheOldViewsArea)
 
 TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -455,7 +455,7 @@ TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
 
 TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -506,7 +506,7 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
 
 TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -529,7 +529,7 @@ TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
 
 TEST_F(PlanePairTest, FitFramesConstructionGeometryAndAnEmptyDesign)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

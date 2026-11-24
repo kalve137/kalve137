@@ -58,7 +58,7 @@ std::filesystem::path pairFolder(const std::string& suite)
     return root / suite;
 }
 
-std::optional<std::string> newViewMissing()
+std::optional<std::string> viewportMissing()
 {
     if (app::startupFromEnvironment().view != app::ViewKind::New) {
         return "Runs with KALVE137_VIEW=new";

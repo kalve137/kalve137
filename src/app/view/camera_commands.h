@@ -37,7 +37,7 @@ public:
 
     static constexpr double kEmptySceneHalfSize = 60.0;
 
-    CameraCommands(viewer::OcctViewWidget& view, render::Viewport* newView, std::function<bool()> sceneIsEmpty,
+    CameraCommands(viewer::OcctViewWidget& view, render::Viewport* viewport, std::function<bool()> sceneIsEmpty,
                    QObject* parent);
 
     void home(Move move);

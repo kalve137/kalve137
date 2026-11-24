@@ -49,9 +49,9 @@ namespace kalve137::app {
 using namespace sketch_editor_detail;
 
 SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view,
-                           render::Viewport* newView, QObject* parent)
-    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_viewport(newView),
-      m_cameraInput(newView != nullptr)
+                           render::Viewport* viewport, QObject* parent)
+    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_viewport(viewport),
+      m_cameraInput(viewport != nullptr)
 {
     m_valueEditor = new QLineEdit(canvas());
     m_valueEditor->setObjectName("dimensionEditor");
@@ -115,14 +115,14 @@ SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::O
     connect(m_inputs, &SketchInputs::accepted, this, &SketchEditor::onInputsAccepted);
 
     connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
-    if (newView != nullptr) {
-        m_band = new BandOverlay(newView);
-        connect(newView, &render::Viewport::capturedPress, this, &SketchEditor::onPress);
-        connect(newView, &render::Viewport::capturedRelease, this, &SketchEditor::onRelease);
-        connect(newView, &render::Viewport::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
-        connect(newView, &render::Viewport::mouseMoved, this,
+    if (viewport != nullptr) {
+        m_band = new BandOverlay(viewport);
+        connect(viewport, &render::Viewport::capturedPress, this, &SketchEditor::onPress);
+        connect(viewport, &render::Viewport::capturedRelease, this, &SketchEditor::onRelease);
+        connect(viewport, &render::Viewport::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
+        connect(viewport, &render::Viewport::mouseMoved, this,
                 [this](QPointF pos, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { onMove(pos, buttons); });
-        connect(newView, &render::Viewport::cameraChanged, this, &SketchEditor::onCameraChanged);
+        connect(viewport, &render::Viewport::cameraChanged, this, &SketchEditor::onCameraChanged);
         return;
     }
     connect(view, &viewer::OcctViewWidget::capturedPress, this, &SketchEditor::onPress);
