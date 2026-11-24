@@ -401,6 +401,9 @@ void MainWindow::createActions()
         {SketchEditor::Tool::ArcThrough, "arc_through", tr("3-Point Arc"), QKeySequence(Qt::Key_A)},
         {SketchEditor::Tool::Arc, "arc", tr("Center Point Arc"), {}},
         {SketchEditor::Tool::Polygon, "polygon", tr("Polygon"), {}},
+        {SketchEditor::Tool::Slot, "slot", tr("Slot"), {}},
+        {SketchEditor::Tool::CenterSlot, "center_slot", tr("Center Point Slot"), {}},
+        {SketchEditor::Tool::OverallSlot, "overall_slot", tr("Overall Slot"), {}},
         {SketchEditor::Tool::Point, "point", tr("Point"), {}},
         {SketchEditor::Tool::Trim, "trim", tr("Trim"), QKeySequence(Qt::Key_T)},
         {SketchEditor::Tool::Fillet, "sketch_fillet", tr("Fillet"), {}},
@@ -598,6 +601,7 @@ void MainWindow::createToolBars()
     add(SketchEditor::Tool::Circle);
     addVariants({SketchEditor::Tool::ArcThrough, SketchEditor::Tool::Arc});
     add(SketchEditor::Tool::Polygon);
+    addVariants({SketchEditor::Tool::Slot, SketchEditor::Tool::CenterSlot, SketchEditor::Tool::OverallSlot});
     add(SketchEditor::Tool::Point);
     m_sketchBar->addSeparator();
     add(SketchEditor::Tool::Trim);

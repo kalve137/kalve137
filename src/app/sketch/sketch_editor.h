@@ -25,6 +25,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 class QLineEdit;
@@ -59,6 +60,9 @@ public:
         Arc,
         ArcThrough,
         Polygon,
+        Slot,
+        CenterSlot,
+        OverallSlot,
         Point,
         Trim,
         Fillet,
@@ -196,6 +200,7 @@ private:
     void clickCenterRectangle(Snap snap);
     void clickCircle(Snap snap);
     void clickPolygon(Snap snap);
+    void clickSlot(Snap snap);
     void clickArcThrough(const Snap& snap);
     void clickPoint(const Snap& snap);
 
@@ -210,6 +215,9 @@ private:
     sketch::Vec2 draftCenterCorner(sketch::Vec2 cursor) const;
     sketch::Vec2 draftPolygonCorner(sketch::Vec2 cursor) const;
     int polygonSides() const;
+    sketch::Vec2 draftSlotEnd(sketch::Vec2 cursor) const;
+    double draftSlotWidth(sketch::Vec2 cursor) const;
+    std::optional<std::pair<sketch::Vec2, sketch::Vec2>> slotCenters(sketch::Vec2 end, double width) const;
     double draftRadius(sketch::Vec2 cursor) const;
     void placeInputs(sketch::Vec2 cursor);
     void clickArc(const Snap& snap);

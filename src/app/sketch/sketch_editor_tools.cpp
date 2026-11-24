@@ -50,13 +50,8 @@ void SketchEditor::clickLine(Snap snap)
         const Id start = placePoint(candidate, *m_first);
         built.end = placePoint(candidate, snap);
         built.line = candidate.addLine(start, built.end);
-        if (autoAxis && !heldAngle) {
-            const double degrees = std::abs(std::atan2(delta.y, delta.x)) * 180.0 / std::numbers::pi;
-            if (degrees < kAutoAxisDegrees || degrees > 180.0 - kAutoAxisDegrees) {
-                candidate.addConstraint(ConstraintKind::Horizontal, {built.line});
-            } else if (std::abs(degrees - 90.0) < kAutoAxisDegrees) {
-                candidate.addConstraint(ConstraintKind::Vertical, {built.line});
-            }
+        if (const std::optional<ConstraintKind> axis = autoAxisOf(delta); autoAxis && !heldAngle && axis) {
+            candidate.addConstraint(*axis, {built.line});
         }
         if (dimensions && heldLength) {
             candidate.addConstraint(ConstraintKind::Distance, {built.line}, *heldLength);
@@ -194,6 +189,12 @@ void SketchEditor::openInputs()
     case Tool::Polygon:
         m_inputs->open({Kind::Length, Kind::Count});
         return;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        m_inputs->open({Kind::Length, Kind::Length});
+        m_inputs->setPlaceholder(1, tr("Width"));
+        return;
     case Tool::Select:
     case Tool::Arc:
     case Tool::ArcThrough:
@@ -244,6 +245,11 @@ void SketchEditor::onInputsAccepted()
         break;
     case Tool::Polygon:
         clickPolygon(at);
+        break;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        clickSlot(at);
         break;
     case Tool::Select:
     case Tool::Arc:
@@ -420,6 +426,26 @@ void SketchEditor::placeInputs(Vec2 cursor)
         const QPointF out = unitScreen(rim - screen(start));
         m_inputs->setLive(0, sketch::distance(start, corner) * 2.0, rim + out * kInputGapPixels, out);
         m_inputs->setLive(1, polygonSides(), screen(start) + QPointF(0.0, kInputOffsetPixels));
+        return;
+    }
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot: {
+        const Vec2 end = m_second ? m_second->pos : draftSlotEnd(cursor);
+        const Vec2 from = m_tool == Tool::CenterSlot ? start * 2.0 - end : start;
+        const Vec2 dir = sketch::distance(from, end) > 1e-9 ? normalized(end - from) : Vec2{1.0, 0.0};
+        const Vec2 side{-dir.y, dir.x};
+        const double span = sketch::distance(start, end) * (m_tool == Tool::CenterSlot ? 2.0 : 1.0);
+        if (m_second) {
+            const double width = draftSlotWidth(cursor);
+            const Vec2 away = dot(cursor - from, side) > 0.0 ? side * (-width / 2.0) : side * (width / 2.0);
+            beside(0, span, from + away, end + away, from);
+            beside(1, width, end + side * (width / 2.0), end - side * (width / 2.0), from);
+        } else {
+            beside(0, span, from, end, from - side);
+            const QPointF below = unitScreen(screen(from - side) - screen(from));
+            m_inputs->place(1, screen((from + end) * 0.5) + below * kInputGapPixels, below);
+        }
         return;
     }
     case Tool::Select:
@@ -835,6 +861,9 @@ void SketchEditor::clickConstraint(const Hit& hit)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
     case Tool::Trim:
     case Tool::Fillet:
