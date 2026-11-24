@@ -50,14 +50,23 @@ function(kalve137_install_app target)
         install(DIRECTORY "${dir}" DESTINATION ${CMAKE_INSTALL_BINDIR}/fonts)
     endforeach()
 
+    set(kalve137_deploy_options --exclude-plugins qtuiotouchplugin)
+    if(WIN32)
+        list(APPEND kalve137_deploy_options
+            --no-opengl-sw
+            --no-system-d3d-compiler
+            --no-system-dxc-compiler
+        )
+    elseif(APPLE)
+        list(APPEND kalve137_deploy_options --no-strip)
+    endif()
     qt_generate_deploy_app_script(
         TARGET ${target}
         OUTPUT_SCRIPT deploy_script
         NO_TRANSLATIONS
         NO_COMPILER_RUNTIME
         NO_UNSUPPORTED_PLATFORM_ERROR
-        DEPLOY_TOOL_OPTIONS --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler
-            --exclude-plugins qtuiotouchplugin
+        DEPLOY_TOOL_OPTIONS ${kalve137_deploy_options}
     )
     install(SCRIPT ${deploy_script})
 

@@ -177,6 +177,13 @@ kalve137_set_warnings(kalve137_app)
 qt_add_executable(kalve137 WIN32 main.cpp)
 target_link_libraries(kalve137 PRIVATE kalve137_app)
 kalve137_set_warnings(kalve137)
+if(APPLE)
+    set_target_properties(kalve137 PROPERTIES
+        MACOSX_BUNDLE ON
+        MACOSX_BUNDLE_BUNDLE_NAME "Kalve 137"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "137.kalve.kalve137"
+    )
+endif()
 
 set(asset_dir "${PROJECT_SOURCE_DIR}/assets")
 set(branding_dir "${asset_dir}/branding")
