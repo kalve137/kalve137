@@ -45,4 +45,22 @@ TEST(BadgePlacement, ACoincidenceOfTwoCentersShowsAConcentricBadgeOnEachRing)
     EXPECT_TRUE(std::ranges::none_of(badges, [&](const BadgePlace& badge) { return badge.constraint == joined; }));
 }
 
+TEST(BadgePlacement, OnlyFixedItemsThatAreNotProjectedShowALock)
+{
+    Sketch s;
+    s.addPoint({0.0, 0.0}, true);
+    const Id projectedPoint = s.addPoint({10.0, 0.0}, true);
+    s.point(projectedPoint)->projected = true;
+    const Id line = s.addLine(s.addPoint({0.0, 10.0}), s.addPoint({10.0, 10.0}));
+    s.curve(line)->fixed = true;
+    s.curve(line)->projected = true;
+    for (const Id id : s.curve(line)->points) {
+        s.point(id)->fixed = true;
+        s.point(id)->projected = true;
+    }
+    EXPECT_EQ(countOf(placeBadges(s), 0, "lock"), 1);
+    s.curve(line)->projected = false;
+    EXPECT_EQ(countOf(placeBadges(s), 0, "lock"), 2);
+}
+
 } // namespace

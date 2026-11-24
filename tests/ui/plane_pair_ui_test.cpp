@@ -282,12 +282,10 @@ protected:
 
 TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     std::ofstream table(m_folder / "origin-spans.tsv");
     table << "view\told right\tnew right\told top\tnew top\tnew width\n";
     load(core::Document{}, true);
@@ -318,12 +316,10 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
 
 TEST_F(PlanePairTest, AConstructionPlaneCuttingABodyCoversTheOldViewsArea)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     std::ofstream table(m_folder / "plane-areas.tsv");
     table << "view\told pixels\tnew pixels\n";
     const Aim aim = orbit({0.0, 0.0, kHalfPlane}, -60.0, 25.0, 200.0, camera::Projection::Perspective);
@@ -348,12 +344,10 @@ TEST_F(PlanePairTest, AConstructionPlaneCuttingABodyCoversTheOldViewsArea)
 
 TEST_F(PlanePairTest, PlanesAndAxesFarFromASmallBodyCoverTheOldViewsArea)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     std::ofstream table(m_folder / "far-areas.tsv");
     table << "view\told pixels\tnew pixels\n";
     const Aim aim = orbit({kFarBody / 2.0, 0.0, 0.0}, -60.0, 30.0, 400.0, camera::Projection::Perspective);
@@ -372,12 +366,10 @@ TEST_F(PlanePairTest, PlanesAndAxesFarFromASmallBodyCoverTheOldViewsArea)
 
 TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     core::Document document = blockDocument();
     document.add(offsetPlane(kHalfPlane));
     document.add(
@@ -463,12 +455,10 @@ TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
 
 TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     m_new->scene()->setPickMode(app::PickMode::Planes);
     auto* picker = m_new->findChild<app::NewViewPicker*>();
     ASSERT_NE(picker, nullptr);
@@ -516,12 +506,10 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
 
 TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
         actionNamed(*window, QStringLiteral("Show Grid"))->trigger();
     }
@@ -541,12 +529,10 @@ TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
 
 TEST_F(PlanePairTest, FitFramesConstructionGeometryAndAnEmptyDesign)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     core::Document planes;
     planes.add(offsetPlane(kFarPlane));
     load(planes, false);

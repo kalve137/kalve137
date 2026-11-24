@@ -3,6 +3,7 @@
 
 #include "render/rhi/glyph_atlas.h"
 
+#include "log/log.h"
 #include "render/style.h"
 
 #include <QColor>
@@ -153,7 +154,12 @@ void GlyphAtlas::addIcon(BadgeIcon icon)
     QImage tile = blankImage(QSize(side, side));
     {
         QPainter painter(&tile);
-        QSvgRenderer(iconPath(icon)).render(&painter);
+        QSvgRenderer renderer(iconPath(icon));
+        if (renderer.isValid()) {
+            renderer.render(&painter);
+        } else {
+            K137_WARN(Viewer, "The new view could not read the {} badge icon", iconName(icon));
+        }
         painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
         painter.fillRect(tile.rect(), Qt::white);
     }

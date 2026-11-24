@@ -203,13 +203,17 @@ inline Vec2 anchorOf(const sketch::Sketch& sketch, Id curveId)
     return {};
 }
 
+inline bool solvesWithin(sketch::Sketch probe, std::size_t redundantBefore)
+{
+    const sketch::SolveResult result = sketch::solve(probe);
+    return result.solved && result.conflicting.empty() && result.redundant.size() <= redundantBefore;
+}
+
 inline sketch::Sketch withDimensionsIfSolvable(const std::function<sketch::Sketch(bool)>& build,
                                                std::size_t redundantBefore)
 {
     sketch::Sketch candidate = build(true);
-    sketch::Sketch probe = candidate;
-    const sketch::SolveResult result = sketch::solve(probe);
-    if (!result.solved || !result.conflicting.empty() || result.redundant.size() > redundantBefore) {
+    if (!solvesWithin(candidate, redundantBefore)) {
         return build(false);
     }
     return candidate;

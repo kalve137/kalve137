@@ -413,8 +413,8 @@ protected:
 
 TEST_F(EdgePairTest, EdgesMatchTheOldViewInNumbers)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
     const std::filesystem::path folder = pairFolder("EdgePairTest");
     std::filesystem::create_directories(folder);
@@ -470,9 +470,7 @@ TEST_F(EdgePairTest, EdgesMatchTheOldViewInNumbers)
     };
     for (const Case& sample : cases) {
         const std::unique_ptr<app::MainWindow> newWindow = showPairWindow(app::ViewKind::New);
-        if (newWindow->newView() == nullptr || !newWindow->newView()->isReady()) {
-            GTEST_SKIP() << "The new view did not start";
-        }
+        ASSERT_TRUE(newWindow->newView() != nullptr && newWindow->newView()->isReady()) << kNewViewDidNotStart;
         const std::unique_ptr<app::MainWindow> oldWindow = showPairWindow(app::ViewKind::Old);
         ASSERT_TRUE(oldWindow->oldView()->isReady());
         for (app::MainWindow* window : {oldWindow.get(), newWindow.get()}) {

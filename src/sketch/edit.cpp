@@ -320,7 +320,8 @@ void dropLengthConstraints(Sketch& sketch, Id curve)
 
 void dropIfUnused(Sketch& sketch, Id point)
 {
-    if (point != kOriginId && sketch.isPoint(point) && sketch.curvesUsing(point).empty()) {
+    const Point* at = sketch.point(point);
+    if (point != kOriginId && at != nullptr && !at->projected && sketch.curvesUsing(point).empty()) {
         sketch.remove(point);
     }
 }
@@ -413,6 +414,9 @@ std::optional<Sketch> trim(const Sketch& sketch, Id curve, Vec2 pick)
         out.remove(curve);
         return out;
     }
+    if (out.curve(curve)->projected) {
+        return std::nullopt;
+    }
     out.dropOffsetPairs(curve);
     const Curve original = *out.curve(curve);
     const std::optional<Id> low = split.low ? std::optional(endAt(out, *split.low)) : std::nullopt;
@@ -491,7 +495,7 @@ std::optional<Sketch> filletCorner(const Sketch& sketch, Id point, double radius
     double lengths[2];
     for (int i = 0; i < 2; ++i) {
         const Curve* curve = sketch.curve(curves[i]);
-        if (curve->kind != CurveKind::Line) {
+        if (curve->kind != CurveKind::Line || curve->projected) {
             return std::nullopt;
         }
         const Id far = curve->points[0] == point ? curve->points[1] : curve->points[0];

@@ -98,9 +98,9 @@ TEST_F(MenuTest, TimelineRenameRefusesAParameterName)
     ui->session().edit(QStringLiteral("Add w"),
                        [](core::Document& document) { EXPECT_FALSE(core::addParameter(document, "w", "10 mm")); });
     answerText("w");
-    answerMessage(QMessageBox::Ok);
     ui->contextMenu(ui->timelineChip(kExtrude), "Rename...");
     EXPECT_EQ(ui->state()["features"][1]["name"], "Extrude1") << ui->state().dump(2);
+    EXPECT_TRUE(ui->statusText().contains(QStringLiteral("'w' is already defined"))) << ui->statusText().toStdString();
 }
 
 TEST_F(MenuTest, TimelineRollsBackAndToTheEnd)

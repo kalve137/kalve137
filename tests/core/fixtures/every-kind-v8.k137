@@ -874,6 +874,24 @@
           "constraints": [
             {
               "id": 18,
+              "joints": [
+                {
+                  "point": 10,
+                  "tangent": false
+                },
+                {
+                  "point": 11,
+                  "tangent": false
+                },
+                {
+                  "point": 12,
+                  "tangent": false
+                },
+                {
+                  "point": 13,
+                  "tangent": false
+                }
+              ],
               "kind": "offset",
               "refs": [
                 9,

@@ -10,6 +10,7 @@
 #include "core/undo_stack.h"
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
+#include "same_document.h"
 #include "sketch/offset.h"
 
 #include <gtest/gtest.h>
@@ -41,6 +42,7 @@ namespace {
 using Step = std::function<void(Document&)>;
 
 const std::filesystem::path kFixtures = std::filesystem::path(KALVE137_SOURCE_DIR) / "tests" / "core" / "fixtures";
+const std::filesystem::path kSamples = std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples";
 
 SketchFeature rectangle(double x0, double y0, double x1, double y1, OriginPlane plane = OriginPlane::XY)
 {
@@ -743,6 +745,37 @@ TEST(Sweep, VersionSixFixtureStillLoads)
     expectSameVolumes(model, recompute(everyKind()));
 }
 
+TEST(Sweep, VersionSevenFixtureFromTheFirstReleaseStillLoads)
+{
+    const auto fixture = kFixtures / "dodecahedron-v7.k137";
+    ASSERT_TRUE(std::filesystem::exists(fixture)) << fixture;
+    ShapeStore shapes;
+    const std::string text = readFile(fixture);
+    ASSERT_EQ(nlohmann::json::parse(text)["version"], 7);
+    const Document loaded = fromJson(text, shapes);
+    const Model model = recompute(loaded);
+    for (const Feature& feature : loaded.features()) {
+        EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
+    }
+    ASSERT_EQ(model.bodies.size(), 1U);
+    const std::string shipped = readFile(kSamples / "dodecahedron.k137");
+    expectSameVolumes(model, recompute(fromJson(shipped, shapes)));
+    test::expectSameDocument(nlohmann::json::parse(shipped), nlohmann::json::parse(toJson(loaded, shapes)), "");
+}
+
+TEST(Sweep, VersionEightFixtureWritesBackUnchanged)
+{
+    ShapeStore shapes;
+    const std::string text = readFile(kFixtures / "every-kind-v8.k137");
+    const nlohmann::json saved = nlohmann::json::parse(toJson(fromJson(text, shapes), shapes));
+    test::expectSameDocument(nlohmann::json::parse(text), saved, "");
+    const nlohmann::json& features = saved.at("features");
+    const auto plane = std::find_if(features.begin(), features.end(),
+                                    [](const nlohmann::json& feature) { return feature.at("name") == "Plane2"; });
+    ASSERT_NE(plane, features.end());
+    EXPECT_EQ((*plane)["data"]["angle"], 30.0);
+}
+
 TEST(Sweep, VersionEightFixtureLoadsItsOffset)
 {
     const auto fixture = kFixtures / "every-kind-v8.k137";
@@ -762,6 +795,8 @@ TEST(Sweep, VersionEightFixtureLoadsItsOffset)
     ASSERT_NE(offset, s.constraints().end());
     EXPECT_EQ(sketch::offsetPairs(offset->second).size(), 4U);
     EXPECT_DOUBLE_EQ(offset->second.value, 2.0);
+    ASSERT_EQ(offset->second.joints.size(), 4U);
+    EXPECT_TRUE(std::ranges::none_of(offset->second.joints, &sketch::OffsetJoint::tangent));
 }
 
 TEST(Sweep, VersionEightFixtureLoadsItsParameters)

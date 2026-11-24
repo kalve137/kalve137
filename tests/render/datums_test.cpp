@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -32,6 +33,7 @@ constexpr camera::Viewport kViewport{480, 360, 1.5};
 constexpr double kPixelTolerance = 0.5;
 constexpr int kAxisRows = 3;
 constexpr double kPatternBits = 16.0;
+constexpr double kAxisEndPixels = 2.0;
 
 camera::Camera facing(const camera::Vec3& anchor, const camera::Vec3& toward, const camera::Vec3& up,
                       camera::Projection projection, double scale)
@@ -278,7 +280,9 @@ TEST(Datums, AxesDashInTheOldViewsPatterns)
         }
         const double device = (origin ? kOriginAxisPixels : kConstructionAxisPixels) * kViewport.pixelRatio;
         const double share = static_cast<double>(std::popcount(static_cast<std::uint16_t>(pattern))) / kPatternBits;
-        EXPECT_NEAR(lit, device * share, device / kPatternBits * 2.0) << kind << " draws " << lit << " of " << device;
+        const double period = kPatternBits * kDatumDashPixels * kViewport.pixelRatio;
+        const double tail = std::fmod(device, period) * std::max(share, 1.0 - share);
+        EXPECT_NEAR(lit, device * share, tail + kAxisEndPixels) << kind << " draws " << lit << " of " << device;
     }
 }
 
@@ -337,6 +341,29 @@ TEST(Datums, PointsBecomeTopmostMarkersAndOnlyConstructionPointsPick)
     datums.points.clear();
     EXPECT_TRUE(datums.empty());
     EXPECT_TRUE(buildDatums(datums, camera, kViewport, {}).markers.empty());
+}
+
+TEST(Datums, PointsPastTheEntryCapDrawWithoutPickingAndMarkTheGeometryCapped)
+{
+    const camera::Camera camera = facing({}, {0.0, 0.0, 1.0}, {0.0, 1.0, 0.0}, camera::Projection::Orthographic, 120.0);
+    Datums datums{.originPlanes = {},
+                  .originAxes = {},
+                  .planes = {},
+                  .axes = {},
+                  .planeColor = kPlane,
+                  .points = {},
+                  .originPoint = false,
+                  .originPointColor = {}};
+    for (std::uint32_t i = 0; i < kDatumEntries; ++i) {
+        datums.points.push_back({.id = i + 1, .anchor = {static_cast<double>(i), 0.0, 0.0}});
+    }
+    EXPECT_FALSE(buildDatums(datums, camera, kViewport, {}).capped);
+    datums.points.push_back({.id = kDatumEntries + 1, .anchor = {0.0, 1.0, 0.0}});
+    const DatumGeometry geometry = buildDatums(datums, camera, kViewport, {});
+    EXPECT_TRUE(geometry.capped);
+    ASSERT_EQ(geometry.markers.size(), kDatumEntries + 1);
+    EXPECT_EQ(geometry.markers.back().flags, kMarkerTopmost);
+    EXPECT_EQ(geometry.markers.back().pick, 0U);
 }
 
 } // namespace

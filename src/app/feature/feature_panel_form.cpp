@@ -15,7 +15,6 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -337,14 +336,15 @@ void FeaturePanel::buildForm()
                 m_axis = axis;
                 axis->addItems({tr("X axis"), tr("Y axis"), tr("Z axis"), tr("Construction axis")});
                 axis->setCurrentIndex(static_cast<int>(f.axis.kind) - 1);
-                auto* count = new QSpinBox(m_form);
+                auto* count = new ValueEdit(core::Quantity::Count, f.count, m_form);
                 count->setRange(core::kMinPatternCount, core::kMaxPatternCount);
-                count->setValue(f.count);
+                count->setDecimals(0);
                 auto* spacing = makeLengthBox(f.spacing, -kMaxLength, m_form);
                 auto* angle = new ValueEdit(core::Quantity::Angle, f.angleDegrees, m_form);
                 angle->setRange(0.1, 360.0);
                 angle->setDecimals(2);
                 angle->setStep(15.0);
+                bindField(count, "count");
                 bindField(spacing, "spacing");
                 bindField(angle, "angle");
                 fields->addRow(tr("Type"), kind);
@@ -375,10 +375,11 @@ void FeaturePanel::buildForm()
                     data.axis = {kind, 0, 0};
                     changed();
                 });
-                connect(count, &QSpinBox::valueChanged, this, [this, changed](int value) {
-                    std::get<core::PatternFeature>(*m_data).count = value;
+                connect(count, &ValueEdit::valueChanged, this, [this, changed](double value) {
+                    std::get<core::PatternFeature>(*m_data).count = static_cast<int>(std::lround(value));
                     changed();
                 });
+                connect(count, &ValueEdit::accepted, this, &FeaturePanel::accept);
                 connect(spacing, &ValueEdit::valueChanged, this, [this, changed](double value) {
                     std::get<core::PatternFeature>(*m_data).spacing = value;
                     changed();

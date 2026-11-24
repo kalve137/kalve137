@@ -637,12 +637,11 @@ void FeaturePanel::accept()
     if (!isActive() || !m_ok->isEnabled()) {
         return;
     }
-    core::FeatureData accepted = std::move(*m_data);
-    std::map<std::string, std::string> expressions = std::move(m_expressions);
+    core::FeatureData accepted = *m_data;
+    std::map<std::string, std::string> expressions = m_expressions;
     const core::FeatureId editing = m_editing;
     const QString title = titleOf(accepted);
     K137_INFO(App, "{} accepted{}", title.toStdString(), editing != 0 ? " as an edit" : "");
-    finish();
 
     const auto nameBody = [](core::FeatureData& d, core::Document& document) {
         std::visit(core::Overloaded{
@@ -682,25 +681,34 @@ void FeaturePanel::accept()
                    d);
     };
 
+    bool done = false;
     if (editing != 0) {
         const core::Feature* edited = m_session.document().find(editing);
         if (edited == nullptr) {
+            finish();
             emit message(tr("The feature being edited no longer exists"));
             return;
         }
         const QString name = QString::fromStdString(edited->name);
-        m_session.edit(tr("Edit %1").arg(name), [&](core::Document& document) {
+        done = m_session.edit(tr("Edit %1").arg(name), [&](core::Document& document) {
             nameBody(accepted, document);
             core::Feature* target = document.find(editing);
             target->data = std::move(accepted);
             target->expressions = std::move(expressions);
         });
     } else {
-        m_session.edit(title, [&](core::Document& document) {
+        done = m_session.edit(title, [&](core::Document& document) {
             nameBody(accepted, document);
             const core::FeatureId added = document.add(std::move(accepted));
             document.find(added)->expressions = std::move(expressions);
         });
+    }
+    if (!done) {
+        K137_INFO(App, "{} refused, the panel stays open", title.toStdString());
+        return;
+    }
+    if (isActive()) {
+        finish();
     }
 }
 

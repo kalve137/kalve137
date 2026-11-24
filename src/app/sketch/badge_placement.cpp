@@ -112,12 +112,12 @@ std::vector<BadgePlace> placeBadges(const sketch::Sketch& s)
         }
     }
     for (const auto& [id, point] : s.points()) {
-        if (point.fixed && id != sketch::kOriginId) {
+        if (point.fixed && !point.projected && id != sketch::kOriginId) {
             near(0, id, QStringLiteral("lock"));
         }
     }
     for (const auto& [id, curve] : s.curves()) {
-        if (curve.fixed) {
+        if (curve.fixed && !curve.projected) {
             near(0, id, QStringLiteral("lock"));
         }
     }

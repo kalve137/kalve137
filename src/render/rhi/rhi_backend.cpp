@@ -157,7 +157,7 @@ bool RhiBackend::createShared()
         return false;
     }
     m_cornersUploaded = false;
-    m_layout = bindingsFor(m_layoutTexture.get());
+    Owned<QRhiShaderResourceBindings> layout = bindingsFor(m_layoutTexture.get());
     m_idLayout = idBindingsFor(m_layoutTexture.get(), m_uniforms.get());
     m_grid.washBindings = bindingsFor(m_layoutTexture.get());
     m_grid.lineBindings = bindingsFor(m_layoutTexture.get());
@@ -178,8 +178,10 @@ bool RhiBackend::createShared()
     if (!m_datums.pick->create() || !m_datums.originPick->create()) {
         return false;
     }
-    m_datums.idBindings = idBindingsFor(m_layoutTexture.get(), m_datums.pick.get());
-    m_datums.originIdBindings = idBindingsFor(m_layoutTexture.get(), m_datums.originPick.get());
+    m_datums.idFillBindings = idBindingsFor(m_layoutTexture.get(), m_datums.pick.get());
+    m_datums.idLineBindings = idBindingsFor(m_layoutTexture.get(), m_datums.pick.get());
+    m_datums.originIdFillBindings = idBindingsFor(m_layoutTexture.get(), m_datums.originPick.get());
+    m_datums.originIdLineBindings = idBindingsFor(m_layoutTexture.get(), m_datums.originPick.get());
     m_markers.depthBindings = bindingsFor(m_layoutTexture.get());
     m_markers.topBindings = bindingsFor(m_layoutTexture.get());
     m_markers.pick.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(PickUniforms)));
@@ -187,14 +189,20 @@ bool RhiBackend::createShared()
         return false;
     }
     m_markers.idBindings = idBindingsFor(m_layoutTexture.get(), m_markers.pick.get());
-    return createSketchShared() && m_markers.depthBindings != nullptr && m_markers.topBindings != nullptr &&
-           m_markers.idBindings != nullptr && m_layout != nullptr && m_idLayout != nullptr &&
-           m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr && m_haloBindings != nullptr &&
-           m_maskBindings != nullptr && m_goldBindings != nullptr && m_hiddenFaceBindings.at(0) != nullptr &&
-           m_hiddenFaceBindings.at(1) != nullptr && m_hiddenEdgeBindings != nullptr &&
-           m_datums.fillBindings != nullptr && m_datums.lineBindings != nullptr &&
-           m_datums.originFillBindings != nullptr && m_datums.originLineBindings != nullptr &&
-           m_datums.resetBindings != nullptr && m_datums.idBindings != nullptr && m_datums.originIdBindings != nullptr;
+    const bool complete = createSketchShared() && m_markers.depthBindings != nullptr &&
+                          m_markers.topBindings != nullptr && m_markers.idBindings != nullptr && layout != nullptr &&
+                          m_idLayout != nullptr && m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr &&
+                          m_haloBindings != nullptr && m_maskBindings != nullptr && m_goldBindings != nullptr &&
+                          m_hiddenFaceBindings.at(0) != nullptr && m_hiddenFaceBindings.at(1) != nullptr &&
+                          m_hiddenEdgeBindings != nullptr && m_datums.fillBindings != nullptr &&
+                          m_datums.lineBindings != nullptr && m_datums.originFillBindings != nullptr &&
+                          m_datums.originLineBindings != nullptr && m_datums.resetBindings != nullptr &&
+                          m_datums.idFillBindings != nullptr && m_datums.idLineBindings != nullptr &&
+                          m_datums.originIdFillBindings != nullptr && m_datums.originIdLineBindings != nullptr;
+    if (complete) {
+        m_layout = std::move(layout);
+    }
+    return complete;
 }
 
 bool RhiBackend::createSketchShared()
@@ -997,9 +1005,13 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
         K137_ERROR(Viewer, "The new view could not create the GPU resources for the sketch being edited");
         return false;
     }
-    if (!refreshAnnotations(list.annotations, list.frame.pixelRatio, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its badges and labels");
-        return false;
+    if (m_annotationsFailed) {
+        m_annotations.quads.count = 0;
+    } else if (!refreshAnnotations(list.annotations, list.frame.pixelRatio, updates)) {
+        m_annotationsFailed = true;
+        m_annotations.quads.count = 0;
+        K137_ERROR(Viewer, "The new view could not create the GPU resources for its badges and labels, it draws "
+                           "without them");
     }
     m_hiddenPass = list.highlight.hidden;
     m_wireFill = list.highlight.wireFill;
@@ -1073,6 +1085,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     m_idChunks.clear();
     m_idPlanes = false;
     m_idAxes = false;
+    m_idDatumsThroughBodies = false;
     m_idMarkersShown = false;
     m_idSketchLines = false;
     m_idSketchPoints = false;
@@ -1122,6 +1135,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
         if (refreshDatums(list.datums, updates)) {
             m_idPlanes = style.planes;
             m_idAxes = style.axes;
+            m_idDatumsThroughBodies = style.datumsThroughBodies;
         } else {
             K137_ERROR(Viewer, "The new view could not create the id pass resources for its planes and axes");
             complete = false;
@@ -1207,12 +1221,18 @@ void RhiBackend::drawIds(QRhiCommandBuffer* buffer, QSize size) const
 
 void RhiBackend::drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const
 {
+    if (m_idDatumsThroughBodies && (m_idAxes || m_idPlanes)) {
+        buffer->setGraphicsPipeline(m_idReset.get());
+        buffer->setViewport(viewport);
+        buffer->setShaderResources(m_idLayout.get());
+        buffer->draw(kPostCorners);
+    }
     if (m_idAxes) {
-        drawLines(buffer, m_idDatumLines.get(), m_datums.idBindings.get(), m_datums.idLines, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.idLineBindings.get(), m_datums.idLines, viewport);
     }
     if (m_idPlanes) {
-        drawFill(buffer, m_idDatumFill.get(), m_datums.idBindings.get(), m_datums.idFills, viewport);
-        drawLines(buffer, m_idDatumLines.get(), m_datums.idBindings.get(), m_datums.idOutlines, viewport);
+        drawFill(buffer, m_idDatumFill.get(), m_datums.idFillBindings.get(), m_datums.idFills, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.idLineBindings.get(), m_datums.idOutlines, viewport);
     }
     const bool originAxes = m_idAxes && m_datums.idOriginLines.count > 0;
     const bool originPlanes = m_idPlanes && m_datums.idOriginFills.count > 0;
@@ -1224,11 +1244,12 @@ void RhiBackend::drawDatumIds(QRhiCommandBuffer* buffer, const QRhiViewport& vie
     buffer->setShaderResources(m_idLayout.get());
     buffer->draw(kPostCorners);
     if (originAxes) {
-        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdBindings.get(), m_datums.idOriginLines, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdLineBindings.get(), m_datums.idOriginLines, viewport);
     }
     if (originPlanes) {
-        drawFill(buffer, m_idDatumFill.get(), m_datums.originIdBindings.get(), m_datums.idOriginFills, viewport);
-        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdBindings.get(), m_datums.idOriginOutlines, viewport);
+        drawFill(buffer, m_idDatumFill.get(), m_datums.originIdFillBindings.get(), m_datums.idOriginFills, viewport);
+        drawLines(buffer, m_idDatumLines.get(), m_datums.originIdLineBindings.get(), m_datums.idOriginOutlines,
+                  viewport);
     }
 }
 

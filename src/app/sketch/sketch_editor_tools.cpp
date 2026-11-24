@@ -528,6 +528,9 @@ void SketchEditor::clickTrim(Vec2 pos)
     }
     std::optional<sketch::Sketch> trimmed = sketch::trim(current(), hit.id, pos);
     if (!trimmed) {
+        if (current().curve(hit.id)->projected) {
+            emit message(tr("Projected curves follow the model. Break the link first"));
+        }
         return;
     }
     m_selection.clear();
@@ -565,6 +568,11 @@ void SketchEditor::clickFillet(QPointF screen, Vec2 pos)
         return;
     }
     const Id point = *corner;
+    const sketch::Sketch& s = current();
+    if (std::ranges::any_of(s.curvesUsing(point), [&](Id curve) { return s.curve(curve)->projected; })) {
+        emit message(tr("Projected curves follow the model. Break the link first"));
+        return;
+    }
     promptValue(screen, m_filletRadius, core::Quantity::Length, 0, [this, point](double radius, const std::string&) {
         std::optional<sketch::Sketch> rounded = sketch::filletCorner(current(), point, radius);
         if (!rounded) {
@@ -740,9 +748,17 @@ void SketchEditor::clickConstraint(const Hit& hit)
         sketch::Sketch candidate = s;
         if (hit.kind == Hit::Kind::Point && hit.id != sketch::kOriginId) {
             sketch::Point* point = candidate.point(hit.id);
+            if (point->projected) {
+                emit message(tr("Projected points follow the model. Break the link first"));
+                return;
+            }
             point->fixed = !point->fixed;
         } else if (hit.kind == Hit::Kind::Curve) {
             sketch::Curve* curve = candidate.curve(hit.id);
+            if (curve->projected) {
+                emit message(tr("Projected curves follow the model. Break the link first"));
+                return;
+            }
             curve->fixed = !curve->fixed;
         } else {
             return;

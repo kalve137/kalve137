@@ -5,8 +5,11 @@
 #include "core/naming.h"
 #include "core/projection.h"
 #include "core/recompute.h"
+#include "core/serialization.h"
 #include "geometry/modeling.h"
+#include "sketch/edit.h"
 #include "sketch/profiles.h"
+#include "sketch/solver.h"
 
 #include <gtest/gtest.h>
 
@@ -14,6 +17,7 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
@@ -262,7 +266,82 @@ TEST(Projection, OtherCurvesAreRefused)
     EXPECT_FALSE(projectEdge(BRepBuilderAPI_MakeEdge(tilted), kFloor).has_value());
     const gp_Elips ellipse(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 4.0, 2.0);
     EXPECT_FALSE(projectEdge(BRepBuilderAPI_MakeEdge(ellipse), kFloor).has_value());
-    EXPECT_FALSE(kProjectionRefused.empty());
+}
+
+TEST(Projection, TrimFilletAndDeleteAroundProjectedItemsKeepTheLinks)
+{
+    Part part = block(40.0, 10.0);
+    SketchFeature data = sketchAbove(part, 25.0);
+    const Model model = recompute(part.doc);
+    const Projection edge = projectEdgeAt(data, model, gp_Pnt(20, 0, 10));
+    const Projection vertex = projectVertexAt(data, model, gp_Pnt(40, 20, 10));
+    ASSERT_NE(edge.curve, 0);
+    ASSERT_NE(vertex.point, 0);
+    sketch::Sketch& s = data.sketch;
+    const std::vector<sketch::Id> ends = s.curve(edge.curve)->points;
+    const sketch::Vec2 corner = s.point(ends[0])->pos;
+    s.addLine(s.addPoint({20, -10}), s.addPoint({20, 10}));
+    const sketch::Id leg = s.addLine(ends[0], s.addPoint(corner + sketch::Vec2{0, -15}));
+    s.addLine(s.addPoint({20, 20}), vertex.point);
+    s.addLine(vertex.point, s.addPoint({40, 40}));
+
+    EXPECT_FALSE(sketch::trim(s, edge.curve, {5, 0}));
+    EXPECT_FALSE(sketch::filletCorner(s, ends[0], 2.0));
+    const std::optional<sketch::Sketch> rounded = sketch::filletCorner(s, vertex.point, 3.0);
+    ASSERT_TRUE(rounded);
+    s = *rounded;
+    ASSERT_NE(s.point(vertex.point), nullptr);
+    EXPECT_TRUE(s.point(vertex.point)->projected);
+    EXPECT_TRUE(s.curvesUsing(vertex.point).empty());
+    EXPECT_FALSE(validateProjections(data));
+
+    s.remove(edge.curve);
+    dropBrokenProjections(data);
+    ASSERT_EQ(data.projections.size(), 1U);
+    EXPECT_EQ(data.projections[0].point, vertex.point);
+    EXPECT_EQ(s.point(ends[1]), nullptr);
+    ASSERT_NE(s.point(ends[0]), nullptr);
+    EXPECT_FALSE(s.point(ends[0])->projected);
+    EXPECT_FALSE(s.point(ends[0])->fixed);
+    EXPECT_NE(s.curve(leg), nullptr);
+    EXPECT_FALSE(validateProjections(data));
+    EXPECT_FALSE(sketch::validate(s));
+
+    const FeatureId id = part.doc.add(std::move(data));
+    const Model after = recompute(part.doc);
+    EXPECT_EQ(healthOf(after, id), FeatureHealth::Ok);
+    expectNear(pointOf(after, id, vertex.point), {40, 20});
+
+    ShapeStore shapes;
+    const std::string text = toJson(part.doc, shapes);
+    const Document loaded = fromJson(text, shapes);
+    EXPECT_EQ(toJson(loaded, shapes), text);
+    EXPECT_EQ(healthOf(recompute(loaded), id), FeatureHealth::Ok);
+}
+
+TEST(Projection, ADroppedLinkReleasesItsItems)
+{
+    SketchFeature data;
+    const Projection line = addProjectedEdge(data, {ProjectedShape::Line, {{0, 0}, {10, 0}}, 0.0}, gp_Pnt(5, 0, 0));
+    sketch::Sketch& s = data.sketch;
+    const std::vector<sketch::Id> ends = s.curve(line.curve)->points;
+    s.point(ends[0])->projected = false;
+    EXPECT_TRUE(validateProjections(data));
+    dropBrokenProjections(data);
+    EXPECT_TRUE(data.projections.empty());
+    EXPECT_FALSE(s.curve(line.curve)->projected);
+    EXPECT_FALSE(s.curve(line.curve)->fixed);
+    EXPECT_FALSE(s.point(ends[1])->projected);
+    EXPECT_FALSE(s.point(ends[1])->fixed);
+    EXPECT_FALSE(validateProjections(data));
+
+    const Projection circle = addProjectedEdge(data, {ProjectedShape::Circle, {{20, 0}}, 3.0}, gp_Pnt(23, 0, 0));
+    EXPECT_FALSE(validateProjections(data));
+    s.point(s.curve(circle.curve)->points[0])->projected = false;
+    EXPECT_TRUE(validateProjections(data));
+    s.point(s.curve(circle.curve)->points[0])->projected = true;
+    s.point(s.addPoint({5, 5}, true))->projected = true;
+    EXPECT_TRUE(validateProjections(data));
 }
 
 TEST(Projection, VertexDropsOntoThePlane)
@@ -310,9 +389,13 @@ TEST(Projection, DroppingBrokenLinksKeepsTheRest)
     SketchFeature data;
     const Projection line = addProjectedEdge(data, {ProjectedShape::Line, {{0, 0}, {10, 0}}, 0.0}, gp_Pnt(5, 0, 0));
     const Projection circle = addProjectedEdge(data, {ProjectedShape::Circle, {{20, 0}}, 3.0}, gp_Pnt(23, 0, 0));
+    const std::vector<sketch::Id> ends = data.sketch.curve(line.curve)->points;
     data.sketch.remove(line.curve);
     ASSERT_TRUE(validateProjections(data).has_value());
     dropBrokenProjections(data);
+    for (const sketch::Id end : ends) {
+        EXPECT_EQ(data.sketch.point(end), nullptr);
+    }
     ASSERT_EQ(data.projections.size(), 1U);
     EXPECT_EQ(data.projections[0].curve, circle.curve);
     EXPECT_FALSE(validateProjections(data).has_value());
@@ -441,4 +524,90 @@ TEST(Projection, LostSourceKeepsTheLastGeometryAndWarns)
     EXPECT_TRUE(model.sketches.at(id).solve.solved);
     EXPECT_TRUE(model.sketches.at(id).solve.conflicting.empty());
     expectNear(pointOf(model, id, vertex.point), {10, 0});
+}
+
+TEST(Projection, WarningListsEveryProblem)
+{
+    Part part = cylinder(10.0, 20.0);
+    SketchFeature data = sketchAbove(part, 30.0);
+    const Projection edge = projectEdgeAt(data, recompute(part.doc), gp_Pnt(0, 10, 20));
+    ASSERT_NE(edge.curve, 0);
+    const sketch::Id from = data.sketch.addPoint({30, 0});
+    const sketch::Id to = data.sketch.addPoint({40, 0});
+    data.sketch.addConstraint(sketch::ConstraintKind::Distance, {from, to}, 10.0);
+    data.sketch.addConstraint(sketch::ConstraintKind::Distance, {from, to}, 20.0);
+    const FeatureId id = part.doc.add(std::move(data));
+
+    part.doc.remove(part.pad);
+    const Model model = recompute(part.doc);
+    ASSERT_EQ(healthOf(model, id), FeatureHealth::Warning);
+    EXPECT_FALSE(model.sketches.at(id).solve.solved);
+    EXPECT_EQ(model.status.at(id).message, brokenProjectionsMessage(1) + ". The sketch has conflicting constraints");
+}
+
+TEST(Projection, HorizontalDistanceKeepsItsSideWhenTheModelMovesPastIt)
+{
+    Part part = block(40.0, 10.0);
+    SketchFeature data = sketchAbove(part, 25.0);
+    const Projection vertex = projectVertexAt(data, recompute(part.doc), gp_Pnt(40, 20, 10));
+    ASSERT_NE(vertex.point, 0);
+    const sketch::Id loose = data.sketch.addPoint({45, 30});
+    data.sketch.addConstraint(sketch::ConstraintKind::HorizontalDistance, {vertex.point, loose}, 5.0);
+    const FeatureId id = part.doc.add(std::move(data));
+
+    setWidth(part, 60.0);
+    const Model model = recompute(part.doc);
+    EXPECT_EQ(healthOf(model, id), FeatureHealth::Ok);
+    expectNear(pointOf(model, id, vertex.point), {60, 20});
+    EXPECT_NEAR(pointOf(model, id, loose).x, 65.0, 1e-6);
+}
+
+TEST(Projection, VerticalDistanceAndAngleKeepTheirSideWhenProjectionsMove)
+{
+    sketch::Sketch before;
+    const sketch::Id a = before.addPoint({0, 0}, true);
+    const sketch::Id b = before.addPoint({0, 10}, true);
+    const sketch::Id fixedLine = before.addLine(a, b);
+    const sketch::Id e = before.addPoint({10, 10});
+    const sketch::Id freeLine = before.addLine(a, e);
+    const sketch::Id loose = before.addPoint({20, 5});
+    before.addConstraint(sketch::ConstraintKind::VerticalDistance, {a, loose}, 5.0);
+    before.addConstraint(sketch::ConstraintKind::Angle, {fixedLine, freeLine}, 45.0);
+
+    sketch::Sketch moved = before;
+    moved.point(a)->pos = {20, 10};
+    moved.point(b)->pos = {20, 20};
+    ASSERT_TRUE(sketch::solveMoved(moved, before).solved);
+    EXPECT_NEAR(moved.point(loose)->pos.y, 15.0, 1e-6);
+    const sketch::Vec2 up = moved.point(b)->pos - moved.point(a)->pos;
+    const sketch::Vec2 out = moved.point(e)->pos - moved.point(a)->pos;
+    EXPECT_LT(up.x * out.y - up.y * out.x, 0.0);
+}
+
+TEST(Projection, AnOpenCascadeFailureBreaksOnlyItsLink)
+{
+    SketchFeature data;
+    const Projection kept = addProjectedEdge(data, {ProjectedShape::Line, {{0, 0}, {10, 0}}, 0.0}, gp_Pnt(5, 0, 0));
+    const Projection failing =
+        addProjectedEdge(data, {ProjectedShape::Line, {{0, 20}, {10, 20}}, 0.0}, gp_Pnt(0, 20, 0));
+    BRep_Builder builder;
+    TopoDS_Edge bare;
+    builder.MakeEdge(bare);
+    builder.Add(bare, BRepBuilderAPI_MakeVertex(gp_Pnt(0, 20, 0)).Vertex().Oriented(TopAbs_FORWARD));
+    builder.Add(bare, BRepBuilderAPI_MakeVertex(gp_Pnt(10, 20, 0)).Vertex().Oriented(TopAbs_REVERSED));
+    std::vector<Body> bodies(2);
+    bodies[0].shape = line(gp_Pnt(0, 0, 0), gp_Pnt(12, 0, 0));
+    bodies[1].shape = bare;
+    EXPECT_ANY_THROW({
+        if (const std::optional<EdgeHit> hit = resolveEdge(bodies, failing.ref)) {
+            projectEdge(hit->edge, kFloor);
+        }
+    });
+
+    const std::vector<sketch::Id> broken = followProjections(data.sketch, data.projections, bodies, kFloor);
+    EXPECT_EQ(broken, std::vector<sketch::Id>{failing.curve});
+    const std::vector<sketch::Id> ends = data.sketch.curve(kept.curve)->points;
+    const sketch::Vec2 far =
+        data.sketch.point(ends[0])->pos.x > 1.0 ? data.sketch.point(ends[0])->pos : data.sketch.point(ends[1])->pos;
+    expectNear(far, {12, 0});
 }

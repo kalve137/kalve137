@@ -1,0 +1,1080 @@
+{
+  "counters": {
+    "appearance": 2,
+    "extrude": 6,
+    "plane": 5,
+    "sketch": 6
+  },
+  "features": [
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "plane_name": "XY",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 10,
+              "kind": "line",
+              "points": [
+                5,
+                6
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 11,
+              "kind": "line",
+              "points": [
+                6,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 2.4492935982947065e-15,
+              "y": 40.0
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -38.04226065180614,
+              "y": 12.3606797749979
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -23.51141009169893,
+              "y": -32.36067977499789
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 23.511410091698917,
+              "y": -32.360679774997905
+            },
+            {
+              "fixed": false,
+              "id": 6,
+              "x": 38.042260651806146,
+              "y": 12.360679774997887
+            }
+          ]
+        }
+      },
+      "id": 1,
+      "name": "Sketch1",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "Dodecahedron",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "new_body",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 1
+        },
+        "second_distance": 10.0
+      },
+      "id": 2,
+      "name": "Extrude1",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "angle": 63.43494882292201,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            1.0,
+            6.123233995736766e-17,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 3,
+      "name": "Plane1",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            5.476786982642026e-17,
+            -0.8944271909999159,
+            0.4472135954999581
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            6.123233995736767e-17,
+            3.0814879110195774e-33
+          ]
+        },
+        "plane_feature": 3,
+        "plane_name": "Plane1",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.00000000000001,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -100.0,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -100.00000000000003,
+              "y": -100.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 99.99999999999999,
+              "y": -100.00000000000003
+            }
+          ]
+        }
+      },
+      "id": 4,
+      "name": "Sketch2",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "intersect",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 4
+        },
+        "second_distance": 10.0
+      },
+      "id": 5,
+      "name": "Extrude2",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "angle": 63.43494882292201,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            0.30901699437494745,
+            0.9510565162951536,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 6,
+      "name": "Plane2",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.85065080835204,
+            -0.27639320225002106,
+            0.447213595499958
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            0.30901699437494745,
+            0.9510565162951536,
+            2.7755575615628907e-17
+          ]
+        },
+        "plane_feature": 6,
+        "plane_name": "Plane2",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.00000000000001,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -100.0,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -100.00000000000003,
+              "y": -100.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 99.99999999999999,
+              "y": -100.00000000000003
+            }
+          ]
+        }
+      },
+      "id": 7,
+      "name": "Sketch3",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "intersect",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 7
+        },
+        "second_distance": 10.0
+      },
+      "id": 8,
+      "name": "Extrude3",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "angle": 63.43494882292201,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            -0.8090169943749475,
+            0.5877852522924731,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 9,
+      "name": "Plane3",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            0.5257311121191336,
+            0.7236067977499789,
+            0.4472135954999581
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            -0.8090169943749475,
+            0.5877852522924731,
+            2.7755575615628914e-17
+          ]
+        },
+        "plane_feature": 9,
+        "plane_name": "Plane3",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.00000000000001,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -100.0,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -100.00000000000003,
+              "y": -100.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 99.99999999999999,
+              "y": -100.00000000000003
+            }
+          ]
+        }
+      },
+      "id": 10,
+      "name": "Sketch4",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "intersect",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 10
+        },
+        "second_distance": 10.0
+      },
+      "id": 11,
+      "name": "Extrude4",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "angle": 63.43494882292201,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            -0.8090169943749476,
+            -0.5877852522924731,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 12,
+      "name": "Plane4",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            -0.5257311121191336,
+            0.723606797749979,
+            0.447213595499958
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            -0.8090169943749476,
+            -0.5877852522924731,
+            0.0
+          ]
+        },
+        "plane_feature": 12,
+        "plane_name": "Plane4",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.00000000000001,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -100.0,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -100.00000000000003,
+              "y": -100.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 99.99999999999999,
+              "y": -100.00000000000003
+            }
+          ]
+        }
+      },
+      "id": 13,
+      "name": "Sketch5",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "intersect",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 13
+        },
+        "second_distance": 10.0
+      },
+      "id": 14,
+      "name": "Extrude5",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "angle": 63.43494882292201,
+        "base": {
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            1.0,
+            0.0,
+            -0.0
+          ]
+        },
+        "base_name": "XY",
+        "center": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hinge": {
+          "direction": [
+            0.3090169943749473,
+            -0.9510565162951536,
+            0.0
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "kind": "angle"
+      },
+      "id": 15,
+      "name": "Plane5",
+      "suppressed": false,
+      "type": "plane"
+    },
+    {
+      "data": {
+        "plane": {
+          "normal": [
+            -0.85065080835204,
+            -0.2763932022500209,
+            0.4472135954999581
+          ],
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "x_dir": [
+            0.3090169943749473,
+            -0.9510565162951536,
+            0.0
+          ]
+        },
+        "plane_feature": 15,
+        "plane_name": "Plane5",
+        "sketch": {
+          "constraints": [],
+          "curves": [
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 6,
+              "kind": "line",
+              "points": [
+                2,
+                3
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 7,
+              "kind": "line",
+              "points": [
+                3,
+                4
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 8,
+              "kind": "line",
+              "points": [
+                4,
+                5
+              ],
+              "radius": 0.0
+            },
+            {
+              "construction": false,
+              "fixed": false,
+              "id": 9,
+              "kind": "line",
+              "points": [
+                5,
+                2
+              ],
+              "radius": 0.0
+            }
+          ],
+          "points": [
+            {
+              "fixed": true,
+              "id": 1,
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "fixed": false,
+              "id": 2,
+              "x": 100.00000000000001,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 3,
+              "x": -100.0,
+              "y": 100.00000000000001
+            },
+            {
+              "fixed": false,
+              "id": 4,
+              "x": -100.00000000000003,
+              "y": -100.0
+            },
+            {
+              "fixed": false,
+              "id": 5,
+              "x": 99.99999999999999,
+              "y": -100.00000000000003
+            }
+          ]
+        }
+      },
+      "id": 16,
+      "name": "Sketch6",
+      "suppressed": false,
+      "type": "sketch"
+    },
+    {
+      "data": {
+        "body_name": "",
+        "distance": 40.0,
+        "extent": "symmetric",
+        "operation": "intersect",
+        "profiles": {
+          "seeds": [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "sketch": 16
+        },
+        "second_distance": 10.0
+      },
+      "id": 17,
+      "name": "Extrude6",
+      "suppressed": false,
+      "type": "extrude"
+    },
+    {
+      "data": {
+        "bodies": [
+          [
+            2,
+            0
+          ]
+        ],
+        "color": [
+          0.39215686274509803,
+          0.49019607843137253,
+          0.6196078431372549
+        ],
+        "faces": []
+      },
+      "id": 18,
+      "name": "Appearance1",
+      "suppressed": false,
+      "type": "appearance"
+    },
+    {
+      "data": {
+        "bodies": [],
+        "color": [
+          0.9490196078431372,
+          0.7176470588235294,
+          0.0196078431372549
+        ],
+        "faces": [
+          {
+            "names": [],
+            "point": [
+              0.0,
+              0.0,
+              20.0
+            ]
+          }
+        ]
+      },
+      "id": 19,
+      "name": "Appearance2",
+      "suppressed": false,
+      "type": "appearance"
+    }
+  ],
+  "format": "kalve137-design",
+  "marker": 19,
+  "next_id": 20,
+  "units": "mm",
+  "version": 7
+}

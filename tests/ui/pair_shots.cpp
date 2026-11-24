@@ -5,6 +5,7 @@
 
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
+#include "render/graphics_api.h"
 #include "render/rhi/rhi_view.h"
 #include "viewer/occt_view_widget.h"
 
@@ -25,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <format>
 
 namespace kalve137::uitest {
 
@@ -54,6 +56,18 @@ std::filesystem::path pairFolder(const std::string& suite)
         custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
                          : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
     return root / suite;
+}
+
+std::optional<std::string> newViewMissing()
+{
+    if (app::startupFromEnvironment().view != app::ViewKind::New) {
+        return "Runs with KALVE137_VIEW=new";
+    }
+    const render::GraphicsApi api = render::platformGraphicsApi();
+    if (!render::canStart(api)) {
+        return std::format("The new view has no usable {} device here", render::graphicsApiName(api));
+    }
+    return std::nullopt;
 }
 
 std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view)

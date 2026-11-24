@@ -9,18 +9,26 @@
 #include "core/document.h"
 #include "core/feature.h"
 #include "core/parameter_table.h"
+#include "render/annotations.h"
+#include "render/rhi/rhi_view.h"
 #include "scenario.h"
 #include "sketch/sketch.h"
 #include "ui_test.h"
 
+#include <QAbstractItemView>
+#include <QApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTableWidget>
+#include <QTest>
 #include <QTreeWidget>
 
 #include <gtest/gtest.h>
 
+#include <gp_Pnt.hxx>
+
+#include <cmath>
 #include <string>
 #include <variant>
 #include <vector>
@@ -211,9 +219,7 @@ TEST_F(ParametersTest, DeleteRefusesAUsedParameter)
     table()->setCurrentCell(1, kName);
     press(*dialog, QStringLiteral("Delete"));
     EXPECT_EQ(names(), (std::vector<std::string>{"w", "h", "spare"}));
-    EXPECT_TRUE(dialog->errorText().startsWith(QStringLiteral("Used by Sketch1 d")) &&
-                dialog->errorText().endsWith(QStringLiteral(" and Extrude1 distance")))
-        << dialog->errorText().toStdString();
+    EXPECT_EQ(dialog->errorText(), QStringLiteral("Used by Sketch1 distance 15 mm and Extrude1 distance"));
 
     table()->setCurrentCell(2, kName);
     press(*dialog, QStringLiteral("Delete"));
@@ -349,6 +355,77 @@ TEST_F(ValueNamesTest, APlainNumberClearsTheExpressionOfAField)
     EXPECT_NEAR(extrudeData().distance, 12.0, kTolerance) << "The typed number stays after a parameter edit";
 }
 
+TEST_F(ValueNamesTest, AnEqualPlainNumberClearsTheExpressionOfAField)
+{
+    driveExtrude("w * 2");
+    app::ValueEdit* box = distanceField();
+    ASSERT_NE(box, nullptr);
+    ui->fill("Distance", "20");
+    ASSERT_FALSE(ui->state()["featurePanel"]) << ui->state().dump(2);
+    EXPECT_TRUE(ui->session().document().find(kExtrude)->expressions.empty());
+    EXPECT_NEAR(extrudeData().distance, 20.0, kTolerance);
+
+    setW("30 mm");
+    EXPECT_NEAR(extrudeData().distance, 20.0, kTolerance) << "The typed number stays after a parameter edit";
+}
+
+TEST_F(ValueNamesTest, PatternCountTakesAName)
+{
+    seed({{"n", "4"}});
+    ui->trigger("Pattern");
+    ui->click(gp_Pnt(5, 3, kBlockHeight));
+    auto* count = qobject_cast<app::ValueEdit*>(ui->field("Count"));
+    ASSERT_NE(count, nullptr);
+
+    ui->fill("Count", "2.5");
+    ASSERT_TRUE(ui->state()["featurePanel"]) << "A refused count keeps the panel open";
+    EXPECT_TRUE(count->property("invalid").toBool());
+    ASSERT_NE(count->parentWidget(), nullptr);
+    const QLabel* error = visibleChild(*count->parentWidget(), QStringLiteral("fieldError"));
+    ASSERT_NE(error, nullptr);
+    EXPECT_TRUE(error->text().contains(QStringLiteral("whole number"))) << error->text().toStdString();
+
+    ui->fill("Count", "n", false);
+    EXPECT_EQ(count->expression(), QStringLiteral("n"));
+    ui->fill("Spacing", "50");
+    ASSERT_FALSE(ui->state()["featurePanel"]) << ui->state().dump(2);
+    const core::Feature& pattern = ui->session().document().features().back();
+    ASSERT_TRUE(std::holds_alternative<core::PatternFeature>(pattern.data));
+    EXPECT_EQ(pattern.expressions.at("count"), "n");
+    EXPECT_EQ(std::get<core::PatternFeature>(pattern.data).count, 4);
+
+    EXPECT_FALSE(ui->session().tryEdit(QStringLiteral("Edit n"), [](core::Document& document) {
+        return core::setParameterExpression(document, "n", "6");
+    }));
+    ui->settle();
+    EXPECT_EQ(std::get<core::PatternFeature>(ui->session().document().features().back().data).count, 6);
+}
+
+TEST_F(ValueNamesTest, ADrivenDimensionLabelShowsTheMark)
+{
+    if (ui->window().newView() == nullptr) {
+        GTEST_SKIP() << "Dimension labels carry the mark in the new view only";
+    }
+    const sketch::Id id = dimensionOnTheBottom();
+    ASSERT_NE(id, 0);
+    const auto labels = [this] {
+        std::vector<std::u32string> texts;
+        for (const render::LabelItem& label : ui->window().newView()->annotations().labels) {
+            texts.push_back(label.text);
+        }
+        return texts;
+    };
+    editDimension(*ui, id, QStringLiteral("w*3"));
+    ui->settle();
+    EXPECT_EQ(labels(), (std::vector<std::u32string>{U"fx: 30"}));
+    ui->save("driven dimension label");
+
+    editDimension(*ui, id, QStringLiteral("30"));
+    ui->settle();
+    EXPECT_TRUE(constraint(id)->expression.empty());
+    EXPECT_EQ(labels(), (std::vector<std::u32string>{U"30"}));
+}
+
 TEST_F(ValueNamesTest, DimensionEditorTakesANameAndAPlainNumberClearsIt)
 {
     const sketch::Id id = dimensionOnTheBottom();
@@ -387,6 +464,100 @@ TEST_F(ValueNamesTest, DimensionEditorTakesANameAndAPlainNumberClearsIt)
     EXPECT_NEAR(constraint(id)->value, 50.0, kTolerance);
     setW("5 mm");
     EXPECT_NEAR(constraint(id)->value, 50.0, kTolerance) << "The typed number stays after a parameter edit";
+}
+
+TEST_F(ValueNamesTest, TheCompleterOffersNamesAndInsertsTheChoice)
+{
+    seed({{"wall", "2 mm"}});
+    app::ValueEdit* box = distanceField();
+    ASSERT_NE(box, nullptr);
+    ui->click(box);
+    box->selectAll();
+    ui->type(QStringLiteral("wa"));
+    QAbstractItemView* popup = nullptr;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (widget->objectName() == QStringLiteral("nameCompleter") && widget->isVisible()) {
+            popup = qobject_cast<QAbstractItemView*>(widget);
+        }
+    }
+    ASSERT_NE(popup, nullptr) << "Typing the start of a name opens the completer";
+    EXPECT_EQ(popup->objectName(), QStringLiteral("nameCompleter"));
+    ASSERT_EQ(popup->model()->rowCount(), 1);
+    EXPECT_EQ(popup->model()->index(0, 0).data().toString(), QStringLiteral("wall"));
+    ui->save("name completer");
+
+    const QModelIndex wall = popup->model()->index(0, 0);
+    QTest::mouseClick(popup->viewport(), Qt::LeftButton, {}, popup->visualRect(wall).center());
+    ui->settle();
+    EXPECT_EQ(box->text(), QStringLiteral("wall"));
+    EXPECT_FALSE(popup->isVisible());
+    ASSERT_TRUE(ui->state()["featurePanel"]) << "Picking a name doesn't accept the panel";
+
+    ui->key(Qt::Key_Return);
+    ASSERT_FALSE(ui->state()["featurePanel"]) << ui->state().dump(2);
+    EXPECT_EQ(ui->session().document().find(kExtrude)->expressions.at("distance"), "wall");
+    EXPECT_NEAR(extrudeData().distance, 2.0, kTolerance);
+}
+
+TEST_F(ValueNamesTest, LeavingADrivenFieldWithoutTypingShowsTheValue)
+{
+    driveExtrude("w * 2");
+    app::ValueEdit* box = distanceField();
+    ASSERT_NE(box, nullptr);
+    ui->click(box);
+    EXPECT_EQ(box->text(), QStringLiteral("w * 2"));
+    ui->key(Qt::Key_Tab);
+    ASSERT_FALSE(box->hasFocus());
+    EXPECT_EQ(box->text(), QStringLiteral("20 mm")) << "Focus out shows the value even without an edit";
+    const QLabel* mark = box->findChild<QLabel*>("fxMark");
+    ASSERT_NE(mark, nullptr);
+    EXPECT_TRUE(mark->isVisible());
+    EXPECT_EQ(box->expression(), QStringLiteral("w * 2"));
+}
+
+TEST_F(ValueNamesTest, AFailedCommitOnFocusOutKeepsTheLastGoodValue)
+{
+    app::ValueEdit* box = distanceField();
+    ASSERT_NE(box, nullptr);
+    const double before = extrudeData().distance;
+    const QString shown = box->text();
+    ui->click(box);
+    box->selectAll();
+    ui->type(QStringLiteral("15"));
+    EXPECT_NEAR(box->value(), 15.0, kTolerance) << "Typing previews the value";
+    ui->type(QStringLiteral(" + q"));
+    ui->key(Qt::Key_Return);
+    ASSERT_TRUE(ui->state()["featurePanel"]);
+    EXPECT_EQ(box->text(), QStringLiteral("15 + q")) << "A refused Return leaves the text to fix";
+    EXPECT_NEAR(box->value(), std::abs(before), kTolerance);
+    ui->key(Qt::Key_Tab);
+    ASSERT_FALSE(box->hasFocus());
+    EXPECT_NEAR(box->value(), std::abs(before), kTolerance) << "The refused text gives back the last good value";
+    EXPECT_EQ(box->text(), shown);
+    ASSERT_NE(box->parentWidget(), nullptr);
+    const QLabel* error = visibleChild(*box->parentWidget(), QStringLiteral("fieldError"));
+    ASSERT_NE(error, nullptr) << "The error stays after focus out";
+    EXPECT_TRUE(error->text().contains(QStringLiteral("q"))) << error->text().toStdString();
+    ui->save("refused on focus out");
+
+    ui->click(box);
+    ui->key(Qt::Key_Return);
+    ASSERT_FALSE(ui->state()["featurePanel"]) << ui->state().dump(2);
+    EXPECT_NEAR(extrudeData().distance, before, kTolerance);
+    EXPECT_TRUE(ui->session().document().find(kExtrude)->expressions.empty());
+}
+
+TEST_F(ParametersTest, RetypingTheSameCanonicalTextPushesNoUndoStep)
+{
+    seed({{"w", "10 mm"}, {"h", "w * 2"}});
+    app::ParametersDialog* dialog = open();
+    ASSERT_NE(dialog, nullptr);
+    commit(1, kExpression, QStringLiteral("w*2"));
+    EXPECT_TRUE(dialog->errorText().isEmpty()) << dialog->errorText().toStdString();
+    EXPECT_EQ(cell(1, kExpression), QStringLiteral("w * 2"));
+    ui->session().undo();
+    ui->settle();
+    EXPECT_TRUE(names().empty()) << "Undo takes back the seed, not an edit that changed nothing";
 }
 
 } // namespace

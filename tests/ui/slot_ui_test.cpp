@@ -4,17 +4,22 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/session/design_session.h"
+#include "core/document.h"
+#include "core/feature.h"
 #include "sketch/sketch.h"
 
 #include <QImage>
 #include <QPointF>
 #include <QRectF>
+#include <QString>
 #include <QWidget>
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cmath>
+#include <variant>
 #include <vector>
 
 namespace kalve137::uitest {
@@ -169,6 +174,30 @@ TEST_F(SlotTest, CenterPointAndOverallVariantsPlaceTheArcCenters)
         EXPECT_NEAR(std::abs(s->point(arc->points[0])->pos.x), 20.0, kTolerance) << "Ends sit at the clicked points";
         EXPECT_NEAR(arc->radius, 10.0, kTolerance);
     }
+}
+
+TEST_F(SlotTest, EndsOnFixedPointsDropTheAxisConstraint)
+{
+    startSketch(*ui, "Slot");
+    const auto id = ui->state()["sketch"].get<core::FeatureId>();
+    ui->session().edit(QStringLiteral("Points"), [&](core::Document& document) {
+        sketch::Sketch& s = std::get<core::SketchFeature>(document.find(id)->data).sketch;
+        s.addPoint({-20, 20}, true);
+        s.addPoint({20, 20}, true);
+    });
+
+    ui->trigger("Slot");
+    glide(*ui, gp_Pnt(-30, 30, 0), gp_Pnt(-20, 20, 0));
+    ui->click(gp_Pnt(-20, 20, 0));
+    glide(*ui, gp_Pnt(-20, 20, 0), gp_Pnt(20, 20, 0));
+    ui->click(gp_Pnt(20, 20, 0));
+    glide(*ui, gp_Pnt(20, 20, 0), gp_Pnt(0, 30, 0));
+    ui->click(gp_Pnt(0, 30, 0));
+    const sketch::Sketch* s = lastSketch(*ui);
+    ASSERT_NE(s, nullptr);
+    expectSlot(*s, {-20, 20}, {20, 20}, 20.0);
+    EXPECT_TRUE(std::ranges::none_of(
+        s->constraints(), [](const auto& entry) { return entry.second.kind == sketch::ConstraintKind::Horizontal; }));
 }
 
 } // namespace

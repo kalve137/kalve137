@@ -219,14 +219,16 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
     if (!wanted.any()) {
         return std::nullopt;
     }
-    const std::optional<render::IdPick> hit = m_view->pickAt(position, wanted,
-                                                             {.points = wanted.points,
-                                                              .planes = wanted.planes,
-                                                              .axes = wanted.axes,
-                                                              .markers = wanted.markers,
-                                                              .sketchLines = wanted.sketchLines,
-                                                              .sketchPoints = wanted.sketchPoints,
-                                                              .profiles = wanted.profiles});
+    const std::optional<render::IdPick> hit =
+        m_view->pickAt(position, wanted,
+                       {.points = wanted.points,
+                        .planes = wanted.planes,
+                        .axes = wanted.axes,
+                        .datumsThroughBodies = !wanted.faces && !wanted.edges && !wanted.points,
+                        .markers = wanted.markers,
+                        .sketchLines = wanted.sketchLines,
+                        .sketchPoints = wanted.sketchPoints,
+                        .profiles = wanted.profiles});
     if (!hit) {
         return std::nullopt;
     }
@@ -234,8 +236,10 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
     if (!found.overlay()) {
         found.mesh = meshOf(hit->item);
     }
-    const camera::Vec3 at = m_view->pointOf(hit->hit.x, hit->hit.y, hit->hit.depth);
-    found.point = gp_Pnt(at.x, at.y, at.z);
+    const render::DepthReach reach = found.overlay() ? render::DepthReach::PastFar : render::DepthReach::InsideFar;
+    if (const std::optional<camera::Vec3> at = m_view->pointOf(hit->hit.x, hit->hit.y, hit->hit.depth, reach)) {
+        found.point = gp_Pnt(at->x, at->y, at->z);
+    }
     if (found.sketch) {
         if (const std::optional<snapshot::Point> exact = render::sketchPointOf(m_view->sketches(), *found.sketch)) {
             found.point = gp_Pnt((*exact)[0], (*exact)[1], (*exact)[2]);

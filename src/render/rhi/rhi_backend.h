@@ -137,8 +137,10 @@ private:
         Owned<QRhiShaderResourceBindings> resetBindings;
         Owned<QRhiBuffer> pick;
         Owned<QRhiBuffer> originPick;
-        Owned<QRhiShaderResourceBindings> idBindings;
-        Owned<QRhiShaderResourceBindings> originIdBindings;
+        Owned<QRhiShaderResourceBindings> idFillBindings;
+        Owned<QRhiShaderResourceBindings> idLineBindings;
+        Owned<QRhiShaderResourceBindings> originIdFillBindings;
+        Owned<QRhiShaderResourceBindings> originIdLineBindings;
     };
     struct MarkerGpu {
         std::uint64_t revision = 0;
@@ -299,6 +301,7 @@ private:
     Owned<QRhiGraphicsPipeline> m_idSketchProfiles;
     bool m_idPlanes = false;
     bool m_idAxes = false;
+    bool m_idDatumsThroughBodies = false;
     bool m_idMarkersShown = false;
     bool m_idSketchLines = false;
     bool m_idSketchPoints = false;
@@ -311,6 +314,7 @@ private:
     bool m_biased = false;
     bool m_cornersUploaded = false;
     bool m_toldPickLimit = false;
+    bool m_annotationsFailed = false;
     std::uint64_t m_meshUploads = 0;
     std::uint64_t m_paletteUploads = 0;
 };

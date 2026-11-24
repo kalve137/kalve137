@@ -298,12 +298,10 @@ protected:
 
 TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     load(core::Document{}, false);
     const std::vector<Kind> kinds = everyKind();
     const double first = -kSpacing * static_cast<double>(kinds.size() - 1) / 2.0;
@@ -360,12 +358,10 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
 
 TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const camera::Vec3 inside{0.0, 0.0, kBlockHeight / 2.0};
     const camera::Vec3 onEdge{kBlockWidth / 2.0, -kBlockDepth / 2.0, kBlockHeight / 2.0};
     const auto aim = [&](app::MainWindow& window) { lookAcross(window, inside, kPickScale); };
@@ -430,12 +426,10 @@ TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
 
 TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const camera::Vec3 onEdge{kBlockWidth / 2.0, -kBlockDepth / 2.0, kBlockHeight / 2.0};
     core::Document document = blockDocument();
     document.add(core::PointFeature{gp_Pnt(onEdge.x, onEdge.y, onEdge.z), "Edge"});

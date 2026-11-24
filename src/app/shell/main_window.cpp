@@ -151,7 +151,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
             m_rhiView->setSketchLook(sketchLook(*m_scene));
         });
     }
-    m_sketchEditor = new SketchEditor(*m_session, m_view, m_rhiView, this);
+    m_sketchEditor = new SketchEditor(*m_session, *m_scene, m_view, m_rhiView, this);
     m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
 
     createActions();
@@ -214,10 +214,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         if (auto it = m_toolActions.find(m_sketchEditor->tool()); it != m_toolActions.end()) {
             it->second->setChecked(true);
         }
-        if (m_sketchEditor->picksModel() != m_projectPicking) {
-            m_projectPicking = m_sketchEditor->picksModel();
-            m_scene->setPickMode(m_projectPicking ? PickMode::Project : PickMode::None);
-        }
+        updatePickMode();
         updateActions();
         updateStatus();
     });
@@ -230,11 +227,15 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         m_featureFrame->setVisible(active);
         if (!active) {
             refreshScene();
+            updatePickMode();
         }
         updateActions();
     });
     connect(m_measurePanel, &MeasurePanel::activeChanged, this, [this](bool active) {
         m_measureFrame->setVisible(active);
+        if (!active) {
+            updatePickMode();
+        }
         updateActions();
     });
     connect(m_featurePanel, &FeaturePanel::message, this,

@@ -26,5 +26,6 @@ struct DragTarget {
 };
 
 SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets = {});
+SolveResult solveMoved(Sketch& sketch, const Sketch& before);
 
 } // namespace kalve137::sketch

@@ -22,8 +22,17 @@ namespace {
 
 constexpr double kDegToRad = std::numbers::pi / 180.0;
 constexpr double kQuarterTurn = std::numbers::pi / 2.0;
-constexpr double kTangentSine = 1e-6;
-constexpr std::size_t kOffsetParamsPerRef = 8;
+constexpr double kShortest = 1e-6;
+
+double dot(Vec2 a, Vec2 b)
+{
+    return a.x * b.x + a.y * b.y;
+}
+
+Vec2 directionOf(const GCS::Line& line)
+{
+    return Vec2{*line.p2.x, *line.p2.y} - Vec2{*line.p1.x, *line.p1.y};
+}
 
 struct OffsetEnd {
     std::size_t pair = 0;
@@ -32,7 +41,8 @@ struct OffsetEnd {
 
 class SolverModel {
 public:
-    SolverModel(const Sketch& sketch, bool holdOffsetSources) : m_sketch(sketch)
+    SolverModel(const Sketch& sketch, const Sketch* signs, bool holdOffsetSources)
+        : m_sketch(sketch), m_signs(signs != nullptr ? *signs : sketch)
     {
         if (holdOffsetSources) {
             for (const auto& [id, constraint] : sketch.constraints()) {
@@ -41,15 +51,6 @@ public:
                 }
             }
         }
-        std::size_t count = 2 * sketch.points().size();
-        for (const auto& [id, curve] : sketch.curves()) {
-            count += curve.kind == CurveKind::Arc ? 3 : (curve.kind == CurveKind::Circle ? 1 : 0);
-        }
-        for (const auto& [id, constraint] : sketch.constraints()) {
-            count += 2 + kOffsetParamsPerRef * (constraint.kind == ConstraintKind::Offset ? constraint.refs.size() : 0);
-        }
-        m_params.reserve(count);
-
         for (const auto& [id, point] : sketch.points()) {
             const std::size_t index = push(point.pos.x);
             push(point.pos.y);
@@ -92,6 +93,28 @@ public:
     bool isFinite() const
     {
         return std::ranges::all_of(m_params, [](double value) { return std::isfinite(value); });
+    }
+
+    bool keepsShape() const
+    {
+        const auto positive = [](const auto& entry) { return *entry.second.rad > kShortest; };
+        if (!std::ranges::all_of(m_circles, positive) || !std::ranges::all_of(m_arcs, positive)) {
+            return false;
+        }
+        for (const auto& [id, constraint] : m_sketch.constraints()) {
+            for (const OffsetPair& pair : offsetPairs(constraint)) {
+                const auto source = m_lines.find(pair.source);
+                const auto offset = m_lines.find(pair.offset);
+                if (source == m_lines.end() || offset == m_lines.end()) {
+                    continue;
+                }
+                const Vec2 along = directionOf(source->second);
+                if (dot(along, directionOf(offset->second)) <= kShortest * std::hypot(along.x, along.y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     void writeBack(Sketch& sketch) const
@@ -280,6 +303,21 @@ private:
 
     double* value(double v) { return &m_params[push(v)]; }
 
+    Vec2 signPos(Id id) const
+    {
+        if (const Point* point = m_signs.point(id)) {
+            return point->pos;
+        }
+        const std::size_t index = m_pointIndex.at(id);
+        return {m_params[index], m_params[index + 1]};
+    }
+
+    Vec2 signDirection(Id line) const
+    {
+        const Curve* curve = m_sketch.curve(line);
+        return signPos(curve->points[1]) - signPos(curve->points[0]);
+    }
+
     void addConstraint(GCS::System& sys, Id tag, const Constraint& c)
     {
         const auto ref = [&](std::size_t i) { return i < c.refs.size() ? c.refs[i] : 0; };
@@ -364,13 +402,13 @@ private:
             break;
         case ConstraintKind::HorizontalDistance:
             if (p0 && p1) {
-                const double sign = *p1->x >= *p0->x ? 1.0 : -1.0;
+                const double sign = signPos(ref(1)).x >= signPos(ref(0)).x ? 1.0 : -1.0;
                 sys.addConstraintDifference(p0->x, p1->x, value(sign * c.value), tag);
             }
             break;
         case ConstraintKind::VerticalDistance:
             if (p0 && p1) {
-                const double sign = *p1->y >= *p0->y ? 1.0 : -1.0;
+                const double sign = signPos(ref(1)).y >= signPos(ref(0)).y ? 1.0 : -1.0;
                 sys.addConstraintDifference(p0->y, p1->y, value(sign * c.value), tag);
             }
             break;
@@ -390,11 +428,9 @@ private:
             break;
         case ConstraintKind::Angle:
             if (l0 && l1) {
-                const double d0x = *l0->p2.x - *l0->p1.x;
-                const double d0y = *l0->p2.y - *l0->p1.y;
-                const double d1x = *l1->p2.x - *l1->p1.x;
-                const double d1y = *l1->p2.y - *l1->p1.y;
-                const double sign = d0x * d1y - d0y * d1x >= 0.0 ? 1.0 : -1.0;
+                const Vec2 d0 = signDirection(ref(0));
+                const Vec2 d1 = signDirection(ref(1));
+                const double sign = d0.x * d1.y - d0.y * d1.x >= 0.0 ? 1.0 : -1.0;
                 sys.addConstraintL2LAngle(*l0, *l1, value(sign * c.value * kDegToRad), tag);
             }
             break;
@@ -457,8 +493,9 @@ private:
                 anchorEnd(sys, tag, pairs[touching[0].pair], touching[0].end);
                 continue;
             }
-            if (touching.size() != 2 ||
-                !isTangentJoint(sys, pairs[touching[0].pair].offset, pairs[touching[1].pair].offset, point)) {
+            const auto joint =
+                std::ranges::find(c.joints, point, [](const OffsetJoint& stored) { return stored.point; });
+            if (touching.size() != 2 || joint == c.joints.end() || !joint->tangent) {
                 continue;
             }
             const OffsetEnd& anchor = lineRef(pairs[touching[0].pair].offset) != nullptr ? touching[1] : touching[0];
@@ -487,16 +524,6 @@ private:
                 addRoundOffset(sys, tag, pairs[i], root ? std::optional(c.value) : std::nullopt);
             }
         }
-    }
-
-    bool isTangentJoint(GCS::System& sys, Id first, Id second, Id joint)
-    {
-        GCS::Curve* a = curveRef(first);
-        GCS::Curve* b = curveRef(second);
-        if (a == nullptr || b == nullptr) {
-            return false;
-        }
-        return std::abs(std::sin(sys.calculateAngleViaPoint(*a, *b, m_points.at(joint)))) < kTangentSine;
     }
 
     void anchorEnd(GCS::System& sys, Id tag, const OffsetPair& pair, std::size_t end)
@@ -604,8 +631,9 @@ private:
     }
 
     const Sketch& m_sketch;
+    const Sketch& m_signs;
     std::set<Id> m_held;
-    std::vector<double> m_params;
+    std::deque<double> m_params;
     std::map<Id, std::size_t> m_pointIndex;
     std::map<Id, GCS::Point> m_points;
     std::map<Id, GCS::Line> m_lines;
@@ -628,9 +656,10 @@ std::vector<Id> toIds(const GCS::VEC_I& tags)
     return ids;
 }
 
-SolveResult solveOnce(Sketch& sketch, const std::vector<DragTarget>& targets, bool holdOffsetSources)
+SolveResult solveOnce(Sketch& sketch, const Sketch* signs, const std::vector<DragTarget>& targets,
+                      bool holdOffsetSources)
 {
-    SolverModel model(sketch, holdOffsetSources);
+    SolverModel model(sketch, signs, holdOffsetSources);
     GCS::System system;
     model.addConstraints(system);
     std::vector<double> goals;
@@ -653,6 +682,9 @@ SolveResult solveOnce(Sketch& sketch, const std::vector<DragTarget>& targets, bo
         if (!model.isFinite()) {
             K137_WARN(Sketch, "Solver returned non-finite values, keeping the previous positions");
             result.solved = false;
+        } else if (!model.keepsShape()) {
+            K137_DEBUG(Sketch, "Solve turned a curve inside out, keeping the previous positions");
+            result.solved = false;
         }
     }
     if (result.solved) {
@@ -672,24 +704,34 @@ SolveResult solveOnce(Sketch& sketch, const std::vector<DragTarget>& targets, bo
     return result;
 }
 
-} // namespace
-
-SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
+SolveResult solveWithSigns(Sketch& sketch, const Sketch* before, const std::vector<DragTarget>& targets)
 {
     const bool offsets = std::ranges::any_of(
         sketch.constraints(), [](const auto& entry) { return entry.second.kind == ConstraintKind::Offset; });
     if (!offsets) {
-        return solveOnce(sketch, targets, false);
+        return solveOnce(sketch, before, targets, false);
     }
     Sketch settled = sketch;
-    if (solveOnce(settled, targets, true).solved) {
-        SolveResult result = solveOnce(settled, targets, false);
+    if (solveOnce(settled, before, targets, true).solved) {
+        SolveResult result = solveOnce(settled, before, targets, false);
         if (result.solved) {
             sketch = std::move(settled);
             return result;
         }
     }
-    return solveOnce(sketch, targets, false);
+    return solveOnce(sketch, before, targets, false);
+}
+
+} // namespace
+
+SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
+{
+    return solveWithSigns(sketch, nullptr, targets);
+}
+
+SolveResult solveMoved(Sketch& sketch, const Sketch& before)
+{
+    return solveWithSigns(sketch, &before, {});
 }
 
 } // namespace kalve137::sketch

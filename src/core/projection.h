@@ -13,13 +13,9 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace kalve137::core {
-
-inline constexpr std::string_view kProjectionRefused =
-    "Only straight edges and circles parallel to the sketch project for now";
 
 enum class ProjectedShape { Point, Line, Circle, Arc };
 

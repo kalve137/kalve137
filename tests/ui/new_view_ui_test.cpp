@@ -1244,6 +1244,69 @@ TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
 
+void expectDatumPicksFollowTheCamera(render::RhiView& canvas, const std::string& api)
+{
+    constexpr double kIntoPlane = 25.0;
+    const render::PickKinds kinds{.faces = false, .edges = false, .planes = true, .axes = true};
+    const render::IdStyle style{.planes = true, .axes = true};
+    const GridHidden gridOff(canvas);
+    const snapshot::Color color{0.9F, 0.6F, 0.4F};
+    const render::Datums datums{
+        .originPlanes = {{.id = 0, .anchor = {60.0, 0.0, 0.0}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 1.0, 0.0}}},
+        .originAxes = {{.id = 0, .anchor = {60.0, -40.0, 0.0}, .direction = {0.0, 0.0, 1.0}, .color = color}},
+        .planes = {{.id = 1, .anchor = {}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 1.0, 0.0}}},
+        .axes = {{.id = 2, .anchor = {0.0, -40.0, 0.0}, .direction = {0.0, 0.0, 1.0}, .color = color}},
+        .planeColor = color};
+    canvas.setScene({.bodies = {}, .origin = {}, .hidden = {}});
+    canvas.setDatums(datums);
+    const std::array frames{obliqueAt({30.0, -15.0, 0.0}, 140.0), obliqueAt({30.0, 10.0, 0.0}, 180.0),
+                            obliqueAt({30.0, -35.0, 10.0}, 140.0)};
+    const std::array planes{
+        std::pair{snapshot::Point{}, render::DatumKey{.kind = render::DatumKind::Plane, .id = 1}},
+        std::pair{snapshot::Point{60.0, 0.0, 0.0}, render::DatumKey{.kind = render::DatumKind::OriginPlane, .id = 0}}};
+    const std::array axes{
+        std::pair{snapshot::Point{0.0, -40.0, 10.0}, render::DatumKey{.kind = render::DatumKind::Axis, .id = 2}},
+        std::pair{snapshot::Point{60.0, -40.0, 10.0},
+                  render::DatumKey{.kind = render::DatumKind::OriginAxis, .id = 0}}};
+    ASSERT_FALSE(grabbed(canvas).isNull());
+    for (std::size_t frame = 0; frame < frames.size(); ++frame) {
+        canvas.setCamera(frames.at(frame));
+        for (const auto& [anchor, key] : planes) {
+            const QPointF corner = logicalPixelOf(canvas, {anchor[0] + 1.0, anchor[1] + 1.0, anchor[2]});
+            const QPointF at = toward(logicalPixelOf(canvas, anchor), corner, kIntoPlane);
+            const std::optional<render::IdPick> pick = canvas.pickAt(at, kinds, style);
+            ASSERT_TRUE(pick.has_value()) << api << " frame " << frame << " plane " << key.id;
+            EXPECT_EQ(pick->datum, key) << api << " frame " << frame;
+        }
+        for (const auto& [point, key] : axes) {
+            const std::optional<render::IdPick> pick = canvas.pickAt(logicalPixelOf(canvas, point), kinds, style);
+            ASSERT_TRUE(pick.has_value()) << api << " frame " << frame << " axis " << key.id;
+            EXPECT_EQ(pick->datum, key) << api << " frame " << frame;
+        }
+    }
+    canvas.setDatums({});
+}
+
+TEST_F(NewViewTest, PicksPlanesAndAxesAfterTheCameraMovesOnEveryApi)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    expectDatumPicksFollowTheCamera(*canvas, "main");
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
+        }
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        expectDatumPicksFollowTheCamera(view, std::string(render::graphicsApiName(api)));
+    }
+}
+
 TEST_F(NewViewTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
 {
     render::RhiView* canvas = ui->newView();

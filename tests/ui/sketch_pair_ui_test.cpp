@@ -72,6 +72,7 @@ constexpr int kAcrossPixels = 3;
 constexpr int kCurveStep = 2;
 constexpr int kRimSteps = 48;
 constexpr double kPickMissShare = 0.015;
+constexpr int kPressPullBodyMisses = 20;
 
 const camera::Vec3 kCenter{20.0, 0.0, kBlockHeight / 2.0};
 const camera::Vec3 kTopFree{-8.0, -5.0, kBlockHeight};
@@ -305,9 +306,10 @@ protected:
 
 TEST_F(SketchPairTest, IdleCurvesDrawOnTheFaceAndTheFloorLikeTheOldView)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Design design = sketchedBlock();
     const bool colors = drawsReferenceColors(*m_old->oldView());
     std::ofstream table(m_folder / "sketch-curves.tsv");
@@ -360,9 +362,10 @@ TEST_F(SketchPairTest, IdleCurvesDrawOnTheFaceAndTheFloorLikeTheOldView)
 
 TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Design design = sketchedBlock();
     const bool colors = drawsReferenceColors(*m_old->oldView());
     load(design.document);
@@ -406,9 +409,10 @@ TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
 
 TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
     const Shots idle = grab();
@@ -446,9 +450,10 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
 
 TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     core::Document document = blockDocument();
     core::SketchFeature drawn;
     sketch::Sketch& s = drawn.sketch;
@@ -483,9 +488,10 @@ TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
 
 TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
     auto* picker = m_new->findChild<app::NewViewPicker*>();
@@ -536,9 +542,10 @@ TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
 
 TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     Design design = sketchedBlock();
     design.document.add(
         core::AxisFeature{core::AxisSource::TwoPoints, gp_Ax1(gp_Pnt(kFloorProfile.x, 0.0, 0.0), gp::DX()), "Points"});
@@ -629,19 +636,19 @@ TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
         }
         EXPECT_LE(missed, static_cast<int>(sketch * kPickMissShare))
             << name << ": " << missed << " of " << sketch << " hovers on or near a sketch differ from the old view";
-        const bool oldPicksAxesThroughUnpickableBodies = mode == app::PickMode::ProfilesAndLines;
-        if (!oldPicksAxesThroughUnpickableBodies) {
-            EXPECT_LE(bodyMissed, static_cast<int>(body * kPickMissShare))
-                << name << ": " << bodyMissed << " of " << body << " hovers on a body or axis differ from the old view";
-        }
+        const int bodyLimit =
+            mode == app::PickMode::PressPull ? kPressPullBodyMisses : static_cast<int>(body * kPickMissShare);
+        EXPECT_LE(bodyMissed, bodyLimit) << name << ": " << bodyMissed << " of " << body
+                                         << " hovers on a body or axis differ from the old view";
     }
 }
 
 TEST_F(SketchPairTest, SketchesKeepDrawingAcrossCameraMovesHereAndOnOpenGl)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
     setMode(app::PickMode::Profiles);
