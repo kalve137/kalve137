@@ -468,56 +468,74 @@ TEST_F(NewViewTest, DrawsEdgesLikeTheCpuBackend)
     canvas->setViewportStyle(original);
 }
 
+void expectHighlightsLikeTheCpuBackend(render::RhiView& canvas, const std::string& api, UiDriver& ui)
+{
+    const GridHidden gridOff(canvas);
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
+    canvas.setScene({.bodies = {box}, .origin = origin, .hidden = {}});
+    const auto item = [](render::PickKind kind, std::uint32_t index) {
+        return render::PickedItem{.feature = 1, .part = 0, .kind = kind, .index = index};
+    };
+    render::Highlight highlight{
+        .hovered = {item(render::PickKind::Face, 5)},
+        .selected = {item(render::PickKind::Face, 2), item(render::PickKind::Face, 4), item(render::PickKind::Edge, 0)},
+        .hoveredOutline = {},
+        .selectedOutline = {},
+    };
+    for (std::uint32_t edge = 0; edge < box->mesh->edgeCount; ++edge) {
+        (edge % 2 == 0 ? highlight.hoveredOutline : highlight.selectedOutline)
+            .insert(item(render::PickKind::Edge, edge));
+    }
+    const std::array frames{obliqueAt({1000.0, -1000.0, 0.0}, 50.0), obliqueAt({1004.0, -998.0, 2.0}, 70.0),
+                            obliqueAt({996.0, -1003.0, -2.0}, 40.0)};
+    const render::ViewportStyle original = canvas.viewportStyle();
+    for (const render::VisualStyle visual : {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Shaded,
+                                             render::VisualStyle::Wireframe, render::VisualStyle::VisibleEdges}) {
+        render::ViewportStyle style = original;
+        style.visualStyle = visual;
+        canvas.setViewportStyle(style);
+        for (std::size_t frame = 0; frame < frames.size(); ++frame) {
+            const std::string where = std::format("{} style {} frame {}", api, static_cast<int>(visual), frame);
+            canvas.setCamera(frames.at(frame));
+            canvas.setHighlight({});
+            const QImage plain = grabbed(canvas);
+            canvas.setHighlight(highlight);
+            const QImage gpu = grabbed(canvas);
+            const render::Image cpu = cpuOf(canvas);
+            const Comparison comparison = compare(gpu, cpu);
+            ASSERT_TRUE(comparison.sameSize) << where;
+            const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
+            EXPECT_GT(differing(plain, gpu), comparison.body / 3) << where << ": the highlight shows";
+            EXPECT_LT(comparison.different, pixels / 200)
+                << where << ": " << comparison.different << " of " << comparison.body
+                << " drawn pixels differ by more than " << kBackendTolerance;
+            ui.save("highlight " + where);
+        }
+    }
+    canvas.setHighlight({});
+    canvas.setViewportStyle(original);
+}
+
 TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
 {
     render::RhiView* canvas = ui->newView();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
-    const GridHidden gridOff(*canvas);
-    const snapshot::Point origin{1000.0, -1000.0, 0.0};
-    const auto box = render::test::shared(
-        render::test::bodyOf(render::test::edgedBox({990.0, -1010.0, -10.0}, {1010.0, -990.0, 10.0})));
-    canvas->setScene({.bodies = {box}, .origin = origin, .hidden = {}});
-    canvas->setCamera(obliqueAt({1000.0, -1000.0, 0.0}, 50.0));
-    const auto item = [](render::PickKind kind, std::uint32_t index) {
-        return render::PickedItem{.feature = 1, .part = 0, .kind = kind, .index = index};
-    };
-    const render::Highlight highlight{
-        .hovered = {item(render::PickKind::Face, 5)},
-        .selected = {item(render::PickKind::Face, 2)},
-        .hoveredOutline = {},
-        .selectedOutline = {},
-    };
-    const render::ViewportStyle original = canvas->viewportStyle();
-    for (const render::VisualStyle visual : {render::VisualStyle::ShadedWithEdges, render::VisualStyle::Shaded,
-                                             render::VisualStyle::Wireframe, render::VisualStyle::VisibleEdges}) {
-        render::ViewportStyle style = original;
-        style.visualStyle = visual;
-        canvas->setViewportStyle(style);
-        canvas->setHighlight({});
-        const QImage plain = grabbed(*canvas);
-        render::Highlight withEdges = highlight;
-        withEdges.selected.insert(item(render::PickKind::Edge, 0));
-        withEdges.selected.insert(item(render::PickKind::Face, 4));
-        for (std::uint32_t edge = 0; edge < box->mesh->edgeCount; ++edge) {
-            (edge % 2 == 0 ? withEdges.hoveredOutline : withEdges.selectedOutline)
-                .insert(item(render::PickKind::Edge, edge));
+    expectHighlightsLikeTheCpuBackend(*canvas, "main", *ui);
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
         }
-        canvas->setHighlight(withEdges);
-        const QImage gpu = grabbed(*canvas);
-        const render::Image cpu = cpuOf(*canvas);
-        const Comparison comparison = compare(gpu, cpu);
-        ASSERT_TRUE(comparison.sameSize);
-        const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-        EXPECT_GT(differing(plain, gpu), comparison.body / 3) << static_cast<int>(visual) << ": the highlight shows";
-        EXPECT_LT(comparison.different, pixels / 200)
-            << static_cast<int>(visual) << ": " << comparison.different << " of " << comparison.body
-            << " drawn pixels differ by more than " << kBackendTolerance;
-        ui->save("highlight " + std::to_string(static_cast<int>(visual)));
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        expectHighlightsLikeTheCpuBackend(view, std::string(render::graphicsApiName(api)), *ui);
     }
-    canvas->setHighlight({});
-    canvas->setViewportStyle(original);
 }
 
 std::shared_ptr<const snapshot::Body> plateAt(const snapshot::Point& center, double size)

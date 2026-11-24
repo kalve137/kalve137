@@ -149,8 +149,17 @@ bool RhiBackend::createShared()
     m_idLayout = idBindingsFor(m_layoutTexture.get(), m_uniforms.get());
     m_grid.washBindings = bindingsFor(m_layoutTexture.get());
     m_grid.lineBindings = bindingsFor(m_layoutTexture.get());
+    m_haloBindings = bindingsFor(m_layoutTexture.get());
+    m_maskBindings = bindingsFor(m_layoutTexture.get());
+    m_goldBindings = bindingsFor(m_layoutTexture.get());
+    for (Owned<QRhiShaderResourceBindings>& bindings : m_hiddenFaceBindings) {
+        bindings = bindingsFor(m_layoutTexture.get());
+    }
+    m_hiddenEdgeBindings = bindingsFor(m_layoutTexture.get());
     return m_layout != nullptr && m_idLayout != nullptr && m_grid.washBindings != nullptr &&
-           m_grid.lineBindings != nullptr;
+           m_grid.lineBindings != nullptr && m_haloBindings != nullptr && m_maskBindings != nullptr &&
+           m_goldBindings != nullptr && m_hiddenFaceBindings.at(0) != nullptr &&
+           m_hiddenFaceBindings.at(1) != nullptr && m_hiddenEdgeBindings != nullptr;
 }
 
 RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull,
@@ -865,13 +874,14 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
         buffer->drawIndexed(call.gpu->indexCount);
     }
     if (m_wireFill) {
-        drawTriangles(buffer, m_goldFill.get(), m_highlight.selectedFaces, viewport, kWireFaceWeight);
+        drawTriangles(buffer, m_goldFill.get(), m_goldBindings.get(), m_highlight.selectedFaces, viewport,
+                      kWireFaceWeight);
         if (m_postNeeded) {
-            drawTriangles(buffer, m_maskFill.get(), m_highlight.hoveredFaces, viewport, 0.0F);
+            drawTriangles(buffer, m_maskFill.get(), m_maskBindings.get(), m_highlight.hoveredFaces, viewport, 0.0F);
         }
     }
     if (m_postNeeded) {
-        drawLines(buffer, m_halo.get(), m_layout.get(), m_highlight.lines, viewport);
+        drawLines(buffer, m_halo.get(), m_haloBindings.get(), m_highlight.lines, viewport);
     }
     if (!m_edgeCalls.empty()) {
         buffer->setGraphicsPipeline(m_edges.get());
@@ -887,9 +897,10 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
     }
     drawGrid(buffer, viewport);
     if (m_hiddenPass) {
-        drawTriangles(buffer, m_hiddenFaces.at(m_biased ? 1 : 0).get(), m_highlight.selectedFaces, viewport,
-                      kHiddenFaceWeight);
-        drawLines(buffer, m_hiddenEdges.get(), m_layout.get(), m_highlight.selectedEdges, viewport);
+        const std::size_t hidden = m_biased ? 1 : 0;
+        drawTriangles(buffer, m_hiddenFaces.at(hidden).get(), m_hiddenFaceBindings.at(hidden).get(),
+                      m_highlight.selectedFaces, viewport, kHiddenFaceWeight);
+        drawLines(buffer, m_hiddenEdges.get(), m_hiddenEdgeBindings.get(), m_highlight.selectedEdges, viewport);
     }
 }
 
@@ -922,7 +933,8 @@ void RhiBackend::drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipe
     buffer->draw(kEdgeCorners, lines.count);
 }
 
-void RhiBackend::drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& triangles,
+void RhiBackend::drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline,
+                               QRhiShaderResourceBindings* bindings, const Geometry& triangles,
                                const QRhiViewport& viewport, float weight) const
 {
     if (triangles.count == 0) {
@@ -931,7 +943,7 @@ void RhiBackend::drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* 
     buffer->setGraphicsPipeline(pipeline);
     buffer->setViewport(viewport);
     buffer->setBlendConstants(QColor::fromRgbF(weight, weight, weight, weight));
-    buffer->setShaderResources(m_layout.get());
+    buffer->setShaderResources(bindings);
     const QRhiCommandBuffer::VertexInput input(triangles.buffer.get(), 0);
     buffer->setVertexInput(0, 1, &input);
     buffer->draw(triangles.count);

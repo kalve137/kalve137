@@ -151,8 +151,8 @@ private:
                     QRhiResourceUpdateBatch* updates);
     void drawLines(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
                    const Geometry& lines, const QRhiViewport& viewport) const;
-    void drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, const Geometry& triangles,
-                       const QRhiViewport& viewport, float weight) const;
+    void drawTriangles(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
+                       const Geometry& triangles, const QRhiViewport& viewport, float weight) const;
 
     QRhi* m_rhi;
     Owned<QRhiBuffer> m_uniforms;
@@ -167,6 +167,11 @@ private:
     Owned<QRhiGraphicsPipeline> m_goldFill;
     std::array<Owned<QRhiGraphicsPipeline>, 2> m_hiddenFaces;
     Owned<QRhiGraphicsPipeline> m_hiddenEdges;
+    Owned<QRhiShaderResourceBindings> m_haloBindings;
+    Owned<QRhiShaderResourceBindings> m_maskBindings;
+    Owned<QRhiShaderResourceBindings> m_goldBindings;
+    std::array<Owned<QRhiShaderResourceBindings>, 2> m_hiddenFaceBindings;
+    Owned<QRhiShaderResourceBindings> m_hiddenEdgeBindings;
     Owned<QRhiGraphicsPipeline> m_gridWash;
     Owned<QRhiGraphicsPipeline> m_gridLines;
     HighlightGpu m_highlight;
