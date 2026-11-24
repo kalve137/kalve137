@@ -1244,6 +1244,70 @@ TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
 
+TEST_F(NewViewTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const GridHidden gridOff(*canvas);
+    canvas->setScene({.bodies = {}, .origin = {}, .hidden = {}});
+    canvas->setCamera(obliqueAt({}, 60.0));
+    canvas->setSketchLook({.free = {.red = 0.2F, .green = 0.2F, .blue = 0.2F},
+                           .construction = {},
+                           .profile = {},
+                           .highlight = {.red = 0.0F, .green = 0.5F, .blue = 1.0F},
+                           .hover = {.red = 1.0F, .green = 0.5F, .blue = 0.0F},
+                           .editing = 0,
+                           .lines = true,
+                           .points = true,
+                           .profiles = false,
+                           .highlighted = {}});
+    const auto sketchAt = [](double y) {
+        snapshot::Sketch sketch;
+        sketch.feature = 9;
+        sketch.curves.push_back({.id = 2,
+                                 .kind = snapshot::SketchCurveKind::Line,
+                                 .construction = false,
+                                 .points = {{-20.0, y, 0.0}, {20.0, y, 0.0}}});
+        sketch.points.push_back({.id = 5, .point = {0.0, 15.0, 0.0}, .flags = 0});
+        return sketch;
+    };
+    canvas->setSketches({sketchAt(0.0)});
+    ASSERT_FALSE(grabbed(*canvas).isNull());
+    const render::PickKinds lines{.faces = false, .edges = false, .sketchLines = true};
+    const render::PickKinds points{.faces = false, .edges = false, .sketchPoints = true};
+    const render::SketchKey line{.item = render::SketchItem::Line, .feature = 9, .index = 2};
+    const render::SketchKey point{.item = render::SketchItem::Point, .feature = 9, .index = 5};
+    const auto picked = [&](snapshot::Point at, const render::PickKinds& kinds) -> std::optional<render::SketchKey> {
+        const std::optional<render::IdPick> pick = canvas->pickAt(
+            logicalPixelOf(*canvas, at), kinds, {.sketchLines = kinds.sketchLines, .sketchPoints = kinds.sketchPoints});
+        return pick ? pick->sketch : std::nullopt;
+    };
+
+    EXPECT_EQ(picked({0.0, 15.0, 0.0}, points), point);
+    const std::uint64_t pointPasses = canvas->idPasses();
+    canvas->setSketchMarks({.hovered = point, .selected = {}});
+    EXPECT_EQ(picked({0.0, 15.0, 0.0}, points), point) << "a hovered point recolors without moving";
+    EXPECT_EQ(canvas->idPasses(), pointPasses);
+
+    EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line);
+    const std::uint64_t passes = canvas->idPasses();
+
+    canvas->setSketchMarks({.hovered = line, .selected = {}});
+    EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line) << "picks right after a hover";
+    EXPECT_EQ(canvas->idPasses(), passes) << "a hover keeps the id pass";
+
+    canvas->setSketchMarks({.hovered = std::nullopt, .selected = {line}});
+    EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line) << "picks right after a selection";
+    EXPECT_EQ(canvas->idPasses(), passes) << "a selection keeps the id pass";
+
+    canvas->setSketches({sketchAt(-8.0)});
+    EXPECT_FALSE(picked({8.0, 0.0, 0.0}, lines)) << "an edit drops the old line from the id pass";
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "an edit makes the id pass stale";
+    EXPECT_EQ(picked({8.0, -8.0, 0.0}, lines), line) << "picks right after an edit";
+}
+
 void expectDatumPicksFollowTheCamera(render::RhiView& canvas, const std::string& api)
 {
     constexpr double kIntoPlane = 25.0;

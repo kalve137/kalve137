@@ -4,6 +4,7 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/sketch/sketch_editor.h"
+#include "app/theme/theme.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
@@ -15,8 +16,11 @@
 #include "sketch/sketch.h"
 #include "ui_test.h"
 
+#include <QColor>
 #include <QImage>
+#include <QPoint>
 #include <QPointF>
+#include <QRect>
 #include <QRectF>
 #include <QSignalSpy>
 #include <QWidget>
@@ -235,19 +239,121 @@ TEST_F(SketchInputTest, ANavigationDragOverALineSkipsTheRedrawThatAPlainMoveMake
     const gp_Pnt empty(19.0, -5.0, 0.0);
     const gp_Pnt line(19.0, -15.0, 0.0);
     ui->move(ui->at(empty));
+    const auto drawn = [&] {
+        return ui->newView() != nullptr ? ui->newView()->activeSketch() : render::ActiveSketch{};
+    };
+    const render::ActiveSketch start = drawn();
     QSignalSpy redraws(editor, &app::SketchEditor::stateChanged);
     ui->press(ui->at(empty), Qt::MiddleButton);
     ui->move(ui->at(line), Qt::MiddleButton);
     ui->release(ui->at(line), Qt::MiddleButton);
     EXPECT_EQ(redraws.count(), 0);
+    EXPECT_EQ(drawn(), start);
     ui->move(ui->at(empty));
     ui->move(ui->at(line));
-    EXPECT_GT(redraws.count(), 0);
+    if (ui->newView() != nullptr) {
+        EXPECT_NE(drawn(), start);
+    } else {
+        EXPECT_GT(redraws.count(), 0);
+    }
 }
 
 constexpr int kCameraMoves = 5;
 constexpr int kStrokeRadius = 4;
 constexpr int kStrokeChange = 24;
+constexpr int kColorSlack = 40;
+constexpr double kStrokeSlack = 1.5;
+
+bool paintsNear(UiDriver& ui, const gp_Pnt& world, const QColor& color)
+{
+    ui.settle();
+    const QImage image = ui.canvasImage().convertToFormat(QImage::Format_RGB32);
+    const double ratio = static_cast<double>(image.width()) / ui.canvas()->width();
+    const QPoint center((ui.at(world) * ratio).toPoint());
+    const QRect area =
+        QRect(center - QPoint(kStrokeRadius, kStrokeRadius), center + QPoint(kStrokeRadius, kStrokeRadius))
+            .intersected(image.rect());
+    for (int y = area.top(); y <= area.bottom(); ++y) {
+        for (int x = area.left(); x <= area.right(); ++x) {
+            const QRgb p = image.pixel(x, y);
+            if (std::abs(qRed(p) - color.red()) + std::abs(qGreen(p) - color.green()) +
+                    std::abs(qBlue(p) - color.blue()) <=
+                kColorSlack) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool drawsStroke(UiDriver& ui, const gp_Pnt& from, const gp_Pnt& to)
+{
+    const auto near = [](const snapshot::Point& p, const gp_Pnt& q) {
+        return std::hypot(p[0] - q.X(), p[1] - q.Y(), p[2] - q.Z()) < kStrokeSlack;
+    };
+    return std::ranges::any_of(ui.newView()->activeSketch().strokes, [&](const render::SketchStroke& stroke) {
+        return stroke.points.size() == 2 && ((near(stroke.points.front(), from) && near(stroke.points.back(), to)) ||
+                                             (near(stroke.points.front(), to) && near(stroke.points.back(), from)));
+    });
+}
+
+QColor hoverColor()
+{
+    return app::theme::palette().chrome.accent.lighter(130);
+}
+
+TEST_F(SketchInputTest, HoverColorsTheLineUnderTheCursorAndDropsItOnLeave)
+{
+    sketch::Vec2 label;
+    ASSERT_NE(openInputSketch(*ui, label), nullptr);
+    ui->trigger("Top");
+    ui->trigger("Fit All");
+    ui->settle(kRescaleSettleMs);
+    const gp_Pnt empty(19.0, -5.0, 0.0);
+    const gp_Pnt line(10.0, -15.0, 0.0);
+    ui->move(ui->at(empty));
+    EXPECT_FALSE(paintsNear(*ui, line, hoverColor()));
+    ui->move(ui->at(line));
+    EXPECT_TRUE(paintsNear(*ui, line, hoverColor()));
+    ui->move(ui->at(empty));
+    EXPECT_FALSE(paintsNear(*ui, line, hoverColor()));
+}
+
+TEST_F(SketchInputTest, AHoverAfterAnEditOrUndoDrawsTheSketchAsItIsNow)
+{
+    sketch::Vec2 label;
+    ASSERT_NE(openInputSketch(*ui, label), nullptr);
+    ui->trigger("Top");
+    ui->trigger("Fit All");
+    ui->settle(kRescaleSettleMs);
+    const gp_Pnt empty(19.0, -5.0, 0.0);
+    const gp_Pnt from(-20.0, 30.0, 0.0);
+    const gp_Pnt to(20.0, 30.0, 0.0);
+    const gp_Pnt middle(0.0, 30.0, 0.0);
+    ui->move(ui->at(gp_Pnt(10.0, -15.0, 0.0)));
+    ui->move(ui->at(middle));
+    EXPECT_FALSE(paintsNear(*ui, middle, hoverColor()));
+
+    ui->trigger("Line");
+    ui->click(from);
+    ui->click(to);
+    ui->key(Qt::Key_Escape);
+    ui->key(Qt::Key_Escape);
+    ui->move(ui->at(empty));
+    ui->move(ui->at(middle));
+    EXPECT_TRUE(paintsNear(*ui, middle, hoverColor()));
+    if (ui->newView() != nullptr) {
+        EXPECT_TRUE(drawsStroke(*ui, from, to));
+    }
+
+    ui->move(ui->at(empty));
+    ui->key(Qt::Key_Z, Qt::ControlModifier);
+    ui->move(ui->at(middle));
+    EXPECT_FALSE(paintsNear(*ui, middle, hoverColor()));
+    if (ui->newView() != nullptr) {
+        EXPECT_FALSE(drawsStroke(*ui, from, to));
+    }
+}
 
 bool changesAround(const QImage& before, const QImage& after, const QPointF& at, double ratio)
 {

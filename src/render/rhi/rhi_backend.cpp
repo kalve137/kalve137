@@ -950,6 +950,14 @@ bool RhiBackend::refreshSketches(const SketchDraw& sketches, QRhiResourceUpdateB
 
 bool RhiBackend::refreshActiveSketch(const ActiveSketchDraw& sketch, QRhiResourceUpdateBatch* updates)
 {
+    if (sketch.previewRevision != m_active.previewRevision) {
+        m_active.previewRevision = 0;
+        if (!uploadInto(sketch.previewLines.data(), sketch.previewLines.size_bytes(), sketch.previewLines.size(),
+                        m_active.previewLines, updates)) {
+            return false;
+        }
+        m_active.previewRevision = sketch.previewRevision;
+    }
     if (sketch.revision == m_active.revision) {
         return true;
     }
@@ -969,6 +977,7 @@ void RhiBackend::drawActiveSketch(QRhiCommandBuffer* buffer, const QRhiViewport&
 {
     drawFill(buffer, m_activeFills.get(), m_active.fillBindings.get(), m_active.profiles, viewport);
     drawLines(buffer, m_activeLines.get(), m_active.lineBindings.get(), m_active.lines, viewport);
+    drawLines(buffer, m_activeLines.get(), m_active.lineBindings.get(), m_active.previewLines, viewport);
     drawFill(buffer, m_activeFills.get(), m_active.fillBindings.get(), m_active.arrows, viewport);
 }
 

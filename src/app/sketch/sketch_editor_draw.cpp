@@ -78,22 +78,16 @@ void SketchEditor::redraw()
     if (!isActive() || feature() == nullptr) {
         if (m_newView != nullptr) {
             clearView();
+        } else {
+            m_view->redraw();
         }
-        m_view->redraw();
         return;
     }
 
     sketch::Sketch shown = m_dragPreview ? *m_dragPreview : current();
-    {
-        sketch::Sketch probe = shown;
-        m_solve = sketch::solve(probe);
-    }
-    std::set<Id> conflicted;
-    for (Id constraint : m_solve.conflicting) {
-        if (const sketch::Constraint* c = shown.constraint(constraint)) {
-            conflicted.insert(c->refs.begin(), c->refs.end());
-        }
-    }
+    const DrawCache& cache = drawCache(shown);
+    m_solve = cache.solve;
+    const std::set<Id> conflicted = cache.conflicted;
 
     if (m_newView != nullptr) {
         drawViewSketch(shown, conflicted);
@@ -384,9 +378,10 @@ void SketchEditor::redrawPreview()
     m_viewPreviewMarkers.clear();
     if (!isActive() || !m_hasCursor || feature() == nullptr) {
         if (m_newView != nullptr) {
-            publish();
+            publishPreview();
+        } else {
+            m_view->redraw();
         }
-        m_view->redraw();
         return;
     }
     const gp_Ax3 ax = plane();
@@ -674,7 +669,7 @@ void SketchEditor::redrawPreview()
     }
     placeInputs(cursor);
     if (inView) {
-        publish();
+        publishPreview();
     } else {
         m_view->redraw();
     }

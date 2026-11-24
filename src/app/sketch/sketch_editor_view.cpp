@@ -17,6 +17,7 @@
 #include "viewer/style.h"
 
 #include <TopoDS_Face.hxx>
+#include <gp_XYZ.hxx>
 
 #include <QColor>
 #include <QString>
@@ -42,20 +43,96 @@ camera::Vec3 vecOf(const snapshot::Point& point)
     return {point[0], point[1], point[2]};
 }
 
+bool sameXyz(const gp_XYZ& a, const gp_XYZ& b)
+{
+    return a.X() == b.X() && a.Y() == b.Y() && a.Z() == b.Z();
+}
+
+bool sameAxes(const gp_Ax3& a, const gp_Ax3& b)
+{
+    return sameXyz(a.Location().XYZ(), b.Location().XYZ()) && sameXyz(a.Direction().XYZ(), b.Direction().XYZ()) &&
+           sameXyz(a.XDirection().XYZ(), b.XDirection().XYZ());
+}
+
 } // namespace
+
+SketchEditor::DrawCache& SketchEditor::drawCache(const sketch::Sketch& shown)
+{
+    if (m_drawCache && m_drawCache->feature == m_sketchId && m_drawCache->sketch == shown) {
+        return *m_drawCache;
+    }
+    sketch::Sketch probe = shown;
+    sketch::SolveResult solve = sketch::solve(probe);
+    std::set<Id> conflicted;
+    for (Id constraint : solve.conflicting) {
+        if (const sketch::Constraint* c = shown.constraint(constraint)) {
+            conflicted.insert(c->refs.begin(), c->refs.end());
+        }
+    }
+    return m_drawCache.emplace(DrawCache{.sketch = shown,
+                                         .feature = m_sketchId,
+                                         .solve = std::move(solve),
+                                         .conflicted = std::move(conflicted),
+                                         .snapshot = std::nullopt,
+                                         .plane = {},
+                                         .profiles = false});
+}
+
+const SketchEditor::DrawCache* SketchEditor::shownCache(const sketch::Sketch& shown) const
+{
+    if (m_drawCache && m_drawCache->snapshot && m_drawCache->feature == m_sketchId && m_drawCache->sketch == shown) {
+        return &*m_drawCache;
+    }
+    return nullptr;
+}
+
+void SketchEditor::redrawHover()
+{
+    const sketch::Sketch& shown = m_dragPreview ? *m_dragPreview : current();
+    const DrawCache* cache = shownCache(shown);
+    if (m_newView == nullptr || m_pending || cache == nullptr) {
+        redraw();
+        return;
+    }
+    drawViewSketch(shown, cache->conflicted);
+    publish();
+}
+
+void SketchEditor::relayoutView()
+{
+    const sketch::Sketch& shown = m_dragPreview ? *m_dragPreview : current();
+    const DrawCache* cache = shownCache(shown);
+    if (m_newView == nullptr || m_pending || cache == nullptr) {
+        redraw();
+        return;
+    }
+    drawViewConstraints(shown, cache->solve);
+    publish();
+}
+
+const snapshot::Sketch& SketchEditor::cachedSnapshot(const sketch::Sketch& shown)
+{
+    DrawCache& cache = drawCache(shown);
+    const gp_Ax3 ax = plane();
+    if (!cache.snapshot || !sameAxes(cache.plane, ax) || cache.profiles != m_display.profiles) {
+        const std::vector<TopoDS_Face> faces =
+            m_display.profiles ? sketch::findProfiles(shown, ax) : std::vector<TopoDS_Face>{};
+        cache.snapshot = sketch::snapshotOf(shown, ax, faces, static_cast<int>(m_sketchId));
+        cache.plane = ax;
+        cache.profiles = m_display.profiles;
+    }
+    return *cache.snapshot;
+}
 
 void SketchEditor::drawViewSketch(const sketch::Sketch& shown, const std::set<Id>& conflicted)
 {
     const theme::Palette& colors = theme::palette();
-    const gp_Ax3 ax = plane();
-    const std::vector<TopoDS_Face> faces =
-        m_display.profiles ? sketch::findProfiles(shown, ax) : std::vector<TopoDS_Face>{};
-    snapshot::Sketch snapshot = sketch::snapshotOf(shown, ax, faces, static_cast<int>(m_sketchId));
+    const snapshot::Sketch& snapshot = cachedSnapshot(shown);
     m_viewItems = {};
-    m_viewItems.profiles = std::move(snapshot.profiles);
+    m_viewItems.profiles = snapshot.profiles;
     const snapshot::Color halo = colorOf(colors.viewport.halo);
     const std::set<Id> lost = lostProjections();
-    for (snapshot::SketchCurve& curve : snapshot.curves) {
+    for (const snapshot::SketchCurve& curve : snapshot.curves) {
         const Id id = curve.id;
         if (curve.construction && !m_display.construction && !m_selection.contains(id)) {
             continue;
@@ -79,7 +156,7 @@ void SketchEditor::drawViewSketch(const sketch::Sketch& shown, const std::set<Id
         const bool marked = m_selection.contains(id) || m_hover == id;
         m_viewItems.halos.push_back(
             {.points = curve.points, .color = halo, .width = style::kStrokeHalo, .pattern = render::kSolidPattern});
-        m_viewItems.lines.push_back({.points = std::move(curve.points),
+        m_viewItems.lines.push_back({.points = curve.points,
                                      .color = colorOf(color),
                                      .width = marked ? style::kStrokeBold : style::kStrokeRegular,
                                      .pattern = curve.construction ? render::kDashPattern : render::kSolidPattern});
@@ -118,6 +195,7 @@ void SketchEditor::drawViewConstraints(const sketch::Sketch& s, const sketch::So
     const double wpp = worldPerPixel();
     m_drawnScale = wpp;
     m_editedLabel.reset();
+    m_viewConstraints = {};
     if (!(wpp > 0.0)) {
         return;
     }
@@ -135,12 +213,12 @@ void SketchEditor::drawViewConstraints(const sketch::Sketch& s, const sketch::So
             const QColor& ink =
                 conflicting.contains(place.constraint) ? colors.chrome.conflict : colors.viewport.annotation;
             const QColor& border = m_selection.contains(place.constraint) ? colors.chrome.accent : colors.chrome.border;
-            m_viewItems.annotations.badges.push_back({.anchor = vecOf(at(place.center(wpp))),
-                                                      .offset = {},
-                                                      .icon = *icon,
-                                                      .iconColor = colorOf(ink),
-                                                      .fill = colorOf(fill),
-                                                      .border = colorOf(border)});
+            m_viewConstraints.annotations.badges.push_back({.anchor = vecOf(at(place.center(wpp))),
+                                                            .offset = {},
+                                                            .icon = *icon,
+                                                            .iconColor = colorOf(ink),
+                                                            .fill = colorOf(fill),
+                                                            .border = colorOf(border)});
         }
     }
     if (!m_display.dimensions) {
@@ -162,12 +240,12 @@ void SketchEditor::drawViewConstraints(const sketch::Sketch& s, const sketch::So
                                                          : colors.viewport.annotation;
         const snapshot::Color ink = colorOf(color);
         const auto addLine = [&](snapshot::Polyline points) {
-            m_viewItems.halos.push_back(
+            m_viewConstraints.halos.push_back(
                 {.points = points, .color = halo, .width = style::kStrokeHalo, .pattern = render::kSolidPattern});
-            m_viewItems.lines.push_back({.points = std::move(points),
-                                         .color = ink,
-                                         .width = style::kStrokeThin,
-                                         .pattern = render::kSolidPattern});
+            m_viewConstraints.lines.push_back({.points = std::move(points),
+                                               .color = ink,
+                                               .width = style::kStrokeThin,
+                                               .pattern = render::kSolidPattern});
         };
         for (const sketch::DimensionSegment& line : layout->lines) {
             addLine({at(line.from), at(line.to)});
@@ -181,13 +259,14 @@ void SketchEditor::drawViewConstraints(const sketch::Sketch& s, const sketch::So
             addLine(std::move(arc));
         }
         for (const sketch::DimensionArrow& arrow : layout->arrows) {
-            m_viewItems.arrows.push_back({.corners = {at(arrow.tip), at(arrow.left), at(arrow.right)}, .color = ink});
+            m_viewConstraints.arrows.push_back(
+                {.corners = {at(arrow.tip), at(arrow.left), at(arrow.right)}, .color = ink});
         }
         if (id == m_editingLabel) {
             m_editedLabel = labelRect(*layout);
             continue;
         }
-        m_viewItems.annotations.labels.push_back(
+        m_viewConstraints.annotations.labels.push_back(
             {.anchor = vecOf(at(layout->text)),
              .offset = {},
              .text = QString::fromStdString(layout->label).toStdU32String(),
@@ -200,9 +279,11 @@ void SketchEditor::drawViewConstraints(const sketch::Sketch& s, const sketch::So
 void SketchEditor::clearView()
 {
     m_viewItems = {};
+    m_viewConstraints = {};
     m_viewPreview.clear();
     m_viewPreviewMarkers.clear();
     publish();
+    publishPreview();
 }
 
 void SketchEditor::publish()
@@ -210,16 +291,19 @@ void SketchEditor::publish()
     render::ActiveSketch active;
     active.profiles = m_viewItems.profiles;
     active.profileColor = colorOf(theme::palette().viewport.plane, kProfileTransparency);
-    active.strokes.reserve(m_viewItems.halos.size() + m_viewItems.lines.size() + m_viewPreview.size());
-    active.strokes.insert(active.strokes.end(), m_viewItems.halos.begin(), m_viewItems.halos.end());
-    active.strokes.insert(active.strokes.end(), m_viewItems.lines.begin(), m_viewItems.lines.end());
-    active.strokes.insert(active.strokes.end(), m_viewPreview.begin(), m_viewPreview.end());
-    active.arrows = m_viewItems.arrows;
-    std::vector<render::MarkerItem> markers = m_viewItems.markers;
-    markers.insert(markers.end(), m_viewPreviewMarkers.begin(), m_viewPreviewMarkers.end());
+    for (const std::vector<render::SketchStroke>* strokes :
+         {&m_viewItems.halos, &m_viewConstraints.halos, &m_viewItems.lines, &m_viewConstraints.lines}) {
+        active.strokes.insert(active.strokes.end(), strokes->begin(), strokes->end());
+    }
+    active.arrows = m_viewConstraints.arrows;
     m_newView->setActiveSketch(std::move(active));
-    m_newView->setMarkers(std::move(markers));
-    m_newView->setAnnotations(m_viewItems.annotations);
+    m_newView->setMarkers(m_viewItems.markers);
+    m_newView->setAnnotations(m_viewConstraints.annotations);
+}
+
+void SketchEditor::publishPreview()
+{
+    m_newView->setSketchPreview({.strokes = m_viewPreview, .markers = m_viewPreviewMarkers});
 }
 
 void SketchEditor::onCameraChanged()
@@ -229,7 +313,7 @@ void SketchEditor::onCameraChanged()
     }
     const double wpp = worldPerPixel();
     if (wpp > 0.0 && (!(m_drawnScale > 0.0) || std::abs(wpp / m_drawnScale - 1.0) > kRescaleTolerance)) {
-        redraw();
+        relayoutView();
     }
 }
 

@@ -167,10 +167,10 @@ void styleNotice(QLabel& notice, GraphicsApi api, StartProblem problem)
     }
 }
 
-std::optional<camera::Box> strokeBounds(const ActiveSketch& sketch)
+std::optional<camera::Box> strokeBounds(std::span<const SketchStroke> strokes)
 {
     std::optional<camera::Box> bounds;
-    for (const SketchStroke& stroke : sketch.strokes) {
+    for (const SketchStroke& stroke : strokes) {
         for (const snapshot::Point& point : stroke.points) {
             const camera::Vec3 at{point[0], point[1], point[2]};
             bounds = unite(bounds, camera::Box{at, at});
@@ -337,7 +337,7 @@ MarkerDraw RhiView::markerDraw() const
 
 std::optional<camera::Box> RhiView::fitBounds(double emptyHalfSize) const
 {
-    return fitBox(unite(unite(m_bounds, m_sketchBounds), m_activeBounds), datumAnchors(m_datums), emptyHalfSize);
+    return fitBox(unite(unite(m_bounds, m_sketchBounds), activeBounds()), datumAnchors(m_datums), emptyHalfSize);
 }
 
 void RhiView::setSketches(std::vector<snapshot::Sketch> sketches)
@@ -384,8 +384,29 @@ void RhiView::setActiveSketch(ActiveSketch sketch)
         return;
     }
     m_activeSketch = std::move(sketch);
-    m_activeBounds = strokeBounds(m_activeSketch);
+    m_activeBounds = strokeBounds(m_activeSketch.strokes);
     refreshActiveSketch();
+}
+
+void RhiView::setSketchPreview(SketchPreview preview)
+{
+    if (preview == m_sketchPreview) {
+        return;
+    }
+    const bool markersChanged = preview.markers != m_sketchPreview.markers;
+    m_sketchPreview = std::move(preview);
+    m_previewBounds = strokeBounds(m_sketchPreview.strokes);
+    refreshPreview();
+    if (markersChanged) {
+        refreshMarkers();
+        m_idsFresh = false;
+    }
+    update();
+}
+
+std::optional<camera::Box> RhiView::activeBounds() const
+{
+    return unite(m_activeBounds, m_previewBounds);
 }
 
 ActiveSketchDraw RhiView::activeSketchDraw() const
@@ -393,7 +414,18 @@ ActiveSketchDraw RhiView::activeSketchDraw() const
     return {.revision = m_activeRevision,
             .profiles = m_activeGeometry.profiles,
             .lines = m_activeGeometry.lines,
-            .arrows = m_activeGeometry.arrows};
+            .arrows = m_activeGeometry.arrows,
+            .previewRevision = m_previewRevision,
+            .previewLines = m_previewLines};
+}
+
+void RhiView::refreshPreview()
+{
+    std::vector<DatumLine> lines = placeStrokes(m_sketchPreview.strokes, m_scene.origin);
+    if (lines != m_previewLines) {
+        m_previewLines = std::move(lines);
+        ++m_previewRevision;
+    }
 }
 
 void RhiView::refreshActiveSketch()
@@ -450,12 +482,15 @@ void RhiView::refreshSketches()
         K137_WARN(Viewer, "The new view picks only the first {} sketch items", kDatumEntries);
     }
     const bool same = geometry.drawsLike(m_sketchGeometry);
+    const bool samePicks = geometry.picksLike(m_sketchGeometry);
     m_sketchGeometry = std::move(geometry);
     if (!same) {
         ++m_sketchRevision;
     }
     refreshDatums();
-    m_idsFresh = false;
+    if (!samePicks) {
+        m_idsFresh = false;
+    }
     update();
 }
 
@@ -470,9 +505,16 @@ void RhiView::refreshDatums()
     if (!same) {
         ++m_datumRevision;
     }
+    refreshMarkers();
+}
+
+void RhiView::refreshMarkers()
+{
     std::vector<Marker> markers;
-    markers.reserve(m_datumGeometry.markers.size() + m_sketchGeometry.markers.size() + m_markers.size());
-    for (const std::vector<MarkerItem>* items : {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers}) {
+    markers.reserve(m_datumGeometry.markers.size() + m_sketchGeometry.markers.size() + m_markers.size() +
+                    m_sketchPreview.markers.size());
+    for (const std::vector<MarkerItem>* items :
+         {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers, &m_sketchPreview.markers}) {
         for (const MarkerItem& item : *items) {
             markers.push_back(placeMarker(item, m_scene.origin));
         }
@@ -490,6 +532,7 @@ void RhiView::setScene(snapshot::Scene scene)
     m_camera.fitDepth(m_bounds);
     refreshSketches();
     refreshActiveSketch();
+    refreshPreview();
     refreshAnnotations();
     updateChunks();
     emit sceneChanged();
@@ -845,7 +888,7 @@ Frame RhiView::frame() const
     Frame frame = makeFrame(m_camera, port, m_scene.origin, m_style.background);
     widenFrame(
         frame, m_camera, port, m_scene.origin,
-        unite(unite(unite(unite(m_bounds, m_grid.bounds()), m_datumGeometry.bounds), m_sketchBounds), m_activeBounds));
+        unite(unite(unite(unite(m_bounds, m_grid.bounds()), m_datumGeometry.bounds), m_sketchBounds), activeBounds()));
     return frame;
 }
 

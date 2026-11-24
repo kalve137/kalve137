@@ -209,8 +209,10 @@ struct ActiveSketchDraw {
     std::span<const OverlayVertex> profiles;
     std::span<const DatumLine> lines;
     std::span<const OverlayVertex> arrows;
+    std::uint64_t previewRevision = 0;
+    std::span<const DatumLine> previewLines;
 
-    bool empty() const { return profiles.empty() && lines.empty() && arrows.empty(); }
+    bool empty() const { return profiles.empty() && lines.empty() && arrows.empty() && previewLines.empty(); }
 };
 
 std::optional<std::array<double, 3>> planeDepth(const std::array<double, 16>& viewProjection,

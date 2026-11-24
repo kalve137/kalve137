@@ -159,9 +159,10 @@ void SketchEditor::begin(core::FeatureId sketch)
     seed();
     m_tool = Tool::Select;
     m_repick = 0;
-    m_view->setLeftButtonCaptured(true);
     if (m_newView != nullptr) {
         m_newView->setLeftButtonCaptured(true);
+    } else {
+        m_view->setLeftButtonCaptured(true);
     }
     redraw();
     emit toolChanged();
@@ -181,14 +182,16 @@ void SketchEditor::end()
     clearObjects(m_preview);
     m_sketchId = 0;
     m_before.reset();
+    m_drawCache.reset();
     m_repick = 0;
     canvas()->unsetCursor();
-    m_view->setLeftButtonCaptured(false);
     if (m_newView != nullptr) {
         clearView();
         m_newView->setLeftButtonCaptured(false);
+    } else {
+        m_view->setLeftButtonCaptured(false);
+        m_view->redraw();
     }
-    m_view->redraw();
     emit toolChanged();
 }
 
@@ -757,7 +760,7 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     const Id hoverId = hover.kind == Hit::Kind::None || ownPreview ? 0 : hover.id;
     if (hoverId != m_hover || m_pending) {
         m_hover = hoverId;
-        redraw();
+        redrawHover();
     }
     redrawPreview();
 }

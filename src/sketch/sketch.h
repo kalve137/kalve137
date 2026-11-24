@@ -14,6 +14,8 @@ namespace kalve137::sketch {
 struct Vec2 {
     double x = 0.0;
     double y = 0.0;
+
+    bool operator==(const Vec2&) const = default;
 };
 
 inline Vec2 operator+(Vec2 a, Vec2 b)
@@ -39,6 +41,8 @@ struct Point {
     Vec2 pos;
     bool fixed = false;
     bool projected = false;
+
+    bool operator==(const Point&) const = default;
 };
 
 enum class CurveKind {
@@ -54,6 +58,8 @@ struct Curve {
     bool construction = false;
     bool fixed = false;
     bool projected = false;
+
+    bool operator==(const Curve&) const = default;
 };
 
 enum class ConstraintKind {
@@ -98,6 +104,8 @@ struct Constraint {
     std::vector<int> sides;
     std::vector<OffsetJoint> joints;
     std::string expression;
+
+    bool operator==(const Constraint&) const = default;
 };
 
 struct OffsetPair {
@@ -148,6 +156,8 @@ public:
     std::optional<Vec2> midpoint(Id line) const;
 
     Id nextId() const { return m_nextId; }
+
+    bool operator==(const Sketch&) const = default;
 
 private:
     Id takeId();

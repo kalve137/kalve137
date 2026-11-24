@@ -13,6 +13,7 @@
 #include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "sketch/solver.h"
+#include "snapshot/sketch.h"
 
 #include <AIS_InteractiveObject.hxx>
 #include <gp_Ax3.hxx>
@@ -164,9 +165,24 @@ private:
         snapshot::SketchProfiles profiles;
         std::vector<render::SketchStroke> halos;
         std::vector<render::SketchStroke> lines;
-        std::vector<render::SketchTriangle> arrows;
         std::vector<render::MarkerItem> markers;
+    };
+
+    struct ConstraintItems {
+        std::vector<render::SketchStroke> halos;
+        std::vector<render::SketchStroke> lines;
+        std::vector<render::SketchTriangle> arrows;
         render::Annotations annotations;
+    };
+
+    struct DrawCache {
+        sketch::Sketch sketch;
+        core::FeatureId feature = 0;
+        sketch::SolveResult solve;
+        std::set<sketch::Id> conflicted;
+        std::optional<snapshot::Sketch> snapshot;
+        gp_Ax3 plane;
+        bool profiles = false;
     };
 
     struct PendingDimension {
@@ -284,8 +300,14 @@ private:
     void drawConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
     void drawViewSketch(const sketch::Sketch& sketch, const std::set<sketch::Id>& conflicted);
     void drawViewConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
+    DrawCache& drawCache(const sketch::Sketch& shown);
+    const snapshot::Sketch& cachedSnapshot(const sketch::Sketch& shown);
+    const DrawCache* shownCache(const sketch::Sketch& shown) const;
+    void redrawHover();
+    void relayoutView();
     void clearView();
     void publish();
+    void publishPreview();
     void onCameraChanged();
     void show(const Handle(AIS_InteractiveObject)& object, std::vector<Handle(AIS_InteractiveObject)>& into,
               bool selectable);
@@ -299,6 +321,7 @@ private:
     core::FeatureId m_sketchId = 0;
     Tool m_tool = Tool::Select;
     sketch::SolveResult m_solve;
+    std::optional<DrawCache> m_drawCache;
     double m_drawnScale = 0.0;
     QTimer* m_rescale = nullptr;
     Display m_display;
@@ -362,6 +385,7 @@ private:
     std::vector<Handle(AIS_InteractiveObject)> m_preview;
     std::map<const AIS_InteractiveObject*, sketch::Id> m_constraintObjects;
     ViewItems m_viewItems;
+    ConstraintItems m_viewConstraints;
     std::vector<render::SketchStroke> m_viewPreview;
     std::vector<render::MarkerItem> m_viewPreviewMarkers;
 };

@@ -183,16 +183,7 @@ ActiveGeometry placeActiveSketch(const ActiveSketch& sketch, const snapshot::Poi
                 {.position = relativePosition(profiles.vertices[at], origin), .color = profileColor});
         }
     }
-    for (const SketchStroke& stroke : sketch.strokes) {
-        const VertexColor color = vertexColor(stroke.color);
-        for (std::size_t i = 1; i < stroke.points.size(); ++i) {
-            geometry.lines.push_back({.start = relativePosition(stroke.points[i - 1], origin),
-                                      .end = relativePosition(stroke.points[i], origin),
-                                      .color = color,
-                                      .width = static_cast<float>(stroke.width),
-                                      .pattern = static_cast<float>(stroke.pattern)});
-        }
-    }
+    geometry.lines = placeStrokes(sketch.strokes, origin);
     for (const SketchTriangle& arrow : sketch.arrows) {
         const VertexColor color = vertexColor(arrow.color);
         for (const snapshot::Point& corner : arrow.corners) {
@@ -200,6 +191,22 @@ ActiveGeometry placeActiveSketch(const ActiveSketch& sketch, const snapshot::Poi
         }
     }
     return geometry;
+}
+
+std::vector<DatumLine> placeStrokes(std::span<const SketchStroke> strokes, const snapshot::Point& origin)
+{
+    std::vector<DatumLine> lines;
+    for (const SketchStroke& stroke : strokes) {
+        const VertexColor color = vertexColor(stroke.color);
+        for (std::size_t i = 1; i < stroke.points.size(); ++i) {
+            lines.push_back({.start = relativePosition(stroke.points[i - 1], origin),
+                             .end = relativePosition(stroke.points[i], origin),
+                             .color = color,
+                             .width = static_cast<float>(stroke.width),
+                             .pattern = static_cast<float>(stroke.pattern)});
+        }
+    }
+    return lines;
 }
 
 std::optional<SketchKey> sketchAt(const SketchGeometry& geometry, std::uint32_t entry)

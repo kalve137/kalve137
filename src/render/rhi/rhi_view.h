@@ -93,6 +93,8 @@ public:
     SketchDraw sketchDraw() const;
     void setActiveSketch(ActiveSketch sketch);
     const ActiveSketch& activeSketch() const { return m_activeSketch; }
+    void setSketchPreview(SketchPreview preview);
+    const SketchPreview& sketchPreview() const { return m_sketchPreview; }
     ActiveSketchDraw activeSketchDraw() const;
     void setAnnotations(Annotations annotations);
     const Annotations& annotations() const { return m_annotations; }
@@ -156,6 +158,9 @@ private:
 
     void updateChunks();
     void refreshDatums();
+    void refreshMarkers();
+    void refreshPreview();
+    std::optional<camera::Box> activeBounds() const;
     void refreshSketches();
     void refreshAnnotations();
     void refreshActiveSketch();
@@ -179,6 +184,10 @@ private:
     std::optional<camera::Box> m_activeBounds;
     ActiveGeometry m_activeGeometry;
     std::uint64_t m_activeRevision = 0;
+    SketchPreview m_sketchPreview;
+    std::optional<camera::Box> m_previewBounds;
+    std::vector<DatumLine> m_previewLines;
+    std::uint64_t m_previewRevision = 0;
     camera::Camera m_camera;
     GridOverlay m_grid;
     Datums m_datums;
