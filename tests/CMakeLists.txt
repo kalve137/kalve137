@@ -117,6 +117,7 @@ add_executable(kalve137_uitests
     ui/select_ui_test.cpp
     ui/sketch_input_ui_test.cpp
     ui/sketch_move_ui_test.cpp
+    ui/slot_ui_test.cpp
     ui/scenario.h
     ui/screen_ui_test.cpp
     ui/shading_pair_ui_test.cpp
@@ -174,6 +175,7 @@ set(new_view_sketch
     SelectTest.SketchWindowTakesTheWholeRectangle
     SelectTest.SketchCrossingTakesWhatItTouches
     SketchMoveTest.*
+    SlotTest.*
     WorkflowTest.*
 )
 list(JOIN new_view_sketch ":" new_view_sketch_filter)

@@ -282,6 +282,24 @@ QString SketchEditor::hint() const
     case Tool::Polygon:
         return m_first ? tr("Click a corner, or type the diameter, Tab, the number of sides and Enter")
                        : tr("Click the center");
+    case Tool::Slot:
+        if (!m_first) {
+            return tr("Click the first arc center");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click the second arc center, or type the length, Tab, the width and Enter");
+    case Tool::CenterSlot:
+        if (!m_first) {
+            return tr("Click the slot center");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click an arc center, or type the length, Tab, the width and Enter");
+    case Tool::OverallSlot:
+        if (!m_first) {
+            return tr("Click one end of the slot");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click the other end, or type the length, Tab, the width and Enter");
     case Tool::ArcThrough:
         if (!m_first) {
             return tr("Click the start point");
@@ -405,6 +423,9 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
         return true;
     case Tool::Select:
@@ -502,6 +523,11 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         break;
     case Tool::Polygon:
         clickPolygon(snapAt(*p));
+        break;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        clickSlot(snapAt(*p));
         break;
     case Tool::ArcThrough:
         clickArcThrough(snapAt(*p));
@@ -611,6 +637,9 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
         m_cursorSnap = snapAt(*p);
         break;

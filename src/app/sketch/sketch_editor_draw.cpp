@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -515,6 +516,29 @@ void SketchEditor::redrawPreview()
             for (std::size_t i = 0; i < corners.size(); ++i) {
                 addSegment(corners[i], corners[(i + 1) % corners.size()]);
             }
+        }
+        break;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        if (m_first) {
+            const Vec2 end = m_second ? m_second->pos : draftSlotEnd(cursor);
+            const double width = m_second ? draftSlotWidth(cursor) : heldPositive(1).value_or(0.0);
+            const std::optional<std::pair<Vec2, Vec2>> centers = width > 1e-9 ? slotCenters(end, width) : std::nullopt;
+            if (!centers) {
+                addSegment(m_tool == Tool::CenterSlot ? m_first->pos * 2.0 - end : m_first->pos, end);
+                break;
+            }
+            const auto [a, b] = *centers;
+            const double r = width / 2.0;
+            const Vec2 dir = normalized(b - a);
+            const Vec2 across = Vec2{-dir.y, dir.x} * r;
+            const double up = angleOf(across);
+            addSegment(a, b);
+            addSegment(a + across, b + across);
+            addSegment(b - across, a - across);
+            addArc(gp_Circ(gp_Ax2(world(b), ax.Direction(), ax.XDirection()), r), b, up - std::numbers::pi, up);
+            addArc(gp_Circ(gp_Ax2(world(a), ax.Direction(), ax.XDirection()), r), a, up, up + std::numbers::pi);
         }
         break;
     case Tool::ArcThrough:

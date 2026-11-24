@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <functional>
 #include <numbers>
+#include <optional>
 
 namespace kalve137::app::sketch_editor_detail {
 
@@ -97,6 +98,18 @@ inline double angleOf(Vec2 v)
 inline bool angleInArc(double angle, double start, double end)
 {
     return wrapAngle(angle - start) <= wrapAngle(end - start);
+}
+
+inline std::optional<ConstraintKind> autoAxisOf(Vec2 delta)
+{
+    const double degrees = std::abs(std::atan2(delta.y, delta.x)) * 180.0 / std::numbers::pi;
+    if (degrees < kAutoAxisDegrees || degrees > 180.0 - kAutoAxisDegrees) {
+        return ConstraintKind::Horizontal;
+    }
+    if (std::abs(degrees - 90.0) < kAutoAxisDegrees) {
+        return ConstraintKind::Vertical;
+    }
+    return std::nullopt;
 }
 
 inline QString formatValue(double value)

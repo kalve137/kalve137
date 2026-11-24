@@ -205,6 +205,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/body.svg
         ${asset_dir}/icons/camera.svg
         ${asset_dir}/icons/center_rectangle.svg
+        ${asset_dir}/icons/center_slot.svg
         ${asset_dir}/icons/chamfer.svg
         ${asset_dir}/icons/circle.svg
         ${asset_dir}/icons/coincident.svg
@@ -234,6 +235,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/move.svg
         ${asset_dir}/icons/offset_plane.svg
         ${asset_dir}/icons/origin.svg
+        ${asset_dir}/icons/overall_slot.svg
         ${asset_dir}/icons/parallel.svg
         ${asset_dir}/icons/pattern.svg
         ${asset_dir}/icons/perpendicular.svg
@@ -260,6 +262,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/shell.svg
         ${asset_dir}/icons/show_grid.svg
         ${asset_dir}/icons/sketch_fillet.svg
+        ${asset_dir}/icons/slot.svg
         ${asset_dir}/icons/snap_grid.svg
         ${asset_dir}/icons/symmetric.svg
         ${asset_dir}/icons/tangent.svg

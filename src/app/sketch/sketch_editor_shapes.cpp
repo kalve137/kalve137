@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace kalve137::app {
@@ -150,6 +151,109 @@ void SketchEditor::clickPolygon(Snap snap)
     };
     if (commit(tr("Polygon"), withDimensionsIfSolvable(build, m_solve.redundant.size()))) {
         m_polygonSides = sides;
+        resetProgress();
+    }
+}
+
+Vec2 SketchEditor::draftSlotEnd(Vec2 cursor) const
+{
+    const std::optional<double> length = heldPositive(0);
+    if (!m_first || !length) {
+        return cursor;
+    }
+    const Vec2 a = m_first->pos;
+    const Vec2 dir = sketch::distance(a, cursor) > 1e-9 ? normalized(cursor - a) : Vec2{1.0, 0.0};
+    return a + dir * (m_tool == Tool::CenterSlot ? *length / 2.0 : *length);
+}
+
+double SketchEditor::draftSlotWidth(Vec2 cursor) const
+{
+    if (const std::optional<double> width = heldPositive(1)) {
+        return *width;
+    }
+    if (!m_first || !m_second) {
+        return 0.0;
+    }
+    const Vec2 a = m_first->pos;
+    const Vec2 dir = normalized(m_second->pos - a);
+    return 2.0 * std::abs((cursor.x - a.x) * dir.y - (cursor.y - a.y) * dir.x);
+}
+
+std::optional<std::pair<Vec2, Vec2>> SketchEditor::slotCenters(Vec2 end, double width) const
+{
+    if (!m_first) {
+        return std::nullopt;
+    }
+    const Vec2 a = m_first->pos;
+    std::pair<Vec2, Vec2> centers{a, end};
+    if (m_tool == Tool::CenterSlot) {
+        centers.first = a * 2.0 - end;
+    } else if (m_tool == Tool::OverallSlot) {
+        const double length = sketch::distance(a, end);
+        if (length <= width) {
+            return std::nullopt;
+        }
+        const Vec2 inset = (end - a) * (width / 2.0 / length);
+        centers = {a + inset, end - inset};
+    }
+    if (sketch::distance(centers.first, centers.second) < 1e-9) {
+        return std::nullopt;
+    }
+    return centers;
+}
+
+void SketchEditor::clickSlot(Snap snap)
+{
+    if (!m_first) {
+        m_first = snap;
+        openInputs();
+        return;
+    }
+    if (!m_second) {
+        if (heldPositive(0)) {
+            snap = Snap{draftSlotEnd(snap.pos)};
+        }
+        if (sketch::distance(m_first->pos, snap.pos) < tolerance() * 0.5) {
+            return;
+        }
+        m_second = snap;
+        if (!heldPositive(1)) {
+            return;
+        }
+    }
+    const double width = draftSlotWidth(snap.pos);
+    if (width < tolerance() * 0.5) {
+        return;
+    }
+    const std::optional<std::pair<Vec2, Vec2>> centers = slotCenters(m_second->pos, width);
+    if (!centers) {
+        emit message(tr("The slot has to be longer than it is wide"));
+        return;
+    }
+    const std::optional<double> length = heldPositive(0);
+    const double centerLength = m_tool == Tool::OverallSlot && length ? *length - width : length.value_or(0.0);
+    const auto build = [&](bool dimensions) {
+        sketch::Sketch candidate = current();
+        const Id start = m_tool == Tool::Slot ? placePoint(candidate, *m_first) : candidate.addPoint(centers->first);
+        const Id end =
+            m_tool == Tool::OverallSlot ? candidate.addPoint(centers->second) : placePoint(candidate, *m_second);
+        const sketch::Slot slot = sketch::addSlot(candidate, start, end, width);
+        if (const std::optional<ConstraintKind> axis = autoAxisOf(centers->second - centers->first)) {
+            candidate.addConstraint(*axis, {slot.centerLine});
+        }
+        if (m_tool == Tool::CenterSlot) {
+            candidate.addConstraint(ConstraintKind::Midpoint, {placePoint(candidate, *m_first), slot.centerLine});
+        }
+        if (dimensions) {
+            candidate.addConstraint(ConstraintKind::Distance,
+                                    {candidate.curve(slot.sides[0])->points[0], slot.sides[1]}, width);
+            if (centerLength > 0.0) {
+                candidate.addConstraint(ConstraintKind::Distance, {slot.centerLine}, centerLength);
+            }
+        }
+        return candidate;
+    };
+    if (commit(tr("Slot"), withDimensionsIfSolvable(build, m_solve.redundant.size()))) {
         resetProgress();
     }
 }
