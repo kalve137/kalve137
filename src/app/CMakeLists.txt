@@ -149,8 +149,18 @@ if(GIT_FOUND)
     endif()
 endif()
 
+set(KALVE137_VERSION_BASE "" CACHE STRING "Override base semver for nightly builds")
+set(KALVE137_VERSION_SUFFIX "" CACHE STRING "Extra text appended for nightly builds")
+if(NOT KALVE137_VERSION_BASE STREQUAL "")
+    set(kalve137_version "${KALVE137_VERSION_BASE}${KALVE137_VERSION_SUFFIX}")
+elseif(NOT KALVE137_VERSION_SUFFIX STREQUAL "")
+    set(kalve137_version "${PROJECT_VERSION}${KALVE137_VERSION_SUFFIX}")
+else()
+    set(kalve137_version "${PROJECT_VERSION}")
+endif()
+
 target_compile_definitions(kalve137_app PUBLIC
-    KALVE137_VERSION="${PROJECT_VERSION}"
+    KALVE137_VERSION="${kalve137_version}"
     KALVE137_GIT_HASH="${kalve137_git_hash}"
     KALVE137_BUILD_TYPE="$<CONFIG>"
 )
