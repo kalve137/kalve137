@@ -32,6 +32,8 @@ const char* iconName(BadgeIcon icon)
     switch (icon) {
     case BadgeIcon::Coincident:
         return "coincident";
+    case BadgeIcon::Concentric:
+        return "concentric";
     case BadgeIcon::Equal:
         return "equal";
     case BadgeIcon::Horizontal:
@@ -40,6 +42,8 @@ const char* iconName(BadgeIcon icon)
         return "lock";
     case BadgeIcon::Midpoint:
         return "midpoint";
+    case BadgeIcon::Offset:
+        return "sketch_offset";
     case BadgeIcon::Parallel:
         return "parallel";
     case BadgeIcon::Perpendicular:

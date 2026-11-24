@@ -5,6 +5,8 @@
 
 #include "ui_driver.h"
 
+#include "sketch/sketch.h"
+
 #include <gp_Pnt.hxx>
 
 #include <QString>
@@ -23,5 +25,9 @@ void block(UiDriver& ui);
 void homeView(UiDriver& ui);
 double volume(const UiDriver& ui, std::size_t body = 0);
 int faces(const UiDriver& ui, std::size_t body = 0);
+void glide(UiDriver& ui, const gp_Pnt& from, const gp_Pnt& to);
+void startSketch(UiDriver& ui, const QString& tool);
+const sketch::Sketch* lastSketch(const UiDriver& ui);
+void editDimension(UiDriver& ui, sketch::Id id, const QString& value);
 
 } // namespace kalve137::uitest

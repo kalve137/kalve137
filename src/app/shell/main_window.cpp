@@ -408,6 +408,7 @@ void MainWindow::createActions()
         {SketchEditor::Tool::Trim, "trim", tr("Trim"), QKeySequence(Qt::Key_T)},
         {SketchEditor::Tool::Fillet, "sketch_fillet", tr("Fillet"), {}},
         {SketchEditor::Tool::Mirror, "mirror", tr("Mirror"), QKeySequence(Qt::Key_M)},
+        {SketchEditor::Tool::Offset, "sketch_offset", tr("Offset"), QKeySequence(Qt::Key_O)},
         {SketchEditor::Tool::Dimension, "dimension", tr("Dimension"), QKeySequence(Qt::Key_D)},
         {SketchEditor::Tool::Coincident, "coincident", tr("Coincident"), {}},
         {SketchEditor::Tool::Horizontal, "horizontal", tr("Horizontal"), {}},
@@ -607,6 +608,7 @@ void MainWindow::createToolBars()
     add(SketchEditor::Tool::Trim);
     add(SketchEditor::Tool::Fillet);
     add(SketchEditor::Tool::Mirror);
+    add(SketchEditor::Tool::Offset);
     m_sketchBar->addSeparator();
     add(SketchEditor::Tool::Dimension);
     m_sketchBar->addSeparator();

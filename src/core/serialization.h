@@ -13,7 +13,7 @@
 
 namespace kalve137::core {
 
-inline constexpr int kDesignFormatVersion = 7;
+inline constexpr int kDesignFormatVersion = 8;
 inline constexpr const char* kDesignExtension = ".k137";
 
 std::string toJson(const Document& document, ShapeStore& shapes);

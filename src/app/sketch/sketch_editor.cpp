@@ -18,6 +18,7 @@
 #include "sketch/dimension.h"
 #include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
+#include "sketch/offset.h"
 #include "sketch/profiles.h"
 #include "sketch/select.h"
 #include "viewer/box_band.h"
@@ -183,7 +184,8 @@ void SketchEditor::setTool(Tool tool)
     } else {
         canvas()->unsetCursor();
     }
-    if (tool != Tool::Select && tool != Tool::Mirror) {
+    m_offsetChain.clear();
+    if (tool != Tool::Select && tool != Tool::Mirror && tool != Tool::Offset) {
         m_selection.clear();
         redraw();
     }
@@ -324,6 +326,11 @@ QString SketchEditor::hint() const
         }
         return m_selection.empty() ? tr("Click the mirror line")
                                    : tr("Click the mirror line to mirror the selected curves");
+    case Tool::Offset:
+        return m_offsetChain.empty()
+                   ? tr("Click a curve to offset it with the curves joined to it")
+                   : tr("Type the distance and Enter, move the cursor to the other side or type a negative "
+                        "distance to flip");
     case Tool::Dimension:
         return m_pending ? tr("Click to place the dimension, Esc to cancel")
                          : tr("Click a line, circle, arc or two points, then click to place");
@@ -432,6 +439,7 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -544,6 +552,9 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
     case Tool::Mirror:
         clickMirror(*p);
         break;
+    case Tool::Offset:
+        clickOffset(pos, *p);
+        break;
     case Tool::Dimension:
         clickDimension(pos, hitAt(pos));
         break;
@@ -600,7 +611,7 @@ void SketchEditor::onRelease(QPointF pos)
 
 void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
 {
-    if (!isActive() || feature() == nullptr) {
+    if (!isActive() || feature() == nullptr || (buttons & ~Qt::MouseButtons(Qt::LeftButton)) != Qt::NoButton) {
         return;
     }
     if (m_boxStart && (buttons & Qt::LeftButton) && (m_boxing || viewer::isBoxDrag(*m_boxStart, pos))) {
@@ -647,6 +658,7 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -661,6 +673,16 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Fix:
         m_cursorSnap = Snap{*p};
         break;
+    }
+
+    if (m_tool == Tool::Offset && !m_offsetChain.empty()) {
+        if (const std::optional<sketch::Chain> chain = sketch::orderChain(current(), m_offsetChain)) {
+            const int side = sketch::offsetSide(current(), *chain, *p);
+            if (side != 0 && side != m_offsetSide) {
+                m_offsetSide = side;
+                previewValue(m_valueEditor->text());
+            }
+        }
     }
 
     if (m_tool == Tool::Arc && m_first && m_second) {
@@ -937,6 +959,7 @@ void SketchEditor::previewValue(const QString& text)
 
 void SketchEditor::closeValueEditor()
 {
+    m_offsetChain.clear();
     m_valueApply = nullptr;
     m_valuePreview = nullptr;
     const bool labelHidden = std::exchange(m_editingLabel, 0) != 0;

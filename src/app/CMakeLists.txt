@@ -262,6 +262,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/shell.svg
         ${asset_dir}/icons/show_grid.svg
         ${asset_dir}/icons/sketch_fillet.svg
+        ${asset_dir}/icons/sketch_offset.svg
         ${asset_dir}/icons/slot.svg
         ${asset_dir}/icons/snap_grid.svg
         ${asset_dir}/icons/symmetric.svg

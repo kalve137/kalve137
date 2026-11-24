@@ -8,6 +8,7 @@
 #include "core/undo_stack.h"
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
+#include "sketch/offset.h"
 
 #include <gtest/gtest.h>
 
@@ -17,6 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -144,6 +146,15 @@ std::vector<Step> everyKindSteps()
         doc.add(AxisFeature{AxisSource::TwoPoints, gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), "Points"});
     });
     steps.emplace_back([](Document& doc) { doc.add(PointFeature{gp_Pnt(1, 2, 3), "Point"}); });
+    steps.emplace_back([](Document& doc) {
+        SketchFeature data = rectangle(0, 40, 20, 50);
+        std::vector<sketch::Id> sides;
+        for (const auto& [id, curve] : data.sketch.curves()) {
+            sides.push_back(id);
+        }
+        sketch::addOffset(data.sketch, sides, 2.0);
+        doc.add(std::move(data));
+    });
     return steps;
 }
 
@@ -159,6 +170,7 @@ Document everyKind()
 std::vector<double> volumes(const Model& model)
 {
     std::vector<double> result;
+    result.reserve(model.bodies.size());
     for (const Body& body : model.bodies) {
         result.push_back(geometry::volume(body.shape));
     }
@@ -710,4 +722,25 @@ TEST(Sweep, VersionSixFixtureStillLoads)
         EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
     }
     expectSameVolumes(model, recompute(everyKind()));
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsOffset)
+{
+    const auto fixture = kFixtures / "every-kind-v8.k137";
+    ASSERT_TRUE(std::filesystem::exists(fixture)) << fixture;
+    ShapeStore shapes;
+    const std::string text = readFile(fixture);
+    ASSERT_EQ(nlohmann::json::parse(text)["version"], 8);
+    const Document loaded = fromJson(text, shapes);
+    const Model model = recompute(loaded);
+    for (const Feature& feature : loaded.features()) {
+        EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
+    }
+    expectSameVolumes(model, recompute(everyKind()));
+    const sketch::Sketch& s = std::get<SketchFeature>(loaded.features().back().data).sketch;
+    const auto offset = std::ranges::find(s.constraints(), sketch::ConstraintKind::Offset,
+                                          [](const auto& entry) { return entry.second.kind; });
+    ASSERT_NE(offset, s.constraints().end());
+    EXPECT_EQ(sketch::offsetPairs(offset->second).size(), 4U);
+    EXPECT_DOUBLE_EQ(offset->second.value, 2.0);
 }

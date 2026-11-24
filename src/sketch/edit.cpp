@@ -308,12 +308,14 @@ void dropLengthConstraints(Sketch& sketch, Id curve)
         case ConstraintKind::Diameter:
         case ConstraintKind::Angle:
         case ConstraintKind::Symmetric:
+        case ConstraintKind::Offset:
             break;
         }
     }
     for (Id id : stale) {
         sketch.remove(id);
     }
+    sketch.dropOffsetPairs(curve);
 }
 
 void dropIfUnused(Sketch& sketch, Id point)
@@ -411,6 +413,7 @@ std::optional<Sketch> trim(const Sketch& sketch, Id curve, Vec2 pick)
         out.remove(curve);
         return out;
     }
+    out.dropOffsetPairs(curve);
     const Curve original = *out.curve(curve);
     const std::optional<Id> low = split.low ? std::optional(endAt(out, *split.low)) : std::nullopt;
     const std::optional<Id> high = split.high ? std::optional(endAt(out, *split.high)) : std::nullopt;

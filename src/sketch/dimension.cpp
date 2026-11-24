@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
+#include <vector>
 
 namespace kalve137::sketch {
 
@@ -60,6 +62,57 @@ std::optional<Vec2> corner(const Sketch& sketch, Id first, Id second)
     return l1->first + da * ((gap.x * db.y - gap.y * db.x) / cross);
 }
 
+std::optional<Vec2> roundDirection(const Sketch& sketch, const Curve& curve)
+{
+    if (curve.kind == CurveKind::Circle) {
+        return Vec2{0.0, 1.0};
+    }
+    const Point* center = sketch.point(curve.points[0]);
+    const Point* start = sketch.point(curve.points[1]);
+    const Point* end = sketch.point(curve.points[2]);
+    if (center == nullptr || start == nullptr || end == nullptr) {
+        return std::nullopt;
+    }
+    const double first = std::atan2(start->pos.y - center->pos.y, start->pos.x - center->pos.x);
+    const double last = std::atan2(end->pos.y - center->pos.y, end->pos.x - center->pos.x);
+    double sweep = last - first;
+    if (sweep <= 0.0) {
+        sweep += 2.0 * std::numbers::pi;
+    }
+    const double middle = first + sweep / 2.0;
+    return Vec2{std::cos(middle), std::sin(middle)};
+}
+
+std::optional<std::pair<Vec2, Vec2>> offsetEnds(const Sketch& sketch, const Constraint& constraint)
+{
+    const std::vector<OffsetPair> pairs = offsetPairs(constraint);
+    if (pairs.empty()) {
+        return std::nullopt;
+    }
+    const Curve* source = sketch.curve(pairs.front().source);
+    const Curve* offset = sketch.curve(pairs.front().offset);
+    if (source == nullptr || offset == nullptr || source->kind != offset->kind) {
+        return std::nullopt;
+    }
+    if (source->kind == CurveKind::Line) {
+        const auto from = lineEnds(sketch, pairs.front().source);
+        const auto to = lineEnds(sketch, pairs.front().offset);
+        if (!from || !to) {
+            return std::nullopt;
+        }
+        const Vec2 middle = (from->first + from->second) * 0.5;
+        const std::optional<Vec2> foot = footOnLine(middle, to->first, to->second);
+        return foot ? std::optional(std::pair{middle, *foot}) : std::nullopt;
+    }
+    const std::optional<Vec2> direction = roundDirection(sketch, *source);
+    const std::optional<Vec2> sourceCenter = pointOf(sketch, source->points[0]);
+    const std::optional<Vec2> offsetCenter = pointOf(sketch, offset->points[0]);
+    if (!direction || !sourceCenter || !offsetCenter) {
+        return std::nullopt;
+    }
+    return std::pair{*sourceCenter + *direction * source->radius, *offsetCenter + *direction * offset->radius};
+}
+
 } // namespace
 
 std::optional<std::pair<Vec2, Vec2>> measuredPoints(const Sketch& sketch, const Constraint& constraint)
@@ -95,6 +148,8 @@ std::optional<std::pair<Vec2, Vec2>> measuredPoints(const Sketch& sketch, const 
         const std::optional<Vec2> b = pointOf(sketch, constraint.refs[1]);
         return a && b ? std::optional(std::pair{*a, *b}) : std::nullopt;
     }
+    case ConstraintKind::Offset:
+        return offsetEnds(sketch, constraint);
     case ConstraintKind::Coincident:
     case ConstraintKind::Horizontal:
     case ConstraintKind::Vertical:
@@ -118,7 +173,8 @@ std::optional<Vec2> dimensionAnchor(const Sketch& sketch, const Constraint& cons
     switch (constraint.kind) {
     case ConstraintKind::Distance:
     case ConstraintKind::HorizontalDistance:
-    case ConstraintKind::VerticalDistance: {
+    case ConstraintKind::VerticalDistance:
+    case ConstraintKind::Offset: {
         const auto ends = measuredPoints(sketch, constraint);
         return ends ? std::optional((ends->first + ends->second) * 0.5) : std::nullopt;
     }

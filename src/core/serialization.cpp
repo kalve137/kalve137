@@ -81,6 +81,9 @@ json sketchToJson(const sketch::Sketch& s)
         if (c.labelOffset) {
             constraint["label"] = {c.labelOffset->x, c.labelOffset->y};
         }
+        if (c.kind == sketch::ConstraintKind::Offset) {
+            constraint["sides"] = c.sides;
+        }
         constraints.push_back(std::move(constraint));
     }
     return {{"points", points}, {"curves", curves}, {"constraints", constraints}};
@@ -116,6 +119,7 @@ sketch::Sketch sketchFrom(const json& j)
             const auto xy = label->get<std::array<double, 2>>();
             constraint.labelOffset = sketch::Vec2{xy[0], xy[1]};
         }
+        constraint.sides = c.value("sides", std::vector<int>());
         s.insertConstraint(c.at("id").get<int>(), std::move(constraint));
     }
     if (const std::optional<std::string> problem = sketch::validate(s)) {

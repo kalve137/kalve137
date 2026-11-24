@@ -167,6 +167,8 @@ inline QString glyphFor(ConstraintKind kind)
         return QStringLiteral("midpoint");
     case ConstraintKind::Symmetric:
         return QStringLiteral("symmetric");
+    case ConstraintKind::Offset:
+        return QStringLiteral("sketch_offset");
     case ConstraintKind::Coincident:
     case ConstraintKind::Distance:
     case ConstraintKind::HorizontalDistance:

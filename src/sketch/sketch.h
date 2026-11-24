@@ -71,6 +71,7 @@ enum class ConstraintKind {
     Diameter,
     Angle,
     Symmetric,
+    Offset,
 };
 
 std::string_view toString(ConstraintKind kind);
@@ -85,7 +86,17 @@ struct Constraint {
     std::vector<Id> refs;
     double value = 0.0;
     std::optional<Vec2> labelOffset;
+    std::vector<int> sides;
 };
+
+struct OffsetPair {
+    Id source = 0;
+    Id offset = 0;
+    int side = 1;
+};
+
+std::vector<OffsetPair> offsetPairs(const Constraint& constraint);
+Constraint offsetConstraint(const std::vector<OffsetPair>& pairs, double distance);
 
 class Sketch {
 public:
@@ -98,6 +109,7 @@ public:
     Id addConstraint(ConstraintKind kind, std::vector<Id> refs, double value = 0.0);
 
     void remove(Id id);
+    void dropOffsetPairs(Id curve);
 
     void insertPoint(Id id, Point point);
     void insertCurve(Id id, Curve curve);

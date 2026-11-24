@@ -161,6 +161,63 @@ TEST(PickId, APointBeatsAnEdgeAndAnEdgeBeatsAFaceThenTheNearestWins)
     EXPECT_EQ(hit->y, 4) << "the nearest pixel of the edge, straight across";
 }
 
+TEST(PickId, AnEdgeBehindTheFaceUnderTheCursorOrPastARoundReachLeavesTheFace)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    const std::uint32_t face = encodePickId(0, PickKind::Face, 1);
+    const std::uint32_t edge = encodePickId(0, PickKind::Edge, 2);
+    image.ids.assign(81, face);
+    image.depths.assign(81, 0.5F);
+    const auto pick = [&] {
+        const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kFacesAndEdges);
+        return hit ? hit->id : 0U;
+    };
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(6, y)] = edge;
+        image.depths[image.indexOf(6, y)] = 0.6F;
+    }
+    EXPECT_EQ(pick(), face) << "the edge lies behind the face under the cursor";
+    for (int y = 0; y < 9; ++y) {
+        image.depths[image.indexOf(6, y)] = 0.4F;
+    }
+    EXPECT_EQ(pick(), edge);
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(6, y)] = face;
+    }
+    image.ids[image.indexOf(8, 7)] = edge;
+    image.depths[image.indexOf(8, 7)] = 0.4F;
+    EXPECT_EQ(pick(), face) << "five pixels off is in the square but past the round reach";
+    image.ids[image.indexOf(4, 4)] = 0U;
+    EXPECT_EQ(pick(), edge) << "off the body the whole square reaches";
+}
+
+TEST(PickId, AnAxisReachesThreePixelsOffABodyAndTwoOverAFace)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, 0U);
+    image.depths.assign(81, 0.5F);
+    const std::uint32_t axis = encodePickId(kDatumChunk, PickKind::Edge, 1);
+    const std::uint32_t face = encodePickId(0, PickKind::Face, 2);
+    const PickKinds kinds{.faces = true, .edges = true, .points = false, .axes = true};
+    const auto pick = [&] {
+        const std::optional<IdHit> hit =
+            resolvePick(image, 4, 4, kPickTolerance, kinds, kDatumPickTolerance, kAxisPickTolerance);
+        return hit ? hit->id : 0U;
+    };
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(7, y)] = axis;
+    }
+    EXPECT_EQ(pick(), axis);
+    image.ids[image.indexOf(4, 4)] = face;
+    EXPECT_EQ(pick(), face) << "over a face the axis keeps the datum reach";
+    image.ids[image.indexOf(4, 4)] = 0U;
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(7, y)] = 0U;
+        image.ids[image.indexOf(8, y)] = axis;
+    }
+    EXPECT_EQ(pick(), 0U) << "four pixels off is past the axis reach";
+}
+
 TEST(PickId, PlanesAndAxesReachLessAndTheOriginGroupComesFirst)
 {
     IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
@@ -299,7 +356,8 @@ TEST(PickId, AProfileWinsWithinReachUnlessItPicksOnlyUnderTheCursor)
     }
     const PickKinds kinds{.faces = true, .edges = true, .profiles = true};
     const auto pick = [&](int x, std::span<const std::uint32_t> exact) {
-        const std::optional<IdHit> hit = resolvePick(image, x, 4, kPickTolerance, kinds, kDatumPickTolerance, exact);
+        const std::optional<IdHit> hit =
+            resolvePick(image, x, 4, kPickTolerance, kinds, kDatumPickTolerance, kAxisPickTolerance, exact);
         return hit ? hit->id : 0U;
     };
     const std::array exact{profile};

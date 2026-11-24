@@ -534,7 +534,7 @@ TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
     }
 }
 
-TEST_F(SketchPairTest, ProfilePicksFollowTheOldViewAcrossAGridOfPixels)
+TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
 {
     if (!start()) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
@@ -599,6 +599,8 @@ TEST_F(SketchPairTest, ProfilePicksFollowTheOldViewAcrossAGridOfPixels)
         std::map<std::pair<std::string, std::string>, int> counts;
         int sketch = 0;
         int missed = 0;
+        int body = 0;
+        int bodyMissed = 0;
         for (const QPointF& at : probes) {
             m_old->oldView()->detectAt(at);
             picker->hoverAt(at);
@@ -606,23 +608,32 @@ TEST_F(SketchPairTest, ProfilePicksFollowTheOldViewAcrossAGridOfPixels)
             const std::string fresh = describe(picker->hovered());
             ++counts[{familyOf(old), familyOf(fresh)}];
             const bool involved = isSketch(old) || isSketch(fresh);
+            const bool bodyInvolved = !involved && (old != "none" || fresh != "none");
             sketch += involved ? 1 : 0;
-            if (old == fresh || !involved) {
+            body += bodyInvolved ? 1 : 0;
+            if (old == fresh) {
                 continue;
             }
             const bool nearby = oldPicksNear(at, fresh);
             record << name << '\t' << at.x() << '\t' << at.y() << '\t' << old << '\t' << fresh << '\t' << nearby
                    << '\n';
-            missed += nearby ? 0 : 1;
+            missed += involved && !nearby ? 1 : 0;
+            bodyMissed += bodyInvolved && !nearby ? 1 : 0;
         }
         for (const auto& [pair, count] : counts) {
             summary << name << '\t' << pair.first << '\t' << pair.second << '\t' << count << '\n';
         }
+        summary << name << "\tbody misses\t" << bodyMissed << '\t' << body << '\n';
         if (mode != app::PickMode::Faces) {
             EXPECT_GT(sketch, 0) << name;
         }
         EXPECT_LE(missed, static_cast<int>(sketch * kPickMissShare))
             << name << ": " << missed << " of " << sketch << " hovers on or near a sketch differ from the old view";
+        const bool oldPicksAxesThroughUnpickableBodies = mode == app::PickMode::ProfilesAndLines;
+        if (!oldPicksAxesThroughUnpickableBodies) {
+            EXPECT_LE(bodyMissed, static_cast<int>(body * kPickMissShare))
+                << name << ": " << bodyMissed << " of " << body << " hovers on a body or axis differ from the old view";
+        }
     }
 }
 

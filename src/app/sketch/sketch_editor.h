@@ -67,6 +67,7 @@ public:
         Trim,
         Fillet,
         Mirror,
+        Offset,
         Dimension,
         Coincident,
         Horizontal,
@@ -224,6 +225,7 @@ private:
     void clickTrim(sketch::Vec2 pos);
     void clickFillet(QPointF screen, sketch::Vec2 pos);
     void clickMirror(sketch::Vec2 pos);
+    void clickOffset(QPointF screen, sketch::Vec2 pos);
     void clickDimension(QPointF pos, const Hit& hit);
     void clickConstraint(const Hit& hit);
     void clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers);
@@ -294,6 +296,9 @@ private:
     double m_filletRadius = 2.0;
     int m_polygonSides = 6;
     sketch::Id m_mirrorAxis = 0;
+    std::vector<sketch::Id> m_offsetChain;
+    int m_offsetSide = 1;
+    double m_offsetDistance = 2.0;
     std::vector<Hit> m_picks;
     std::optional<PendingDimension> m_pending;
 

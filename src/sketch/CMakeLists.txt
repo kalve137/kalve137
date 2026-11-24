@@ -12,6 +12,8 @@ add_library(kalve137_sketch STATIC
     draft.h
     edit.cpp
     edit.h
+    offset.cpp
+    offset.h
     profiles.cpp
     profiles.h
     select.cpp

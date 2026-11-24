@@ -17,12 +17,14 @@ namespace {
 
 constexpr std::array<std::pair<const char*, render::BadgeIcon>, render::kBadgeIcons.size()> kIconNames{{
     {"coincident", render::BadgeIcon::Coincident},
+    {"concentric", render::BadgeIcon::Concentric},
     {"equal", render::BadgeIcon::Equal},
     {"horizontal", render::BadgeIcon::Horizontal},
     {"lock", render::BadgeIcon::Lock},
     {"midpoint", render::BadgeIcon::Midpoint},
     {"parallel", render::BadgeIcon::Parallel},
     {"perpendicular", render::BadgeIcon::Perpendicular},
+    {"sketch_offset", render::BadgeIcon::Offset},
     {"symmetric", render::BadgeIcon::Symmetric},
     {"tangent", render::BadgeIcon::Tangent},
     {"vertical", render::BadgeIcon::Vertical},
