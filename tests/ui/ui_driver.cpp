@@ -10,6 +10,8 @@
 #include "app/sketch/sketch_editor.h"
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
+#include "app/view/pick.h"
+#include "app/view/pick_source.h"
 #include "camera/camera.h"
 #include "core/recompute.h"
 #include "geometry/shapes.h"
@@ -59,6 +61,7 @@
 #include <fstream>
 #include <mutex>
 #include <numbers>
+#include <optional>
 #include <ranges>
 #include <string_view>
 
@@ -534,17 +537,20 @@ QPointF UiDriver::originPlane(core::OriginPlane plane)
 {
     const gp_Dir normal = core::originPlane(plane).Direction();
     const QPointF origin = at(gp::Origin());
-    if (m_view == nullptr) {
-        ADD_FAILURE() << "The new view doesn't pick origin planes yet";
-        return origin;
-    }
+    const auto hovers = [&] {
+        if (m_view != nullptr) {
+            return m_view->gridPlane().Direction().IsParallel(normal, kParallelTolerance) &&
+                   m_view->aisContext()->HasDetected();
+        }
+        const std::optional<app::Pick> hovered = m_window->picks()->hovered();
+        return hovered && hovered->kind == app::Pick::Kind::OriginPlane && hovered->plane == plane;
+    };
     for (int radius = kPlaneSearchStep; radius <= kOriginPlanePixels; radius += kPlaneSearchStep) {
         for (int step = 0; step < kPlaneSearchDirections; ++step) {
             const double angle = 2.0 * std::numbers::pi * step / kPlaneSearchDirections;
             const QPointF candidate = origin + QPointF(std::cos(angle), std::sin(angle)) * radius;
             move(candidate);
-            if (m_view->gridPlane().Direction().IsParallel(normal, kParallelTolerance) &&
-                m_view->aisContext()->HasDetected()) {
+            if (hovers()) {
                 return candidate;
             }
         }

@@ -29,6 +29,11 @@ int priorityOf(PickKind kind)
     return 0;
 }
 
+bool isProfile(const PickId& pick)
+{
+    return pick.chunk == kSketchChunk && pick.kind == PickKind::Face;
+}
+
 } // namespace
 
 bool PickKinds::has(PickKind kind) const
@@ -52,6 +57,22 @@ bool PickKinds::allows(std::uint32_t id) const
     if (pick.chunk < kBodyChunks) {
         return has(pick.kind);
     }
+    if (pick.chunk == kSketchChunk) {
+        switch (pick.kind) {
+        case PickKind::None:
+            return false;
+        case PickKind::Face:
+            return profiles;
+        case PickKind::Edge:
+            return sketchLines;
+        case PickKind::Point:
+            return sketchPoints;
+        }
+        return false;
+    }
+    if (pick.chunk == kMarkerChunk) {
+        return markers && pick.kind != PickKind::None;
+    }
     return pick.kind == PickKind::Edge ? axes : pick.kind != PickKind::None && planes;
 }
 
@@ -68,10 +89,10 @@ PickId decodePickId(std::uint32_t id)
 }
 
 std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
-                                 int datumRadius)
+                                 int datumRadius, std::span<const std::uint32_t> exactIds)
 {
     std::optional<IdHit> best;
-    std::tuple<int, int, int> bestRank{};
+    std::tuple<int, int, int, int> bestRank{};
     for (int row = std::max(0, y - radius); row <= std::min(image.height - 1, y + radius); ++row) {
         for (int column = std::max(0, x - radius); column <= std::min(image.width - 1, x + radius); ++column) {
             const std::uint32_t id = image.idAt(column, row);
@@ -81,11 +102,14 @@ std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius,
             const PickId pick = decodePickId(id);
             const int dx = column - x;
             const int dy = row - y;
-            if (pick.chunk >= kBodyChunks && std::max(std::abs(dx), std::abs(dy)) > datumRadius) {
+            if (pick.chunk >= kMarkerChunk && std::max(std::abs(dx), std::abs(dy)) > datumRadius) {
                 continue;
             }
-            const std::tuple<int, int, int> rank{pick.chunk == kOriginChunk ? 0 : 1, -priorityOf(pick.kind),
-                                                 (dx * dx) + (dy * dy)};
+            if ((dx != 0 || dy != 0) && std::ranges::find(exactIds, id) != exactIds.end()) {
+                continue;
+            }
+            const std::tuple<int, int, int, int> rank{pick.chunk == kOriginChunk ? 0 : 1, isProfile(pick) ? 0 : 1,
+                                                      -priorityOf(pick.kind), (dx * dx) + (dy * dy)};
             if (!best || rank < bestRank) {
                 best = IdHit{.id = id, .x = column, .y = row, .depth = image.depthAt(column, row)};
                 bestRank = rank;

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 
 namespace kalve137::render {
 namespace {
@@ -189,6 +190,123 @@ TEST(PickId, PlanesAndAxesReachLessAndTheOriginGroupComesFirst)
     put(2, 2, originPlane);
     EXPECT_EQ(pick(planes), originPlane) << "the origin group wins over nearer items";
     EXPECT_EQ(pick(axes), axis) << "origin planes pick only where planes are wanted";
+}
+
+TEST(PickId, MarkersPickOnlyWhereWantedAndBeatEdges)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, encodePickId(0, PickKind::Face, 1));
+    image.depths.assign(81, 0.5F);
+    const std::uint32_t edge = encodePickId(0, PickKind::Edge, 3);
+    const std::uint32_t marker = encodePickId(kMarkerChunk, PickKind::Point, 0);
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(4, y)] = edge;
+    }
+    image.ids[image.indexOf(5, 5)] = marker;
+    const PickKinds bodies{.faces = true, .edges = true, .points = true};
+    PickKinds withMarkers = bodies;
+    withMarkers.markers = true;
+    const auto pick = [&](const PickKinds& kinds) {
+        const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kinds, kDatumPickTolerance);
+        return hit ? hit->id : 0U;
+    };
+    EXPECT_EQ(pick(bodies), edge) << "markers pick only where markers are wanted";
+    EXPECT_EQ(pick(withMarkers), marker) << "a point marker beats the edge under the cursor";
+    EXPECT_FALSE(withMarkers.allows(encodePickId(kMarkerChunk, PickKind::None, 0)));
+    EXPECT_TRUE(withMarkers.any());
+    EXPECT_TRUE((PickKinds{.faces = false, .edges = false, .markers = true}).any());
+}
+
+TEST(PickId, SketchItemsPickOnlyWhereWantedWithTheFullReach)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, encodePickId(0, PickKind::Face, 1));
+    image.depths.assign(81, 0.5F);
+    const std::uint32_t profile = encodePickId(kSketchChunk, PickKind::Face, 2);
+    const std::uint32_t line = encodePickId(kSketchChunk, PickKind::Edge, 3);
+    const std::uint32_t point = encodePickId(kSketchChunk, PickKind::Point, 4);
+    const auto pick = [&](const PickKinds& kinds) {
+        const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kinds, kDatumPickTolerance);
+        return hit ? hit->id : 0U;
+    };
+    image.ids[image.indexOf(4, 4)] = profile;
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(7, y)] = line;
+    }
+    const PickKinds faces{.faces = true, .edges = false, .points = false};
+    PickKinds profiles = faces;
+    profiles.profiles = true;
+    PickKinds lines = faces;
+    lines.sketchLines = true;
+    EXPECT_EQ(pick(faces), encodePickId(0, PickKind::Face, 1)) << "profiles pick only where profiles are wanted";
+    EXPECT_EQ(pick(profiles), profile);
+    EXPECT_EQ(pick(lines), line) << "a sketch line three pixels off is in reach";
+    image.ids[image.indexOf(1, 1)] = point;
+    PickKinds points = lines;
+    points.sketchPoints = true;
+    EXPECT_EQ(pick(points), point) << "a sketch point beats the line";
+    EXPECT_FALSE(points.allows(encodePickId(kSketchChunk, PickKind::None, 0)));
+    EXPECT_FALSE(faces.allows(line));
+    EXPECT_TRUE((PickKinds{.faces = false, .edges = false, .profiles = true}).any());
+    EXPECT_LT(kSketchChunk, kMarkerChunk);
+    EXPECT_EQ(kBodyChunks, kSketchChunk);
+}
+
+TEST(PickId, AProfileBeatsTheSketchLineOnItsBorder)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, 0U);
+    image.depths.assign(81, 0.5F);
+    const std::uint32_t profile = encodePickId(kSketchChunk, PickKind::Face, 2);
+    const std::uint32_t line = encodePickId(kSketchChunk, PickKind::Edge, 3);
+    const std::uint32_t edge = encodePickId(0, PickKind::Edge, 4);
+    for (int y = 0; y < 9; ++y) {
+        for (int x = 0; x < 5; ++x) {
+            image.ids[image.indexOf(x, y)] = profile;
+        }
+        image.ids[image.indexOf(4, y)] = line;
+    }
+    const auto pick = [&](const PickKinds& kinds) {
+        const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kinds, kDatumPickTolerance);
+        return hit ? hit->id : 0U;
+    };
+    const PickKinds profilesAndLines{.faces = false, .edges = false, .sketchLines = true, .profiles = true};
+    PickKinds lines = profilesAndLines;
+    lines.profiles = false;
+    EXPECT_EQ(pick(profilesAndLines), profile) << "the line under the cursor sits on the profile's border";
+    EXPECT_EQ(pick(lines), line);
+    for (int y = 0; y < 9; ++y) {
+        image.ids[image.indexOf(4, y)] = edge;
+    }
+    lines.edges = true;
+    image.ids[image.indexOf(7, 4)] = line;
+    EXPECT_EQ(pick(lines), edge) << "a body edge and a sketch line still go to the nearest";
+}
+
+TEST(PickId, AProfileWinsWithinReachUnlessItPicksOnlyUnderTheCursor)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, 0U);
+    image.depths.assign(81, 0.5F);
+    const std::uint32_t profile = encodePickId(kSketchChunk, PickKind::Face, 2);
+    const std::uint32_t edge = encodePickId(0, PickKind::Edge, 4);
+    const std::uint32_t face = encodePickId(0, PickKind::Face, 5);
+    for (int y = 0; y < 9; ++y) {
+        for (int x = 0; x < 9; ++x) {
+            image.ids[image.indexOf(x, y)] = x < 3 ? profile : face;
+        }
+        image.ids[image.indexOf(4, y)] = edge;
+    }
+    const PickKinds kinds{.faces = true, .edges = true, .profiles = true};
+    const auto pick = [&](int x, std::span<const std::uint32_t> exact) {
+        const std::optional<IdHit> hit = resolvePick(image, x, 4, kPickTolerance, kinds, kDatumPickTolerance, exact);
+        return hit ? hit->id : 0U;
+    };
+    const std::array exact{profile};
+    EXPECT_EQ(pick(4, {}), profile) << "a profile in reach beats a body edge under the cursor";
+    EXPECT_EQ(pick(4, exact), edge);
+    EXPECT_EQ(pick(3, exact), edge);
+    EXPECT_EQ(pick(2, exact), profile);
 }
 
 TEST(CpuIds, PickAnEdgeFromThreePixelsAway)

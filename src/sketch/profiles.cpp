@@ -3,21 +3,30 @@
 
 #include "sketch/profiles.h"
 
+#include "snapshot/chord.h"
+
 #include <BOPAlgo_Tools.hxx>
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Circ.hxx>
+#include <gp_Trsf.hxx>
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
+#include <utility>
 
 namespace kalve137::sketch {
 
@@ -25,7 +34,18 @@ namespace {
 
 constexpr double kMinLength = 1e-7;
 
+bool isDisk(const TopoDS_Face& face)
+{
+    TopExp_Explorer edges(face, TopAbs_EDGE);
+    if (!edges.More()) {
+        return false;
+    }
+    const TopoDS_Edge edge = TopoDS::Edge(edges.Current());
+    edges.Next();
+    return !edges.More() && BRep_Tool::IsClosed(edge) && BRepAdaptor_Curve(edge).GetType() == GeomAbs_Circle;
 }
+
+} // namespace
 
 gp_Pnt toWorld(const gp_Ax3& plane, Vec2 p)
 {
@@ -156,6 +176,66 @@ std::optional<std::size_t> profileAt(const std::vector<TopoDS_Face>& profiles, c
         }
     }
     return std::nullopt;
+}
+
+Placement placementOf(const gp_Ax3& plane)
+{
+    const auto point = [](const gp_XYZ& xyz) { return snapshot::Point{xyz.X(), xyz.Y(), xyz.Z()}; };
+    return {.origin = point(plane.Location().XYZ()),
+            .x = point(plane.XDirection().XYZ()),
+            .y = point(plane.YDirection().XYZ())};
+}
+
+snapshot::SketchProfiles profileTriangles(const std::vector<TopoDS_Face>& profiles, double deflection)
+{
+    snapshot::SketchProfiles result;
+    result.count = static_cast<std::uint32_t>(profiles.size());
+    if (!(deflection > 0.0)) {
+        return result;
+    }
+    for (std::size_t index = 0; index < profiles.size(); ++index) {
+        const TopoDS_Face& face = profiles[index];
+        if (isDisk(face)) {
+            result.disks.push_back(static_cast<std::uint32_t>(index));
+        }
+        if (!BRepTools::Triangulation(face, deflection)) {
+            const BRepMesh_IncrementalMesh mesher(face, deflection, false, snapshot::kDeviationAngle, false);
+        }
+        TopLoc_Location location;
+        const Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
+        if (triangulation.IsNull()) {
+            continue;
+        }
+        const gp_Trsf placement = location.Transformation();
+        const auto base = static_cast<std::uint32_t>(result.vertices.size());
+        for (int i = 1; i <= triangulation->NbNodes(); ++i) {
+            const gp_XYZ node = triangulation->Node(i).Transformed(placement).XYZ();
+            result.vertices.push_back({node.X(), node.Y(), node.Z()});
+        }
+        const bool flipped = (face.Orientation() == TopAbs_REVERSED) != placement.IsNegative();
+        for (int i = 1; i <= triangulation->NbTriangles(); ++i) {
+            int a = 0;
+            int b = 0;
+            int c = 0;
+            triangulation->Triangle(i).Get(a, b, c);
+            if (flipped) {
+                std::swap(b, c);
+            }
+            result.triangles.push_back({base + static_cast<std::uint32_t>(a - 1),
+                                        base + static_cast<std::uint32_t>(b - 1),
+                                        base + static_cast<std::uint32_t>(c - 1)});
+            result.profiles.push_back(static_cast<std::uint32_t>(index));
+        }
+    }
+    return result;
+}
+
+snapshot::Sketch snapshotOf(const Sketch& sketch, const gp_Ax3& plane, const std::vector<TopoDS_Face>& profiles,
+                            int feature)
+{
+    snapshot::Sketch result = snapshotOf(sketch, placementOf(plane), feature);
+    result.profiles = profileTriangles(profiles, curveDeflection(sketch));
+    return result;
 }
 
 } // namespace kalve137::sketch

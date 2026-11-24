@@ -3,17 +3,22 @@
 
 #include "app/sketch/sketch_editor.h"
 
+#include "app/sketch/badge_placement.h"
 #include "app/sketch/constraint_badge.h"
 #include "app/sketch/dimension_label.h"
 #include "app/sketch/sketch_editor_detail.h"
+#include "app/sketch/sketch_view_items.h"
 #include "app/theme/fonts.h"
 #include "app/theme/theme.h"
 
+#include "render/style.h"
 #include "sketch/build.h"
 #include "sketch/dimension.h"
 #include "sketch/draft.h"
 #include "sketch/edit.h"
 #include "sketch/profiles.h"
+#include "sketch/snapshot.h"
+#include "snapshot/mesh.h"
 #include "viewer/occt_view_widget.h"
 #include "viewer/style.h"
 
@@ -32,8 +37,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
+#include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace kalve137::app {
@@ -69,6 +75,9 @@ void SketchEditor::redraw()
     clearObjects(m_objects);
     m_constraintObjects.clear();
     if (!isActive() || feature() == nullptr) {
+        if (m_newView != nullptr) {
+            clearView();
+        }
         m_view->redraw();
         return;
     }
@@ -85,6 +94,30 @@ void SketchEditor::redraw()
         }
     }
 
+    if (m_newView != nullptr) {
+        drawViewSketch(shown, conflicted);
+    } else {
+        drawSketch(shown, conflicted);
+    }
+
+    const std::optional<sketch::Constraint> pending =
+        m_hasCursor ? pendingConstraint(m_cursor) : std::optional<sketch::Constraint>();
+    if (pending) {
+        const Id id = shown.addConstraint(pending->kind, pending->refs, pending->value);
+        shown.constraint(id)->labelOffset = pending->labelOffset;
+    }
+    if (m_newView != nullptr) {
+        drawViewConstraints(shown, m_solve);
+        publish();
+    } else {
+        drawConstraints(shown, m_solve);
+        m_view->redraw();
+    }
+    emit stateChanged();
+}
+
+void SketchEditor::drawSketch(const sketch::Sketch& shown, const std::set<Id>& conflicted)
+{
     const gp_Ax3 ax = plane();
     if (m_display.profiles) {
         for (const TopoDS_Face& profile : sketch::findProfiles(shown, ax)) {
@@ -149,39 +182,22 @@ void SketchEditor::redraw()
             Aspect_TOM_BALL, occt(color), m_hover == id ? style::kMarkerMedium : style::kMarkerSmall));
         show(object, m_objects, false);
     }
-
-    const std::optional<sketch::Constraint> pending =
-        m_hasCursor ? pendingConstraint(m_cursor) : std::optional<sketch::Constraint>();
-    if (pending) {
-        const Id id = shown.addConstraint(pending->kind, pending->refs, pending->value);
-        shown.constraint(id)->labelOffset = pending->labelOffset;
-    }
-    drawConstraints(shown, m_solve);
-    m_view->redraw();
-    emit stateChanged();
 }
 
 void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveResult& solve)
 {
     const gp_Ax3 ax = plane();
     const gp_Pln pln(ax);
-    const double wpp = m_view->worldPerPixel();
+    const double wpp = worldPerPixel();
     m_drawnScale = wpp;
-    const double textScale = m_view->devicePixelRatioF();
+    const double textScale = canvas()->devicePixelRatioF();
     m_editedLabel.reset();
     const std::set<Id> conflicting(solve.conflicting.begin(), solve.conflicting.end());
-    std::map<Id, int> glyphCount;
 
-    Vec2 lowest{std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
-    Vec2 highest{std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
-    for (const auto& [id, point] : s.points()) {
-        lowest = {std::min(lowest.x, point.pos.x), std::min(lowest.y, point.pos.y)};
-        highest = {std::max(highest.x, point.pos.x), std::max(highest.y, point.pos.y)};
-    }
-    const Vec2 center = (lowest + highest) * 0.5;
+    const Vec2 middle = sketch::dimensionMiddle(s);
     const auto outwardFlyout = [&](Vec2 first, Vec2 second, Vec2 measured) {
         const Vec2 side{-measured.y, measured.x};
-        const double sign = dot(side, (first + second) * 0.5 - center) < 0.0 ? -1.0 : 1.0;
+        const double sign = dot(side, (first + second) * 0.5 - middle) < 0.0 ? -1.0 : 1.0;
         return sign * wpp * kDimensionFlyoutPixels;
     };
 
@@ -191,81 +207,23 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
         }
         return conflicting.contains(id) ? theme::palette().chrome.conflictText : theme::palette().viewport.annotation;
     };
-    const auto placeGlyph = [&](Id constraint, Vec2 at, const QString& icon) {
-        if (!m_display.constraints) {
-            return;
-        }
-        const QColor color =
-            conflicting.contains(constraint) ? theme::palette().chrome.conflict : theme::palette().viewport.annotation;
+    const std::vector<BadgePlace> badges = m_display.constraints ? placeBadges(s) : std::vector<BadgePlace>{};
+    auto nextBadge = badges.begin();
+    const auto showBadge = [&](const BadgePlace& place) {
+        const QColor color = conflicting.contains(place.constraint) ? theme::palette().chrome.conflict
+                                                                    : theme::palette().viewport.annotation;
         Handle(AIS_InteractiveObject) badge =
-            makeConstraintBadge(sketch::toWorld(ax, at), icon, color, m_selection.contains(constraint), textScale);
+            makeConstraintBadge(sketch::toWorld(ax, place.center(wpp)), place.icon, color,
+                                m_selection.contains(place.constraint), textScale);
         show(badge, m_objects, true);
         m_view->aisContext()->SetSelectionSensitivity(badge, 0,
                                                       static_cast<int>(kConstraintBadgePixels * textScale / 2));
-        m_constraintObjects.emplace(badge.get(), constraint);
-    };
-    const auto glyphNear = [&](Id constraint, Id entity, const QString& text) {
-        Vec2 at;
-        Vec2 side{0.0, 1.0};
-        if (s.isCurve(entity)) {
-            at = anchorOf(s, entity);
-            const sketch::Curve* curve = s.curve(entity);
-            if (curve->kind == CurveKind::Line) {
-                const Vec2 d = normalized(s.point(curve->points[1])->pos - s.point(curve->points[0])->pos);
-                side = {-d.y, d.x};
-            } else {
-                side = normalized(at - s.point(curve->points[0])->pos);
-            }
-        } else if (const sketch::Point* point = s.point(entity)) {
-            at = point->pos;
-            side = normalized(Vec2{1.0, 1.0});
-        } else {
-            return;
-        }
-        const int n = glyphCount[entity]++;
-        placeGlyph(constraint, at + side * (wpp * (kGlyphPixels + kGlyphStepPixels * n)), text);
+        m_constraintObjects.emplace(badge.get(), place.constraint);
     };
 
     for (const auto& [id, constraint] : s.constraints()) {
-        const QString glyph = glyphFor(constraint.kind);
-        if (!glyph.isEmpty()) {
-            switch (constraint.kind) {
-            case ConstraintKind::Horizontal:
-            case ConstraintKind::Vertical:
-                if (constraint.refs.size() == 1) {
-                    glyphNear(id, constraint.refs[0], glyph);
-                } else {
-                    const Vec2 a = s.point(constraint.refs[0])->pos;
-                    const Vec2 b = s.point(constraint.refs[1])->pos;
-                    placeGlyph(id, (a + b) * 0.5, glyph);
-                }
-                break;
-            case ConstraintKind::PointOnCurve:
-            case ConstraintKind::Midpoint:
-                glyphNear(id, constraint.refs[0], glyph);
-                break;
-            case ConstraintKind::Symmetric:
-                glyphNear(id, constraint.refs[0], glyph);
-                glyphNear(id, constraint.refs[1], glyph);
-                break;
-            case ConstraintKind::Parallel:
-            case ConstraintKind::Perpendicular:
-            case ConstraintKind::Tangent:
-            case ConstraintKind::Equal:
-                for (Id ref : constraint.refs) {
-                    glyphNear(id, ref, glyph);
-                }
-                break;
-            case ConstraintKind::Coincident:
-            case ConstraintKind::Distance:
-            case ConstraintKind::HorizontalDistance:
-            case ConstraintKind::VerticalDistance:
-            case ConstraintKind::Radius:
-            case ConstraintKind::Diameter:
-            case ConstraintKind::Angle:
-                break;
-            }
-            continue;
+        while (nextBadge != badges.end() && nextBadge->constraint == id) {
+            showBadge(*nextBadge++);
         }
         if (!sketch::isDimension(constraint.kind) || !m_display.dimensions) {
             continue;
@@ -396,9 +354,15 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
         const DimensionLabel label = makeDimensionLabel(dimension->GetTextPosition(), text, color,
                                                         m_selection.contains(id), kDimensionTextPixels, textScale);
         if (id == m_editingLabel) {
-            const QSizeF size = QSizeF(label.pixels) / textScale;
-            m_editedLabel = QRectF(
-                m_view->toScreen(dimension->GetTextPosition()) - QPointF(size.width(), size.height()) / 2.0, size);
+            const std::optional<sketch::DimensionLayout> layout =
+                m_cameraInput ? sketch::layoutDimension(s, constraint, wpp, middle) : std::nullopt;
+            if (layout) {
+                m_editedLabel = labelRect(*layout);
+            } else {
+                const QSizeF size = QSizeF(label.pixels) / textScale;
+                m_editedLabel = QRectF(
+                    m_view->toScreen(dimension->GetTextPosition()) - QPointF(size.width(), size.height()) / 2.0, size);
+            }
             continue;
         }
         show(label.object, m_objects, true);
@@ -406,27 +370,26 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
                                                       std::max(label.pixels.width(), label.pixels.height()) / 2);
         m_constraintObjects.emplace(label.object.get(), id);
     }
-
-    for (const auto& [id, point] : s.points()) {
-        if (point.fixed && id != sketch::kOriginId) {
-            glyphNear(0, id, QStringLiteral("lock"));
-        }
-    }
-    for (const auto& [id, curve] : s.curves()) {
-        if (curve.fixed) {
-            glyphNear(0, id, QStringLiteral("lock"));
-        }
+    while (nextBadge != badges.end()) {
+        showBadge(*nextBadge++);
     }
 }
 
 void SketchEditor::redrawPreview()
 {
     clearObjects(m_preview);
+    m_viewPreview.clear();
+    m_viewPreviewMarkers.clear();
     if (!isActive() || !m_hasCursor || feature() == nullptr) {
+        if (m_newView != nullptr) {
+            publish();
+        }
         m_view->redraw();
         return;
     }
     const gp_Ax3 ax = plane();
+    const sketch::Placement placement = sketch::placementOf(ax);
+    const bool inView = m_newView != nullptr;
     const auto world = [&](Vec2 p) { return sketch::toWorld(ax, p); };
     const auto addEdge = [&](const TopoDS_Shape& shape) {
         Handle(AIS_Shape) object = new AIS_Shape(shape);
@@ -436,10 +399,52 @@ void SketchEditor::redrawPreview()
             new Prs3d_LineAspect(occt(theme::palette().chrome.accent), Aspect_TOL_DOT, style::kStrokeThin));
         show(object, m_preview, false);
     };
+    const auto addStroke = [&](snapshot::Polyline points, const QColor& color, double width, std::uint32_t pattern) {
+        m_viewPreview.push_back(
+            {.points = std::move(points), .color = colorOf(color), .width = width, .pattern = pattern});
+    };
+    const auto addPreview = [&](snapshot::Polyline points) {
+        addStroke(std::move(points), theme::palette().chrome.accent, style::kStrokeThin, render::kDotPattern);
+    };
     const auto addSegment = [&](Vec2 a, Vec2 b) {
-        if (sketch::distance(a, b) > 1e-9) {
+        if (sketch::distance(a, b) <= 1e-9) {
+            return;
+        }
+        if (inView) {
+            addPreview({sketch::placed(placement, a), sketch::placed(placement, b)});
+        } else {
             addEdge(BRepBuilderAPI_MakeEdge(world(a), world(b)));
         }
+    };
+    const auto addArc = [&](const gp_Circ& circle, Vec2 center, double from, double to) {
+        if (inView) {
+            addPreview(arcPolyline(placement, center, circle.Radius(), from, to - from));
+        } else {
+            addEdge(BRepBuilderAPI_MakeEdge(circle, from, to));
+        }
+    };
+    const auto addCircle = [&](const gp_Circ& circle, Vec2 center) {
+        if (inView) {
+            addPreview(arcPolyline(placement, center, circle.Radius(), 0.0, kTwoPi));
+        } else {
+            addEdge(BRepBuilderAPI_MakeEdge(circle));
+        }
+    };
+    const auto addMarker = [&](Vec2 p, Aspect_TypeOfMarker type, double scale) {
+        if (!inView) {
+            Handle(AIS_Shape) marker = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(p)));
+            marker->Attributes()->SetPointAspect(
+                new Prs3d_PointAspect(type, occt(theme::palette().chrome.accent), scale));
+            show(marker, m_preview, false);
+            return;
+        }
+        const snapshot::Point at = sketch::placed(placement, p);
+        m_viewPreviewMarkers.push_back({.anchor = {at[0], at[1], at[2]},
+                                        .shape = markerShapeOf(type),
+                                        .scale = markerScaleOf(scale),
+                                        .color = colorOf(theme::palette().chrome.accent),
+                                        .flags = render::kMarkerTopmost,
+                                        .pick = 0});
     };
     const Vec2 cursor = m_cursorSnap.pos;
 
@@ -454,10 +459,9 @@ void SketchEditor::redrawPreview()
                 const double sweep = std::atan2(back.x * dir.y - back.y * dir.x, dot(back, dir));
                 if (std::abs(sweep) > 1e-3) {
                     const double start = angleOf(back);
-                    const double radius = m_view->worldPerPixel() * kAngleArcPixels;
+                    const double radius = worldPerPixel() * kAngleArcPixels;
                     const gp_Circ circle(gp_Ax2(world(m_first->pos), ax.Direction(), ax.XDirection()), radius);
-                    addEdge(BRepBuilderAPI_MakeEdge(circle, std::min(start, start + sweep),
-                                                    std::max(start, start + sweep)));
+                    addArc(circle, m_first->pos, std::min(start, start + sweep), std::max(start, start + sweep));
                 }
             }
         }
@@ -476,8 +480,7 @@ void SketchEditor::redrawPreview()
         if (m_first) {
             const double r = draftRadius(cursor);
             if (r > 1e-9) {
-                addEdge(
-                    BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(world(m_first->pos), ax.Direction(), ax.XDirection()), r)));
+                addCircle(gp_Circ(gp_Ax2(world(m_first->pos), ax.Direction(), ax.XDirection()), r), m_first->pos);
             }
         }
         break;
@@ -490,7 +493,7 @@ void SketchEditor::redrawPreview()
             const double a1 = m_arcSweep > 0.0 ? start : start + m_arcSweep;
             const double a2 = m_arcSweep > 0.0 ? start + m_arcSweep : start;
             const gp_Circ circle(gp_Ax2(world(m_first->pos), ax.Direction(), ax.XDirection()), r);
-            addEdge(BRepBuilderAPI_MakeEdge(circle, a1, a2));
+            addArc(circle, m_first->pos, a1, a2);
         }
         break;
     case Tool::CenterRectangle:
@@ -526,8 +529,11 @@ void SketchEditor::redrawPreview()
                 const double from = angleOf(s - *center);
                 const double through = wrapAngle(angleOf(cursor - *center) - from);
                 const double to = wrapAngle(angleOf(e - *center) - from);
-                addEdge(through < to ? BRepBuilderAPI_MakeEdge(circle, from, from + to).Shape()
-                                     : BRepBuilderAPI_MakeEdge(circle, from + to, from + kTwoPi).Shape());
+                if (through < to) {
+                    addArc(circle, *center, from, from + to);
+                } else {
+                    addArc(circle, *center, from + to, from + kTwoPi);
+                }
             } else {
                 addSegment(s, e);
             }
@@ -542,18 +548,28 @@ void SketchEditor::redrawPreview()
         if (!piece) {
             break;
         }
+        if (piece->kind == CurveKind::Line && sketch::distance(piece->start, piece->end) < 1e-9) {
+            break;
+        }
+        const bool whole = piece->whole && piece->kind == CurveKind::Circle;
+        const double end = piece->startAngle + wrapAngle(piece->endAngle - piece->startAngle);
+        if (inView) {
+            snapshot::Polyline points =
+                piece->kind == CurveKind::Line
+                    ? snapshot::Polyline{sketch::placed(placement, piece->start), sketch::placed(placement, piece->end)}
+                : whole
+                    ? arcPolyline(placement, piece->center, piece->radius, 0.0, kTwoPi)
+                    : arcPolyline(placement, piece->center, piece->radius, piece->startAngle, end - piece->startAngle);
+            addStroke(std::move(points), theme::palette().chrome.conflict, style::kStrokeBold, render::kSolidPattern);
+            break;
+        }
         TopoDS_Shape shape;
         if (piece->kind == CurveKind::Line) {
-            if (sketch::distance(piece->start, piece->end) < 1e-9) {
-                break;
-            }
             shape = BRepBuilderAPI_MakeEdge(world(piece->start), world(piece->end));
         } else {
             const gp_Circ circle(gp_Ax2(world(piece->center), ax.Direction(), ax.XDirection()), piece->radius);
-            const double end = piece->startAngle + wrapAngle(piece->endAngle - piece->startAngle);
-            shape = piece->whole && piece->kind == CurveKind::Circle
-                        ? BRepBuilderAPI_MakeEdge(circle).Shape()
-                        : BRepBuilderAPI_MakeEdge(circle, piece->startAngle, end).Shape();
+            shape = whole ? BRepBuilderAPI_MakeEdge(circle).Shape()
+                          : BRepBuilderAPI_MakeEdge(circle, piece->startAngle, end).Shape();
         }
         Handle(AIS_Shape) object = new AIS_Shape(shape);
         object->SetColor(occt(theme::palette().chrome.conflict));
@@ -563,10 +579,7 @@ void SketchEditor::redrawPreview()
     }
     case Tool::Fillet:
         if (const std::optional<Id> corner = cornerAt(cursor)) {
-            Handle(AIS_Shape) marker = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(current().point(*corner)->pos)));
-            marker->Attributes()->SetPointAspect(
-                new Prs3d_PointAspect(Aspect_TOM_O_POINT, occt(theme::palette().chrome.accent), style::kMarkerMedium));
-            show(marker, m_preview, false);
+            addMarker(current().point(*corner)->pos, Aspect_TOM_O_POINT, style::kMarkerMedium);
         }
         break;
     case Tool::Mirror:
@@ -574,7 +587,13 @@ void SketchEditor::redrawPreview()
             const Hit hit = curveAt(cursor);
             sketch::Sketch probe = current();
             if (hit.kind == Hit::Kind::Curve) {
-                if (const auto copies = sketch::addMirror(probe, {hit.id}, m_mirrorAxis)) {
+                if (const auto copies = sketch::addMirror(probe, {hit.id}, m_mirrorAxis); copies && inView) {
+                    for (snapshot::SketchCurve& curve : sketch::snapshotOf(probe, placement).curves) {
+                        if (std::ranges::find(*copies, curve.id) != copies->end()) {
+                            addPreview(std::move(curve.points));
+                        }
+                    }
+                } else if (copies) {
                     for (Id copy : *copies) {
                         if (const std::optional<TopoDS_Edge> edge = sketch::makeEdge(probe, copy, ax)) {
                             addEdge(*edge);
@@ -604,7 +623,13 @@ void SketchEditor::redrawPreview()
     if (drawsGeometry(m_tool) && snapUsed) {
         for (const std::optional<Vec2>& source :
              {m_cursorSnap.alignedX, m_cursorSnap.alignedY, m_cursorSnap.extendedFrom}) {
-            if (source && sketch::distance(*source, cursor) > 1e-9) {
+            if (!source || sketch::distance(*source, cursor) <= 1e-9) {
+                continue;
+            }
+            if (inView) {
+                addStroke({sketch::placed(placement, *source), sketch::placed(placement, cursor)},
+                          theme::palette().viewport.annotation, kInferenceLineWidth, render::kDashPattern);
+            } else {
                 Handle(AIS_Shape) guide = new AIS_Shape(BRepBuilderAPI_MakeEdge(world(*source), world(cursor)));
                 guide->SetColor(occt(theme::palette().viewport.annotation));
                 guide->SetWidth(kInferenceLineWidth);
@@ -613,21 +638,19 @@ void SketchEditor::redrawPreview()
                 show(guide, m_preview, false);
             }
         }
-        Handle(AIS_Shape) crosshair = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(cursor)));
-        crosshair->Attributes()->SetPointAspect(
-            new Prs3d_PointAspect(Aspect_TOM_PLUS, occt(theme::palette().chrome.accent), kCursorMarkerScale));
-        show(crosshair, m_preview, false);
+        addMarker(cursor, Aspect_TOM_PLUS, kCursorMarkerScale);
     }
     if (snapUsed && (m_cursorSnap.point != 0 || m_cursorSnap.midpointOf != 0 || m_cursorSnap.onCurve != 0)) {
-        Handle(AIS_Shape) marker = new AIS_Shape(BRepBuilderAPI_MakeVertex(world(cursor)));
         const bool midpoint = m_cursorSnap.midpointOf != 0;
-        const Aspect_TypeOfMarker type = midpoint ? Aspect_TOM_O_STAR : Aspect_TOM_O_POINT;
-        marker->Attributes()->SetPointAspect(new Prs3d_PointAspect(type, occt(theme::palette().chrome.accent),
-                                                                   midpoint ? kMidpointMarkerScale : kSnapMarkerScale));
-        show(marker, m_preview, false);
+        addMarker(cursor, midpoint ? Aspect_TOM_O_STAR : Aspect_TOM_O_POINT,
+                  midpoint ? kMidpointMarkerScale : kSnapMarkerScale);
     }
     placeInputs(cursor);
-    m_view->redraw();
+    if (inView) {
+        publish();
+    } else {
+        m_view->redraw();
+    }
 }
 
 } // namespace kalve137::app

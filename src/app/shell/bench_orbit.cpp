@@ -6,6 +6,7 @@
 #include "app/session/design_session.h"
 #include "app/session/step_import.h"
 #include "app/shell/main_window.h"
+#include "app/sketch/sketch_editor.h"
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
@@ -23,6 +24,7 @@
 #include "log/log.h"
 #include "platform/platform.h"
 #include "render/rhi/rhi_view.h"
+#include "sketch/sketch.h"
 #include "snapshot/mesh.h"
 #include "viewer/occt_view_widget.h"
 
@@ -85,6 +87,9 @@ constexpr int kStaleMoves = 20;
 constexpr double kStaleTurn = 0.002;
 constexpr double kHoverSpan = 0.6;
 constexpr int kSelectReach = 200;
+constexpr int kSketchCells = 10;
+constexpr double kSketchPitch = 20.0;
+constexpr double kSketchCell = 12.0;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 
@@ -296,7 +301,7 @@ std::optional<QSize> checkedRequest(const std::filesystem::path& design, const Q
     return requested;
 }
 
-bool showForBench(MainWindow& window, bool newView, QSize requested)
+void hideChrome(MainWindow& window)
 {
     for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
         dock->hide();
@@ -306,6 +311,25 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
     }
     window.statusBar()->hide();
     window.menuBar()->hide();
+}
+
+void sizeCanvas(MainWindow& window, QSize requested)
+{
+    QWidget* canvas = window.centralWidget();
+    const double ratio = window.devicePixelRatioF();
+    if (window.isFullScreen()) {
+        waitFor([&] { return canvas->size() * ratio == requested; });
+    } else {
+        const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
+                            static_cast<int>(std::lround(requested.height() / ratio)));
+        window.resize(logical + window.size() - canvas->size());
+    }
+    QApplication::processEvents();
+}
+
+bool showForBench(MainWindow& window, bool newView, QSize requested)
+{
+    hideChrome(window);
     const QScreen* screen = window.screen();
     const bool onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
     if (!onScreen) {
@@ -327,16 +351,7 @@ bool showForBench(MainWindow& window, bool newView, QSize requested)
         K137_ERROR(App, "The bench view did not start");
         return false;
     }
-    QWidget* canvas = window.centralWidget();
-    const double ratio = window.devicePixelRatioF();
-    if (window.isFullScreen()) {
-        waitFor([&] { return canvas->size() * ratio == requested; });
-    } else {
-        const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
-                            static_cast<int>(std::lround(requested.height() / ratio)));
-        window.resize(logical + window.size() - canvas->size());
-    }
-    QApplication::processEvents();
+    sizeCanvas(window, requested);
     return true;
 }
 
@@ -401,6 +416,86 @@ bool selectForBench(MainWindow& window)
         K137_WARN(App, "The bench selection found {} face and {} edge", face ? 1 : 0, edge ? 1 : 0);
     }
     return face && edge;
+}
+
+core::SketchFeature denseSketch()
+{
+    core::SketchFeature feature;
+    sketch::Sketch& s = feature.sketch;
+    using sketch::ConstraintKind;
+    const double first = -kSketchPitch * (kSketchCells - 1) / 2.0;
+    for (int row = 0; row < kSketchCells; ++row) {
+        for (int column = 0; column < kSketchCells; ++column) {
+            const double x = first + (kSketchPitch * column);
+            const double y = first + (kSketchPitch * row);
+            const double half = kSketchCell / 2.0;
+            const sketch::Id a = s.addPoint({x - half, y - half});
+            const sketch::Id b = s.addPoint({x + half, y - half});
+            const sketch::Id c = s.addPoint({x + half, y + half});
+            const sketch::Id d = s.addPoint({x - half, y + half});
+            const sketch::Id bottom = s.addLine(a, b);
+            const sketch::Id right = s.addLine(b, c);
+            const sketch::Id top = s.addLine(c, d);
+            const sketch::Id left = s.addLine(d, a);
+            s.addConstraint(ConstraintKind::Horizontal, {bottom});
+            s.addConstraint(ConstraintKind::Horizontal, {top});
+            s.addConstraint(ConstraintKind::Vertical, {right});
+            s.addConstraint(ConstraintKind::Vertical, {left});
+            s.addConstraint(ConstraintKind::Distance, {bottom}, kSketchCell);
+            s.addConstraint(ConstraintKind::Distance, {left}, kSketchCell);
+            const sketch::Id hole = s.addCircle(s.addPoint({x, y}), kSketchCell / 4.0);
+            s.addConstraint(ConstraintKind::Diameter, {hole}, kSketchCell / 2.0);
+        }
+    }
+    return feature;
+}
+
+SketchEditor* openDenseSketch(MainWindow& window, QSize requested)
+{
+    if (!qEnvironmentVariableIsSet("KALVE137_BENCH_SKETCH")) {
+        return nullptr;
+    }
+    auto* session = window.findChild<DesignSession*>();
+    auto* editor = window.findChild<SketchEditor*>();
+    if (session == nullptr || editor == nullptr) {
+        return nullptr;
+    }
+    core::FeatureId id = 0;
+    session->edit(QStringLiteral("Bench sketch"), [&](core::Document& document) { id = document.add(denseSketch()); });
+    window.beginSketch(id);
+    hideChrome(window);
+    QApplication::processEvents();
+    sizeCanvas(window, requested);
+    waitFor([&] {
+        return window.newView() != nullptr ? !window.cameraCommands()->isAnimating() : !window.oldView()->isAnimating();
+    });
+    QApplication::processEvents();
+    return editor->isActive() ? editor : nullptr;
+}
+
+std::optional<std::pair<double, double>> timeSketchRedraw(MainWindow& window, SketchEditor& editor)
+{
+    std::vector<double> totals;
+    for (int i = 0; i < kChangeWarmup + kChangeRepeats; ++i) {
+        QApplication::processEvents();
+        QElapsedTimer timer;
+        timer.start();
+        editor.redraw();
+        if (render::RhiView* view = window.newView()) {
+            if (!view->benchFrame()) {
+                return std::nullopt;
+            }
+        } else {
+            viewer::OcctViewWidget* old = window.oldView();
+            old->setFrameTiming(true);
+            old->repaint();
+            old->setFrameTiming(false);
+        }
+        if (i >= kChangeWarmup) {
+            totals.push_back(elapsedMs(timer));
+        }
+    }
+    return std::pair{percentile(totals, 0.5), percentile(totals, kPercentile)};
 }
 
 int writeResult(const QJsonObject& result, const std::filesystem::path& out)
@@ -774,9 +869,12 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const auto* session = window.findChild<DesignSession*>();
     const ColdBuild cold = buildColdSnapshots(session->model());
     const bool selected = selectForBench(window);
+    SketchEditor* sketch = openDenseSketch(window, *requested);
 
     const std::optional<double> pressMs = firstPress(window);
     const Orbit timed = orbit(window);
+    const std::optional<std::pair<double, double>> redrawMs =
+        sketch != nullptr ? timeSketchRedraw(window, *sketch) : std::nullopt;
     const std::vector<double>& frames = timed.frames;
     if (frames.size() != static_cast<std::size_t>(kOrbitFrames) ||
         timed.cold.size() != static_cast<std::size_t>(kOrbitFrames)) {
@@ -786,6 +884,11 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     }
     QJsonObject result = benchHeader(window, newView, design, size);
     result.insert("selected", selected);
+    result.insert("sketch", sketch != nullptr);
+    if (redrawMs) {
+        result.insert("sketch_redraw_median_ms", redrawMs->first);
+        result.insert("sketch_redraw_p95_ms", redrawMs->second);
+    }
     const QJsonObject timing{
         {"frames", kOrbitFrames},
         {"median_ms", percentile(frames, 0.5)},

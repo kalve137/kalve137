@@ -12,12 +12,6 @@
 
 namespace kalve137::geometry {
 
-namespace {
-
-constexpr double kDeviationPerBoxSide = 4.0;
-
-} // namespace
-
 double displayDeflection(const TopoDS_Shape& shape)
 {
     Bnd_Box box;
@@ -33,7 +27,7 @@ double displayDeflection(const TopoDS_Shape& shape)
     double zMax = 0.0;
     box.Get(xMin, yMin, zMin, xMax, yMax, zMax);
     const double side = std::max({xMax - xMin, yMax - yMin, zMax - zMin});
-    return side * kDisplayDeviationCoefficient * kDeviationPerBoxSide;
+    return snapshot::chordDeflection(side);
 }
 
 void ensureMesh(const TopoDS_Shape& shape)

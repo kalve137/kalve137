@@ -4,6 +4,8 @@
 find_package(Threads REQUIRED)
 
 add_library(kalve137_render STATIC
+    annotations.cpp
+    annotations.h
     box_select.cpp
     box_select.h
     chunk_set.cpp
@@ -24,6 +26,8 @@ add_library(kalve137_render STATIC
     pick_id.cpp
     pick_id.h
     positions.h
+    sketches.cpp
+    sketches.h
     style.h
     thread_pool.cpp
     thread_pool.h

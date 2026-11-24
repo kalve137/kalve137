@@ -21,6 +21,7 @@ constexpr double kFitResolution = 10.0 * kConfusion;
 constexpr double kMaxUpAlignment = 0.999;
 constexpr double kDepthPerDistance = 5.97e-4;
 constexpr double kResolution = std::numeric_limits<double>::min();
+constexpr double kMinPlaneAlong = 1e-9;
 
 bool isPositive(double value)
 {
@@ -75,6 +76,16 @@ Pixel toPixel(const ScreenPoint& point, const Viewport& viewport)
 {
     return {static_cast<int>(point.x * viewport.pixelRatio + 0.5),  // NOLINT(bugprone-incorrect-roundings)
             static_cast<int>(point.y * viewport.pixelRatio + 0.5)}; // NOLINT(bugprone-incorrect-roundings)
+}
+
+std::optional<Vec3> onPlane(const Ray& ray, const Vec3& point, const Vec3& normal)
+{
+    const double along = dot(ray.direction, normal);
+    if (!std::isfinite(along) || std::abs(along) < kMinPlaneAlong) {
+        return std::nullopt;
+    }
+    const Vec3 hit = ray.origin + ray.direction * (dot(point - ray.origin, normal) / along);
+    return isFinite(hit) ? std::optional(hit) : std::nullopt;
 }
 
 Camera::Camera() : m_fovYTan(std::tan(kHalfDegree * m_fovY)) {}

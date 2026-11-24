@@ -34,18 +34,32 @@ struct DatumAxis {
     bool operator==(const DatumAxis&) const = default;
 };
 
+struct DatumPoint {
+    std::uint64_t id = 0;
+    camera::Vec3 anchor;
+
+    bool operator==(const DatumPoint&) const = default;
+};
+
 struct Datums {
     std::vector<DatumPlane> originPlanes;
     std::vector<DatumAxis> originAxes;
     std::vector<DatumPlane> planes;
     std::vector<DatumAxis> axes;
     snapshot::Color planeColor;
+    std::vector<DatumPoint> points;
+    bool originPoint = false;
+    snapshot::Color originPointColor;
 
-    bool empty() const { return originPlanes.empty() && originAxes.empty() && planes.empty() && axes.empty(); }
+    bool empty() const
+    {
+        return originPlanes.empty() && originAxes.empty() && planes.empty() && axes.empty() && points.empty() &&
+               !originPoint;
+    }
     bool operator==(const Datums&) const = default;
 };
 
-enum class DatumKind : std::uint8_t { OriginPlane, OriginAxis, Plane, Axis };
+enum class DatumKind : std::uint8_t { OriginPlane, OriginAxis, Plane, Axis, Point };
 
 struct DatumKey {
     DatumKind kind = DatumKind::OriginPlane;
@@ -72,6 +86,7 @@ struct DatumGeometry {
     std::vector<OverlayVertex> idOriginFills;
     std::vector<DatumLine> idOriginOutlines;
     std::vector<DatumLine> idOriginLines;
+    std::vector<MarkerItem> markers;
     std::optional<camera::Box> bounds;
 
     bool drawsLike(const DatumGeometry& other) const
@@ -88,7 +103,7 @@ inline constexpr std::uint32_t kDatumEntries = 1U << 16;
 double anchorScale(const camera::Camera& camera, const camera::Viewport& viewport, const camera::Vec3& anchor);
 DatumGeometry buildDatums(const Datums& datums, const camera::Camera& camera, const camera::Viewport& viewport,
                           const snapshot::Point& origin, const DatumMarks& marks = {});
-std::optional<DatumKey> datumAt(const Datums& datums, std::uint32_t entry);
+std::optional<DatumKey> datumAt(const Datums& datums, std::uint32_t chunk, std::uint32_t entry);
 bool contains(const Datums& datums, const DatumKey& key);
 std::vector<camera::Vec3> datumAnchors(const Datums& datums);
 std::optional<camera::Box> fitBox(const std::optional<camera::Box>& bodies, std::span<const camera::Vec3> anchors,

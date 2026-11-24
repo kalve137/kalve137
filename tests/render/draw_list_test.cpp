@@ -113,6 +113,32 @@ TEST(DrawList, SceneBoundsHoldTheDrawnBodiesOnly)
     EXPECT_FALSE(sceneBounds(snapshot::Scene{.bodies = {}, .origin = {}, .hidden = {hidden}}).has_value());
 }
 
+TEST(DrawList, SketchBoundsHoldTheCurvesOnly)
+{
+    EXPECT_FALSE(sketchBounds({}).has_value());
+    snapshot::Sketch sketch;
+    sketch.points.push_back({.id = 1, .point = {-900.0, 0.0, 0.0}, .flags = snapshot::kSketchPointOrigin});
+    sketch.profiles.vertices.push_back({0.0, 900.0, 0.0});
+    EXPECT_FALSE(sketchBounds(std::vector{sketch}).has_value()) << "points and profiles alone add no extent";
+    sketch.curves.push_back({.id = 2,
+                             .kind = snapshot::SketchCurveKind::Line,
+                             .construction = false,
+                             .points = {{10.0, 20.0, 5.0}, {40.0, -10.0, 5.0}}});
+    snapshot::Sketch other;
+    other.curves.push_back({.id = 3,
+                            .kind = snapshot::SketchCurveKind::Arc,
+                            .construction = true,
+                            .points = {{0.0, 0.0, -30.0}, {5.0, 5.0, -30.0}}});
+    const std::optional<camera::Box> bounds = sketchBounds(std::vector{sketch, other});
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_EQ(bounds->min.x, 0.0);
+    EXPECT_EQ(bounds->min.y, -10.0);
+    EXPECT_EQ(bounds->min.z, -30.0);
+    EXPECT_EQ(bounds->max.x, 40.0);
+    EXPECT_EQ(bounds->max.y, 20.0);
+    EXPECT_EQ(bounds->max.z, 5.0);
+}
+
 TEST(ChunkSet, ShadedPaintsTheThemeColorThenTheBodyColorThenFaceColors)
 {
     snapshot::Appearance faces{.color = kRed, .faces = {}};

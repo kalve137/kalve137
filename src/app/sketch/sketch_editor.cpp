@@ -10,10 +10,13 @@
 #include "app/sketch/sketch_inputs.h"
 #include "app/theme/fonts.h"
 #include "app/theme/theme.h"
+#include "app/view/band_overlay.h"
 
 #include "geometry/shapes.h"
 #include "log/log.h"
+#include "render/rhi/rhi_view.h"
 #include "sketch/dimension.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
 #include "sketch/profiles.h"
 #include "sketch/select.h"
@@ -42,10 +45,11 @@ namespace kalve137::app {
 
 using namespace sketch_editor_detail;
 
-SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, QObject* parent)
-    : QObject(parent), m_session(session), m_view(view)
+SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, render::RhiView* newView,
+                           QObject* parent)
+    : QObject(parent), m_session(session), m_view(view), m_newView(newView), m_cameraInput(newView != nullptr)
 {
-    m_valueEditor = new QLineEdit(view);
+    m_valueEditor = new QLineEdit(canvas());
     m_valueEditor->setObjectName("dimensionEditor");
     m_valueEditor->setFixedWidth(kValueEditorWidth);
     m_valueEditor->hide();
@@ -82,7 +86,7 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
         }
     });
 
-    m_inputs = new SketchInputs(view, this);
+    m_inputs = new SketchInputs(canvas(), this);
     connect(m_inputs, &SketchInputs::edited, this, [this] {
         if (m_typedMove) {
             previewTypedMove();
@@ -92,11 +96,21 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
     });
     connect(m_inputs, &SketchInputs::accepted, this, &SketchEditor::onInputsAccepted);
 
+    connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
+    if (newView != nullptr) {
+        m_band = new BandOverlay(newView);
+        connect(newView, &render::RhiView::capturedPress, this, &SketchEditor::onPress);
+        connect(newView, &render::RhiView::capturedRelease, this, &SketchEditor::onRelease);
+        connect(newView, &render::RhiView::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
+        connect(newView, &render::RhiView::mouseMoved, this,
+                [this](QPointF pos, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { onMove(pos, buttons); });
+        connect(newView, &render::RhiView::cameraChanged, this, &SketchEditor::onCameraChanged);
+        return;
+    }
     connect(view, &viewer::OcctViewWidget::capturedPress, this, &SketchEditor::onPress);
     connect(view, &viewer::OcctViewWidget::capturedRelease, this, &SketchEditor::onRelease);
     connect(view, &viewer::OcctViewWidget::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
     connect(view, &viewer::OcctViewWidget::pointerMoved, this, &SketchEditor::onMove);
-    connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
 
     m_rescale = new QTimer(this);
     m_rescale->setSingleShot(true);
@@ -126,6 +140,9 @@ void SketchEditor::begin(core::FeatureId sketch)
     }
     m_tool = Tool::Select;
     m_view->setLeftButtonCaptured(true);
+    if (m_newView != nullptr) {
+        m_newView->setLeftButtonCaptured(true);
+    }
     redraw();
     emit toolChanged();
 }
@@ -143,8 +160,12 @@ void SketchEditor::end()
     clearObjects(m_objects);
     clearObjects(m_preview);
     m_sketchId = 0;
-    m_view->unsetCursor();
+    canvas()->unsetCursor();
     m_view->setLeftButtonCaptured(false);
+    if (m_newView != nullptr) {
+        clearView();
+        m_newView->setLeftButtonCaptured(false);
+    }
     m_view->redraw();
     emit toolChanged();
 }
@@ -158,9 +179,9 @@ void SketchEditor::setTool(Tool tool)
     resetProgress();
     m_tool = tool;
     if (drawsGeometry(tool)) {
-        m_view->setCursor(Qt::CrossCursor);
+        canvas()->setCursor(Qt::CrossCursor);
     } else {
-        m_view->unsetCursor();
+        canvas()->unsetCursor();
     }
     if (tool != Tool::Select && tool != Tool::Mirror) {
         m_selection.clear();
@@ -558,7 +579,12 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     }
     if (m_boxStart && (buttons & Qt::LeftButton) && (m_boxing || viewer::isBoxDrag(*m_boxStart, pos))) {
         m_boxing = true;
-        m_view->showBand(*m_boxStart, pos);
+        if (m_band != nullptr) {
+            m_band->setColor(theme::palette().chrome.accent);
+            m_band->showBand(*m_boxStart, pos);
+        } else {
+            m_view->showBand(*m_boxStart, pos);
+        }
         return;
     }
     const std::optional<Vec2> p = toSketch(pos);
@@ -642,8 +668,7 @@ void SketchEditor::onDoubleClick(QPointF pos)
         emit stateChanged();
         return;
     }
-    m_view->detectAt(pos);
-    if (const std::optional<Id> constraint = detectedConstraint()) {
+    if (const std::optional<Id> constraint = constraintAt(pos)) {
         editDimension(*constraint, pos);
     }
 }
@@ -694,6 +719,16 @@ void SketchEditor::clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers)
 
 std::optional<QPointF> SketchEditor::labelOnScreen(Id constraint) const
 {
+    if (m_cameraInput) {
+        const sketch::Sketch& s = shownSketch();
+        const sketch::Constraint* c = s.constraint(constraint);
+        const std::optional<sketch::DimensionLayout> layout =
+            c != nullptr ? sketch::layoutDimension(s, *c, worldPerPixel(), sketch::dimensionMiddle(s)) : std::nullopt;
+        if (!layout) {
+            return std::nullopt;
+        }
+        return toScreen(sketch::toWorld(plane(), layout->text));
+    }
     for (const auto& [object, id] : m_constraintObjects) {
         if (const auto* dimension = dynamic_cast<const PrsDim_Dimension*>(object);
             dimension != nullptr && id == constraint) {
@@ -840,13 +875,13 @@ void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quant
         m_valueEditor->setAlignment(Qt::AlignCenter);
         at = (m_editedLabel->center() - QPointF(size.width(), size.height()) / 2.0).toPoint();
     } else {
-        m_valueEditor->setFont(m_view->font());
+        m_valueEditor->setFont(canvas()->font());
         m_valueEditor->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         m_valueEditor->setFixedSize(kValueEditorWidth + trailing, m_valueEditor->sizeHint().height());
         at = pos.toPoint() + QPoint(static_cast<int>(kInputGapPixels), -m_valueEditor->height() - theme::kSpaceXs);
     }
-    m_valueEditor->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - m_valueEditor->width())),
-                        std::clamp(at.y(), 0, std::max(0, m_view->height() - m_valueEditor->height())));
+    m_valueEditor->move(std::clamp(at.x(), 0, std::max(0, canvas()->width() - m_valueEditor->width())),
+                        std::clamp(at.y(), 0, std::max(0, canvas()->height() - m_valueEditor->height())));
     m_valueEditor->show();
     m_valueEditor->raise();
     m_valueEditor->setFocus();
@@ -884,7 +919,7 @@ void SketchEditor::closeValueEditor()
     }
     if (m_valueEditor->isVisible()) {
         m_valueEditor->hide();
-        m_view->setFocus();
+        canvas()->setFocus();
     }
 }
 
@@ -923,7 +958,11 @@ void SketchEditor::dropBox()
 {
     m_boxStart.reset();
     if (std::exchange(m_boxing, false)) {
-        m_view->hideBand();
+        if (m_band != nullptr) {
+            m_band->hideBand();
+        } else {
+            m_view->hideBand();
+        }
     }
 }
 
@@ -931,7 +970,7 @@ void SketchEditor::selectInBox(QPointF from, QPointF to)
 {
     const gp_Ax3 ax = plane();
     const auto project = [&](Vec2 p) {
-        const QPointF screen = m_view->toScreen(sketch::toWorld(ax, p));
+        const QPointF screen = toScreen(sketch::toWorld(ax, p));
         return Vec2{screen.x(), screen.y()};
     };
     const sketch::BoxMode mode = viewer::isCrossingBox(from, to) ? sketch::BoxMode::Crossing : sketch::BoxMode::Window;

@@ -115,8 +115,8 @@ std::vector<render::PickedItem> NewViewPicker::boxItems(QPointF from, QPointF to
     }
     std::vector<TopoDS_Shape> shapes(candidates.size());
     for (std::size_t i = 0; i < candidates.size(); ++i) {
-        if (const std::optional<Pick> pick =
-                pickOf({.item = candidates[i], .mesh = nullptr, .point = std::nullopt, .datum = std::nullopt})) {
+        if (const std::optional<Pick> pick = pickOf(
+                {.item = candidates[i], .mesh = nullptr, .point = std::nullopt, .datum = std::nullopt, .sketch = {}})) {
             shapes[i] = pick->shape;
         }
     }
@@ -183,8 +183,10 @@ void NewViewPicker::boxSelect(QPointF from, QPointF to, Qt::KeyboardModifiers mo
         m_selected.clear();
     }
     for (const render::PickedItem& item : boxItems(from, to)) {
-        if (std::ranges::none_of(m_selected, [&](const Found& found) { return !found.datum && found.item == item; })) {
-            m_selected.push_back({.item = item, .mesh = meshOf(item), .point = std::nullopt, .datum = std::nullopt});
+        if (std::ranges::none_of(m_selected,
+                                 [&](const Found& found) { return !found.overlay() && found.item == item; })) {
+            m_selected.push_back(
+                {.item = item, .mesh = meshOf(item), .point = std::nullopt, .datum = std::nullopt, .sketch = {}});
         }
     }
     K137_DEBUG(Input, "{} box selected {}",
@@ -203,7 +205,12 @@ render::PickKinds NewViewPicker::kinds() const
             .edges = contains(types, TopAbs_EDGE),
             .points = contains(types, TopAbs_VERTEX),
             .planes = planesPickable(mode),
-            .axes = axesPickable(mode)};
+            .axes = axesPickable(mode),
+            .markers = mode == PickMode::AxisSources,
+            .sketchLines = mode == PickMode::Lines || mode == PickMode::ProfilesAndLines,
+            .sketchPoints = mode == PickMode::HolePlacement,
+            .profiles =
+                mode == PickMode::Profiles || mode == PickMode::ProfilesAndLines || mode == PickMode::PressPull};
 }
 
 std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) const
@@ -212,17 +219,28 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
     if (!wanted.any()) {
         return std::nullopt;
     }
-    const std::optional<render::IdPick> hit =
-        m_view->pickAt(position, wanted, {.points = wanted.points, .planes = wanted.planes, .axes = wanted.axes});
+    const std::optional<render::IdPick> hit = m_view->pickAt(position, wanted,
+                                                             {.points = wanted.points,
+                                                              .planes = wanted.planes,
+                                                              .axes = wanted.axes,
+                                                              .markers = wanted.markers,
+                                                              .sketchLines = wanted.sketchLines,
+                                                              .sketchPoints = wanted.sketchPoints,
+                                                              .profiles = wanted.profiles});
     if (!hit) {
         return std::nullopt;
     }
-    Found found{.item = hit->item, .mesh = nullptr, .point = std::nullopt, .datum = hit->datum};
-    if (!found.datum) {
+    Found found{.item = hit->item, .mesh = nullptr, .point = std::nullopt, .datum = hit->datum, .sketch = hit->sketch};
+    if (!found.overlay()) {
         found.mesh = meshOf(hit->item);
     }
     const camera::Vec3 at = m_view->pointOf(hit->hit.x, hit->hit.y, hit->hit.depth);
     found.point = gp_Pnt(at.x, at.y, at.z);
+    if (found.sketch) {
+        if (const std::optional<snapshot::Point> exact = render::sketchPointOf(m_view->sketches(), *found.sketch)) {
+            found.point = gp_Pnt((*exact)[0], (*exact)[1], (*exact)[2]);
+        }
+    }
     return found;
 }
 
@@ -309,14 +327,47 @@ std::optional<Pick> NewViewPicker::datumPick(const render::DatumKey& key, const 
         pick.line = *axis;
         return pick;
     }
+    case render::DatumKind::Point: {
+        const gp_Pnt* location = findIn(m_shown.points, m_session->model().points, id);
+        if (location == nullptr) {
+            return std::nullopt;
+        }
+        pick.kind = Pick::Kind::ConstructionPoint;
+        pick.feature = id;
+        pick.point = *location;
+        return pick;
+    }
     }
     return std::nullopt;
+}
+
+Pick NewViewPicker::sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point)
+{
+    Pick pick;
+    switch (key.item) {
+    case render::SketchItem::Line:
+        pick.kind = Pick::Kind::SketchLine;
+        break;
+    case render::SketchItem::Point:
+        pick.kind = Pick::Kind::SketchPoint;
+        break;
+    case render::SketchItem::Profile:
+        pick.kind = Pick::Kind::Profile;
+        break;
+    }
+    pick.feature = static_cast<core::FeatureId>(key.feature);
+    pick.index = key.index;
+    pick.point = point;
+    return pick;
 }
 
 std::optional<Pick> NewViewPicker::pickOf(const Found& found) const
 {
     if (found.datum) {
         return datumPick(*found.datum, found.point);
+    }
+    if (found.sketch) {
+        return sketchPick(*found.sketch, found.point);
     }
     const core::Body* body = bodyOf(found.item);
     if (body == nullptr || body->shape.IsNull()) {
@@ -494,6 +545,10 @@ void NewViewPicker::dropStale()
         if (found.datum) {
             return !render::contains(m_view->datums(), *found.datum);
         }
+        if (found.sketch) {
+            return std::ranges::find(m_view->sketchGeometry().keys, *found.sketch) ==
+                   m_view->sketchGeometry().keys.end();
+        }
         return std::ranges::none_of(m_view->scene().bodies, [&](const auto& body) {
             return body->feature == found.item.feature && body->part == found.item.part && body->mesh == found.mesh;
         });
@@ -534,14 +589,14 @@ void NewViewPicker::showHighlight()
     render::Highlight highlight;
     addHover(highlight);
     for (const Found& found : m_selected) {
-        if (found.datum) {
+        if (found.overlay()) {
             continue;
         }
         highlight.selected.insert(found.item);
         addOutline(found.item, highlight.selectedOutline);
     }
     m_view->setHighlight(std::move(highlight));
-    showDatumMarks();
+    showMarks();
 }
 
 void NewViewPicker::showHover()
@@ -549,26 +604,32 @@ void NewViewPicker::showHover()
     render::Highlight highlight;
     addHover(highlight);
     m_view->setHover(std::move(highlight.hovered), std::move(highlight.hoveredOutline));
-    showDatumMarks();
+    showMarks();
 }
 
-void NewViewPicker::showDatumMarks()
+void NewViewPicker::showMarks()
 {
-    render::DatumMarks marks;
+    render::DatumMarks datums;
+    render::SketchMarks sketches;
     if (m_hovered) {
-        marks.hovered = m_hovered->datum;
+        datums.hovered = m_hovered->datum;
+        sketches.hovered = m_hovered->sketch;
     }
     for (const Found& found : m_selected) {
         if (found.datum) {
-            marks.selected.insert(*found.datum);
+            datums.selected.insert(*found.datum);
+        }
+        if (found.sketch) {
+            sketches.selected.insert(*found.sketch);
         }
     }
-    m_view->setDatumMarks(std::move(marks));
+    m_view->setDatumMarks(std::move(datums));
+    m_view->setSketchMarks(std::move(sketches));
 }
 
 void NewViewPicker::addHover(render::Highlight& highlight) const
 {
-    if (m_hovered && !m_hovered->datum) {
+    if (m_hovered && !m_hovered->overlay()) {
         highlight.hovered.insert(m_hovered->item);
         addOutline(m_hovered->item, highlight.hoveredOutline);
     }

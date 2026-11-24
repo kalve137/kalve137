@@ -70,6 +70,7 @@ public:
     CameraCommands* cameraCommands() const { return m_cameraCommands; }
     PickSource* picks() const { return m_picks; }
     Scene* scene() const { return m_scene.get(); }
+    void beginSketch(core::FeatureId id);
 
 protected:
     bool event(QEvent* event) override;
@@ -93,7 +94,6 @@ private:
     void createSketchOn(const gp_Ax3& plane, const std::string& planeName, core::FeatureId planeFeature = 0,
                         std::optional<core::TopoRef> face = std::nullopt);
     bool sceneIsEmpty() const;
-    void beginSketch(core::FeatureId id);
     void finishSketch();
     void editFeature(core::FeatureId id);
     void escape();

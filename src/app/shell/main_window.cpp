@@ -27,6 +27,7 @@
 #include "app/view/grid_settings.h"
 #include "app/view/new_view_picker.h"
 #include "app/view/scene.h"
+#include "app/view/sketch_snapshots.h"
 #include "app/view/view_controls.h"
 #include "app/view/view_cube_arrows.h"
 #include "app/view/view_overlay.h"
@@ -127,6 +128,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         const render::GraphicsApi api = options.graphicsApi.value_or(render::platformGraphicsApi());
         if (const render::StartProblem problem = render::checkStart(api); problem == render::StartProblem::None) {
             m_rhiView = new render::RhiView(api, this);
+            m_rhiView->setTextFamily(fonts::families().qt);
             setCentralWidget(m_rhiView);
         } else {
             setCentralWidget(render::makeFailureNotice(api, problem, this));
@@ -143,9 +145,12 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         m_newViewPicker = new NewViewPicker(*m_rhiView, *m_session, *m_scene, m_session->rays(), this);
         m_scene->setPicks(*m_newViewPicker);
         m_picks = m_newViewPicker;
-        connect(m_scene.get(), &Scene::rebuilt, this, [this] { m_rhiView->setDatums(m_scene->datums()); });
+        connect(m_scene.get(), &Scene::rebuilt, this, [this] {
+            m_rhiView->setDatums(m_scene->datums());
+            m_rhiView->setSketchLook(sketchLook(*m_scene));
+        });
     }
-    m_sketchEditor = new SketchEditor(*m_session, m_view, this);
+    m_sketchEditor = new SketchEditor(*m_session, m_view, m_rhiView, this);
     m_cameraCommands = new CameraCommands(*m_view, m_rhiView, [this] { return sceneIsEmpty(); }, this);
 
     createActions();
@@ -829,9 +834,11 @@ void MainWindow::refreshScene()
         m_newViewPicker->setHighlightedBodies(std::move(highlightedKeys));
     }
     const auto visible = [this](core::BodyKey key) { return m_session->isBodyVisible(key); };
-    const auto showSnapshot = [this](const snapshot::Scene& scene, const core::Model& model) {
+    const auto showSnapshot = [this](const snapshot::Scene& scene, const core::Document& shown,
+                                     const core::Model& model) {
         m_newViewPicker->showModel(model);
         m_rhiView->setScene(scene);
+        m_rhiView->setSketches(sketchSnapshots(shown, model, *m_session));
     };
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
     if (index >= 0 && std::cmp_less(index + 1, document.marker())) {
@@ -840,14 +847,14 @@ void MainWindow::refreshScene()
         const core::Model model = core::recompute(context);
         m_scene->show(context, model, *m_session);
         if (m_rhiView != nullptr) {
-            showSnapshot(m_contextSnapshots.scene(model, visible), model);
+            showSnapshot(m_contextSnapshots.scene(model, visible), context, model);
         }
         return;
     }
     m_contextSnapshots.clear();
     m_scene->show(document, m_session->model(), *m_session);
     if (m_rhiView != nullptr) {
-        showSnapshot(m_session->snapshots().scene(m_session->model(), visible), m_session->model());
+        showSnapshot(m_session->snapshots().scene(m_session->model(), visible), document, m_session->model());
     }
 }
 
@@ -983,6 +990,7 @@ void MainWindow::applyNewViewStyle()
     syncNewViewGrid();
     if (m_scene != nullptr) {
         m_rhiView->setDatums(m_scene->datums());
+        m_rhiView->setSketchLook(sketchLook(*m_scene));
     }
 }
 

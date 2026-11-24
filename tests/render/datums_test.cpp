@@ -6,6 +6,7 @@
 #include "render/cpu_backend.h"
 #include "render/datums.h"
 #include "render/draw_list.h"
+#include "render/pick_id.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 #include "test_meshes.h"
@@ -279,6 +280,63 @@ TEST(Datums, AxesDashInTheOldViewsPatterns)
         const double share = static_cast<double>(std::popcount(static_cast<std::uint16_t>(pattern))) / kPatternBits;
         EXPECT_NEAR(lit, device * share, device / kPatternBits * 2.0) << kind << " draws " << lit << " of " << device;
     }
+}
+
+TEST(Datums, PointsBecomeTopmostMarkersAndOnlyConstructionPointsPick)
+{
+    const camera::Camera camera = facing({}, {0.0, 0.0, 1.0}, {0.0, 1.0, 0.0}, camera::Projection::Orthographic, 120.0);
+    const snapshot::Color white{0.95F, 0.96F, 0.97F};
+    Datums datums{.originPlanes = {},
+                  .originAxes = {},
+                  .planes = {},
+                  .axes = {},
+                  .planeColor = kPlane,
+                  .points = {{.id = 4, .anchor = {10.0, 0.0, 0.0}}, {.id = 9, .anchor = {0.0, 300.0, 0.0}}},
+                  .originPoint = true,
+                  .originPointColor = white};
+    const DatumGeometry geometry = buildDatums(datums, camera, kViewport, {});
+    ASSERT_EQ(geometry.markers.size(), 3U);
+    const MarkerItem& origin = geometry.markers[0];
+    EXPECT_EQ(origin.shape, MarkerShape::Ball);
+    EXPECT_EQ(origin.scale, MarkerScale::Medium);
+    EXPECT_EQ(origin.color, white);
+    EXPECT_EQ(origin.flags, kMarkerTopmost) << "the origin point never picks";
+    for (std::size_t i = 1; i < geometry.markers.size(); ++i) {
+        const MarkerItem& point = geometry.markers[i];
+        EXPECT_EQ(point.shape, MarkerShape::RingPlus);
+        EXPECT_EQ(point.scale, MarkerScale::Medium);
+        EXPECT_EQ(point.color, kPlane);
+        EXPECT_EQ(point.flags, kMarkerTopmost | kMarkerPickable);
+        const PickId id = decodePickId(point.pick);
+        EXPECT_EQ(id.chunk, kMarkerChunk);
+        EXPECT_EQ(id.kind, PickKind::Point);
+        const std::optional<DatumKey> key = datumAt(datums, id.chunk, id.entry);
+        ASSERT_TRUE(key.has_value());
+        EXPECT_EQ(*key, (DatumKey{.kind = DatumKind::Point, .id = datums.points[i - 1].id}));
+        EXPECT_TRUE(contains(datums, *key));
+    }
+    ASSERT_TRUE(geometry.bounds.has_value());
+    EXPECT_DOUBLE_EQ(geometry.bounds->max.y, 300.0) << "points join the depth range";
+    EXPECT_EQ(datumAnchors(datums).size(), 3U) << "points and the origin point join Fit";
+    EXPECT_FALSE(datumAt(datums, kMarkerChunk, 2).has_value());
+
+    const DatumGeometry hovered = buildDatums(datums, camera, kViewport, {},
+                                              {.hovered = DatumKey{.kind = DatumKind::Point, .id = 4}, .selected = {}});
+    EXPECT_NE(hovered.markers[1].color, kPlane) << "a hovered point lights up";
+    EXPECT_EQ(hovered.markers[2].color, kPlane);
+
+    const Marker placed = placeMarker(hovered.markers[1], {5.0, 0.0, 0.0});
+    EXPECT_EQ(placed.position, (Position{5.0F, 0.0F, 0.0F}));
+    EXPECT_EQ(shapeOf(placed), MarkerShape::RingPlus);
+    EXPECT_EQ(flagsOf(placed), kMarkerTopmost | kMarkerPickable);
+    EXPECT_EQ(pickOf(placed), hovered.markers[1].pick);
+    EXPECT_FLOAT_EQ(placed.ring, static_cast<float>(kMarkerMediumRing));
+    EXPECT_FLOAT_EQ(placed.cross, static_cast<float>(kMarkerMediumCross));
+
+    datums.originPoint = false;
+    datums.points.clear();
+    EXPECT_TRUE(datums.empty());
+    EXPECT_TRUE(buildDatums(datums, camera, kViewport, {}).markers.empty());
 }
 
 } // namespace

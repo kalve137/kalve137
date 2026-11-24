@@ -40,6 +40,7 @@ struct Ray {
 };
 
 Pixel toPixel(const ScreenPoint& point, const Viewport& viewport);
+std::optional<Vec3> onPlane(const Ray& ray, const Vec3& point, const Vec3& normal);
 
 class Camera {
 public:

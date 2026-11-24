@@ -4,8 +4,6 @@
 #include "scenario.h"
 #include "ui_test.h"
 
-#include "viewer/occt_view_widget.h"
-
 #include <QLineEdit>
 #include <QRectF>
 
@@ -20,7 +18,7 @@ constexpr int kSamples = 64;
 
 const QLineEdit* angleBox(UiDriver& ui)
 {
-    for (const QLineEdit* edit : ui.view().findChildren<QLineEdit*>("sketchInput")) {
+    for (const QLineEdit* edit : ui.canvas()->findChildren<QLineEdit*>("sketchInput")) {
         if (edit->isVisible() && edit->text().endsWith(QChar(0x00B0))) {
             return edit;
         }

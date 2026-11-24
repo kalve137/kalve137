@@ -32,6 +32,7 @@
 #include <memory>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace kalve137::render {
@@ -164,6 +165,18 @@ void styleNotice(QLabel& notice, GraphicsApi api, StartProblem problem)
     } else {
         notice.setText(QLabel::tr("The graphics device couldn't start with %1.\n%2").arg(apiName(api), oldView));
     }
+}
+
+std::optional<camera::Box> strokeBounds(const ActiveSketch& sketch)
+{
+    std::optional<camera::Box> bounds;
+    for (const SketchStroke& stroke : sketch.strokes) {
+        for (const snapshot::Point& point : stroke.points) {
+            const camera::Vec3 at{point[0], point[1], point[2]};
+            bounds = unite(bounds, camera::Box{at, at});
+        }
+    }
+    return bounds;
 }
 
 } // namespace
@@ -305,9 +318,141 @@ DatumDraw RhiView::datumDraw() const
             .idOriginLines = m_datumGeometry.idOriginLines};
 }
 
+void RhiView::setMarkers(std::vector<MarkerItem> markers)
+{
+    if (markers == m_markers) {
+        return;
+    }
+    m_markers = std::move(markers);
+    refreshDatums();
+    m_idsFresh = false;
+    update();
+}
+
+MarkerDraw RhiView::markerDraw() const
+{
+    return {.revision = m_markerRevision, .markers = m_markerGeometry};
+}
+
 std::optional<camera::Box> RhiView::fitBounds(double emptyHalfSize) const
 {
-    return fitBox(m_bounds, datumAnchors(m_datums), emptyHalfSize);
+    return fitBox(unite(unite(m_bounds, m_sketchBounds), m_activeBounds), datumAnchors(m_datums), emptyHalfSize);
+}
+
+void RhiView::setSketches(std::vector<snapshot::Sketch> sketches)
+{
+    if (sketches == m_sketches) {
+        return;
+    }
+    m_sketches = std::move(sketches);
+    m_sketchBounds = sketchBounds(m_sketches);
+    refreshSketches();
+    emit sceneChanged();
+}
+
+void RhiView::setSketchLook(SketchLook look)
+{
+    if (look == m_sketchLook) {
+        return;
+    }
+    m_sketchLook = std::move(look);
+    refreshSketches();
+}
+
+void RhiView::setSketchMarks(SketchMarks marks)
+{
+    if (marks == m_sketchMarks) {
+        return;
+    }
+    m_sketchMarks = std::move(marks);
+    refreshSketches();
+}
+
+SketchDraw RhiView::sketchDraw() const
+{
+    return {.revision = m_sketchRevision,
+            .curves = m_sketchGeometry.curves,
+            .profiles = m_sketchGeometry.profiles,
+            .idCurves = m_sketchGeometry.idCurves,
+            .idProfiles = m_sketchGeometry.idProfiles};
+}
+
+void RhiView::setActiveSketch(ActiveSketch sketch)
+{
+    if (sketch == m_activeSketch) {
+        return;
+    }
+    m_activeSketch = std::move(sketch);
+    m_activeBounds = strokeBounds(m_activeSketch);
+    refreshActiveSketch();
+}
+
+ActiveSketchDraw RhiView::activeSketchDraw() const
+{
+    return {.revision = m_activeRevision,
+            .profiles = m_activeGeometry.profiles,
+            .lines = m_activeGeometry.lines,
+            .arrows = m_activeGeometry.arrows};
+}
+
+void RhiView::refreshActiveSketch()
+{
+    ActiveGeometry geometry = placeActiveSketch(m_activeSketch, m_scene.origin);
+    if (geometry != m_activeGeometry) {
+        m_activeGeometry = std::move(geometry);
+        ++m_activeRevision;
+    }
+    update();
+}
+
+void RhiView::setAnnotations(Annotations annotations)
+{
+    if (annotations == m_annotations) {
+        return;
+    }
+    m_annotations = std::move(annotations);
+    refreshAnnotations();
+}
+
+AnnotationDraw RhiView::annotationDraw() const
+{
+    return {
+        .revision = m_annotationRevision, .badges = m_placedAnnotations.badges, .labels = m_placedAnnotations.labels};
+}
+
+void RhiView::setTextFamily(const QString& family)
+{
+    if (family == m_textFamily) {
+        return;
+    }
+    m_textFamily = family;
+    if (m_bodies != nullptr) {
+        m_bodies->setTextFamily(family);
+    }
+    update();
+}
+
+void RhiView::refreshAnnotations()
+{
+    PlacedAnnotations placed = placeAnnotations(m_annotations, m_scene.origin);
+    if (placed != m_placedAnnotations) {
+        m_placedAnnotations = std::move(placed);
+        ++m_annotationRevision;
+    }
+    update();
+}
+
+void RhiView::refreshSketches()
+{
+    SketchGeometry geometry = buildSketches(m_sketches, m_sketchLook, m_sketchMarks, m_scene.origin);
+    const bool same = geometry.drawsLike(m_sketchGeometry);
+    m_sketchGeometry = std::move(geometry);
+    if (!same) {
+        ++m_sketchRevision;
+    }
+    refreshDatums();
+    m_idsFresh = false;
+    update();
 }
 
 void RhiView::refreshDatums()
@@ -318,6 +463,17 @@ void RhiView::refreshDatums()
     if (!same) {
         ++m_datumRevision;
     }
+    std::vector<Marker> markers;
+    markers.reserve(m_datumGeometry.markers.size() + m_sketchGeometry.markers.size() + m_markers.size());
+    for (const std::vector<MarkerItem>* items : {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers}) {
+        for (const MarkerItem& item : *items) {
+            markers.push_back(placeMarker(item, m_scene.origin));
+        }
+    }
+    if (markers != m_markerGeometry) {
+        m_markerGeometry = std::move(markers);
+        ++m_markerRevision;
+    }
 }
 
 void RhiView::setScene(snapshot::Scene scene)
@@ -325,7 +481,9 @@ void RhiView::setScene(snapshot::Scene scene)
     m_scene = std::move(scene);
     m_bounds = render::sceneBounds(m_scene);
     m_camera.fitDepth(m_bounds);
-    refreshDatums();
+    refreshSketches();
+    refreshActiveSketch();
+    refreshAnnotations();
     updateChunks();
     emit sceneChanged();
 }
@@ -430,6 +588,8 @@ std::optional<IdImage> RhiView::readIds(const QRect& deviceRect, const IdStyle& 
         refreshDatums();
         DrawList list = m_chunks.pickList(frame());
         list.datums = datumDraw();
+        list.markers = markerDraw();
+        list.sketches = sketchDraw();
         m_idsFresh = m_bodies->prepareIds(list, style, updates);
         m_idStyle = style;
         buffer->beginPass(targets.target.get(), QColor(0, 0, 0, 0), {1.0F, 0}, updates);
@@ -499,20 +659,28 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     if (!image) {
         return std::nullopt;
     }
-    std::optional<IdHit> hit = resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds,
-                                           static_cast<int>(std::lround(kDatumPickTolerance * ratio)));
+    std::optional<IdHit> hit =
+        resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds,
+                    static_cast<int>(std::lround(kDatumPickTolerance * ratio)), m_sketchGeometry.exactIds);
     if (!hit) {
         return std::nullopt;
     }
     hit->x += rect.x();
     hit->y += rect.y();
     const PickId id = decodePickId(hit->id);
+    if (id.chunk == kSketchChunk) {
+        const std::optional<SketchKey> sketch = sketchAt(m_sketchGeometry, id.entry);
+        if (!sketch) {
+            return std::nullopt;
+        }
+        return IdPick{.item = {}, .hit = *hit, .datum = std::nullopt, .sketch = sketch};
+    }
     if (id.chunk >= kBodyChunks) {
-        const std::optional<DatumKey> datum = datumAt(m_datums, id.entry);
+        const std::optional<DatumKey> datum = datumAt(m_datums, id.chunk, id.entry);
         if (!datum) {
             return std::nullopt;
         }
-        return IdPick{.item = {}, .hit = *hit, .datum = datum};
+        return IdPick{.item = {}, .hit = *hit, .datum = datum, .sketch = std::nullopt};
     }
     const std::vector<std::uint64_t>& chunks = m_bodies->idChunks();
     if (id.chunk >= chunks.size()) {
@@ -522,7 +690,7 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     if (!item) {
         return std::nullopt;
     }
-    return IdPick{.item = *item, .hit = *hit, .datum = std::nullopt};
+    return IdPick{.item = *item, .hit = *hit, .datum = std::nullopt, .sketch = std::nullopt};
 }
 
 std::optional<std::vector<PickedItem>> RhiView::itemsIn(const QRect& deviceRect, bool whole, const PickKinds& kinds,
@@ -618,6 +786,7 @@ void RhiView::initialize(QRhiCommandBuffer*)
     }
     if (m_bodies == nullptr) {
         m_bodies = std::make_unique<RhiBackend>(rhi());
+        m_bodies->setTextFamily(m_textFamily);
     }
     if (!m_bodies->setTarget(renderTarget()->renderPassDescriptor(), sampleCount())) {
         fail();
@@ -655,6 +824,7 @@ void RhiView::setCamera(const camera::Camera& camera)
     refreshDatums();
     m_idsFresh = false;
     update();
+    emit cameraChanged();
 }
 
 camera::Viewport RhiView::viewport() const
@@ -667,7 +837,9 @@ Frame RhiView::frame() const
 {
     const camera::Viewport port = viewport();
     Frame frame = makeFrame(m_camera, port, m_scene.origin, m_style.background);
-    widenFrame(frame, m_camera, port, m_scene.origin, unite(unite(m_bounds, m_grid.bounds()), m_datumGeometry.bounds));
+    widenFrame(
+        frame, m_camera, port, m_scene.origin,
+        unite(unite(unite(unite(m_bounds, m_grid.bounds()), m_datumGeometry.bounds), m_sketchBounds), m_activeBounds));
     return frame;
 }
 
@@ -682,13 +854,31 @@ void RhiView::resizeEvent(QResizeEvent* event)
 void RhiView::mousePressEvent(QMouseEvent* event)
 {
     event->accept();
+    if (m_leftCaptured && event->button() == Qt::LeftButton) {
+        emit capturedPress(event->position(), event->modifiers());
+        return;
+    }
     emit mousePressed(event->position(), event->button(), event->buttons(), event->modifiers());
 }
 
 void RhiView::mouseReleaseEvent(QMouseEvent* event)
 {
     event->accept();
+    if (m_leftCaptured && event->button() == Qt::LeftButton) {
+        emit capturedRelease(event->position());
+        return;
+    }
     emit mouseReleased(event->position(), event->button(), event->buttons(), event->modifiers());
+}
+
+void RhiView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (m_leftCaptured && event->button() == Qt::LeftButton) {
+        event->accept();
+        emit capturedDoubleClick(event->position());
+        return;
+    }
+    QRhiWidget::mouseDoubleClickEvent(event);
 }
 
 void RhiView::mouseMoveEvent(QMouseEvent* event)
@@ -722,6 +912,10 @@ void RhiView::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
         DrawList list = m_chunks.draw(frame());
         list.grid = m_grid.draw(m_camera, port);
         list.datums = datumDraw();
+        list.markers = markerDraw();
+        list.sketches = sketchDraw();
+        list.activeSketch = activeSketchDraw();
+        list.annotations = annotationDraw();
         if (!m_bodies->prepare(list, updates)) {
             fail();
         }

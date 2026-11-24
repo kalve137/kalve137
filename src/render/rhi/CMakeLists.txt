@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 add_library(kalve137_render_rhi STATIC
+    glyph_atlas.cpp
+    glyph_atlas.h
+    rhi_annotations.cpp
     rhi_backend.cpp
     rhi_backend.h
     rhi_view.cpp
@@ -16,6 +19,7 @@ target_link_libraries(kalve137_render_rhi
     PRIVATE
         kalve137_log
         Qt6::GuiPrivate
+        Qt6::Svg
 )
 qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
     PREFIX "/kalve137/shaders"
@@ -42,6 +46,8 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
         shaders/datum_line.vert
         shaders/datum.frag
         shaders/depth_reset.frag
+        shaders/marker.vert
+        shaders/marker.frag
         shaders/mask.frag
         shaders/post.vert
         shaders/post.frag
@@ -52,6 +58,9 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
         shaders/id_datum_line.vert
         shaders/id_datum.frag
         shaders/id_depth_reset.frag
+        shaders/id_marker.vert
+        shaders/annotation.vert
+        shaders/annotation.frag
 )
 kalve137_set_warnings(kalve137_render_rhi)
 kalve137_forbid(kalve137_render_rhi OCCT MODULES app core geometry sketch viewer)

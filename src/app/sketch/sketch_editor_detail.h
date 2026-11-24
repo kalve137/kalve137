@@ -6,6 +6,7 @@
 #include "app/sketch/constraint_badge.h"
 
 #include "core/expression.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "sketch/solver.h"
 #include "viewer/style.h"
@@ -32,6 +33,7 @@ using sketch::Id;
 using sketch::Vec2;
 
 inline constexpr double kPickPixels = 9.0;
+inline constexpr double kDimensionPickPixels = 2.5;
 inline constexpr double kInferencePixels = 6.0;
 inline constexpr double kInferenceLineWidth = viewer::style::kStrokeHairline;
 inline constexpr double kMinCrossing = 0.25;
@@ -48,8 +50,8 @@ inline constexpr double kSnapMarkerScale = viewer::style::kMarkerMedium;
 inline constexpr double kMidpointMarkerScale = viewer::style::kMarkerLarge;
 inline constexpr double kGlyphStepPixels = kConstraintBadgePixels + 3.0;
 inline constexpr double kDimensionTextPixels = 20.0;
-inline constexpr double kDimensionFlyoutPixels = 28.0;
-inline constexpr double kAngleDimensionPixels = 64.0;
+using sketch::kAngleDimensionPixels;
+using sketch::kDimensionFlyoutPixels;
 inline constexpr double kRescaleTolerance = 0.02;
 inline constexpr int kRescaleDelayMs = 120;
 inline constexpr double kProfileTransparency = viewer::style::kTintFaint;

@@ -7,7 +7,9 @@ target_sources(kalve137_snapshot INTERFACE
     BASE_DIRS ${PROJECT_SOURCE_DIR}/src
     FILES
         body.h
+        chord.h
         color.h
         mesh.h
+        sketch.h
 )
 kalve137_forbid(kalve137_snapshot QT OCCT MODULES app core geometry render sketch viewer)

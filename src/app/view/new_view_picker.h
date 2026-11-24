@@ -9,6 +9,7 @@
 #include "render/chunk_set.h"
 #include "render/datums.h"
 #include "render/pick_id.h"
+#include "render/sketches.h"
 
 #include <QPointF>
 
@@ -71,8 +72,13 @@ private:
         std::shared_ptr<const snapshot::Mesh> mesh;
         std::optional<gp_Pnt> point;
         std::optional<render::DatumKey> datum;
+        std::optional<render::SketchKey> sketch;
 
-        bool same(const Found& other) const { return item == other.item && datum == other.datum; }
+        bool overlay() const { return datum || sketch; }
+        bool same(const Found& other) const
+        {
+            return item == other.item && datum == other.datum && sketch == other.sketch;
+        }
     };
     using ShapeMap = NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>;
     struct Items {
@@ -88,7 +94,8 @@ private:
     void addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const;
     std::optional<Pick> pickOf(const Found& found) const;
     std::optional<Pick> datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const;
-    void showDatumMarks();
+    static Pick sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point);
+    void showMarks();
     const core::Body* bodyOf(const render::PickedItem& item) const;
     std::shared_ptr<const snapshot::Mesh> meshOf(const render::PickedItem& item) const;
     void press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);

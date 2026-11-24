@@ -4,15 +4,25 @@
 #include "app/sketch/sketch_editor.h"
 
 #include "app/session/design_session.h"
+#include "app/sketch/badge_placement.h"
+#include "app/sketch/constraint_badge.h"
+#include "app/sketch/dimension_label.h"
 #include "app/sketch/sketch_editor_detail.h"
 
+#include "render/rhi/rhi_view.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
 
+#include <QRectF>
+#include <QSizeF>
+#include <QWidget>
+
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -29,18 +39,87 @@ bool usesPoint(const sketch::Curve& curve, Id point)
 
 } // namespace
 
+QWidget* SketchEditor::canvas() const
+{
+    return m_newView != nullptr ? static_cast<QWidget*>(m_newView) : m_view;
+}
+
+std::optional<SketchEditor::Projection> SketchEditor::projection() const
+{
+    if (m_newView != nullptr) {
+        const camera::Viewport viewport = m_newView->viewport();
+        if (!viewport.isValid() || !m_newView->camera().isUsable()) {
+            return std::nullopt;
+        }
+        return Projection{m_newView->camera(), viewport};
+    }
+    const std::optional<camera::Viewport> viewport = m_view->viewport();
+    if (!viewport) {
+        return std::nullopt;
+    }
+    const camera::Camera camera = m_view->currentCamera();
+    if (!camera.isUsable()) {
+        return std::nullopt;
+    }
+    return Projection{camera, *viewport};
+}
+
+double SketchEditor::worldPerPixel() const
+{
+    if (!m_cameraInput) {
+        return m_view->worldPerPixel();
+    }
+    const std::optional<Projection> shown = projection();
+    const double wpp = shown ? shown->camera.worldPerPixel(shown->viewport) : 0.0;
+    return std::isfinite(wpp) && wpp > 0.0 ? wpp : 0.0;
+}
+
+QPointF SketchEditor::toScreen(const gp_Pnt& point) const
+{
+    if (!m_cameraInput) {
+        return m_view->toScreen(point);
+    }
+    const std::optional<Projection> shown = projection();
+    if (!shown) {
+        return {};
+    }
+    const camera::ScreenPoint screen = shown->camera.project({point.X(), point.Y(), point.Z()}, shown->viewport);
+    return {screen.x, screen.y};
+}
+
+double SketchEditor::gridStep() const
+{
+    if (m_newView == nullptr) {
+        return m_view->gridStep();
+    }
+    return m_newView->grid().settings().visible ? m_newView->grid().layout().step : 0.0;
+}
+
 std::optional<Vec2> SketchEditor::toSketch(QPointF pos) const
 {
-    const std::optional<gp_Pnt> point = m_view->pickOnPlane(pos, plane());
+    const gp_Ax3 ax = plane();
+    if (!m_cameraInput) {
+        const std::optional<gp_Pnt> point = m_view->pickOnPlane(pos, ax);
+        return point ? std::optional(sketch::toSketch(ax, *point)) : std::nullopt;
+    }
+    const std::optional<Projection> shown = projection();
+    if (!shown) {
+        return std::nullopt;
+    }
+    const gp_Pnt origin = ax.Location();
+    const gp_Dir normal = ax.Direction();
+    const std::optional<camera::Vec3> point =
+        camera::onPlane(shown->camera.unproject({pos.x(), pos.y()}, shown->viewport),
+                        {origin.X(), origin.Y(), origin.Z()}, {normal.X(), normal.Y(), normal.Z()});
     if (!point) {
         return std::nullopt;
     }
-    return sketch::toSketch(plane(), *point);
+    return sketch::toSketch(ax, gp_Pnt(point->x, point->y, point->z));
 }
 
 double SketchEditor::tolerance() const
 {
-    return m_view->worldPerPixel() * kPickPixels;
+    return worldPerPixel() * kPickPixels;
 }
 
 SketchEditor::Snap SketchEditor::snapAt(Vec2 pos, Id ignorePoint) const
@@ -94,11 +173,11 @@ SketchEditor::Snap SketchEditor::snapAt(Vec2 pos, Id ignorePoint) const
         snap.onCurve = hit.id;
         return snap;
     }
-    if (const double step = m_view->gridStep(); m_gridSnap && step > 0.0) {
+    if (const double step = gridStep(); m_gridSnap && step > 0.0) {
         snap.pos = sketch::snapToGrid(pos, step);
         snap.onGrid = true;
     }
-    const double inferTolerance = m_view->worldPerPixel() * kInferencePixels;
+    const double inferTolerance = worldPerPixel() * kInferencePixels;
     double bestX = inferTolerance;
     double bestY = inferTolerance;
     const auto align = [&](Vec2 source, double offset, double& best, std::optional<Vec2>& aligned) {
@@ -139,7 +218,7 @@ SketchEditor::Snap SketchEditor::snapAt(Vec2 pos, Id ignorePoint) const
 void SketchEditor::extendAlongLine(Vec2 pos, Id ignorePoint, Snap& snap) const
 {
     const sketch::Sketch& s = current();
-    double best = m_view->worldPerPixel() * kInferencePixels;
+    double best = worldPerPixel() * kInferencePixels;
     std::optional<std::pair<Vec2, Vec2>> found;
     for (const auto& [id, curve] : s.curves()) {
         if (curve.kind != CurveKind::Line || usesPoint(curve, ignorePoint)) {
@@ -265,15 +344,109 @@ std::optional<Id> SketchEditor::detectedConstraint() const
     return it->second;
 }
 
+QRectF SketchEditor::labelRect(const sketch::DimensionLayout& layout) const
+{
+    const double ratio = canvas()->devicePixelRatioF();
+    const QSizeF size =
+        QSizeF(dimensionLabelPixels(QString::fromStdString(layout.label), kDimensionTextPixels, ratio)) / ratio;
+    const QPointF center = toScreen(sketch::toWorld(plane(), layout.text));
+    return {center - QPointF(size.width(), size.height()) / 2.0, size};
+}
+
+std::optional<Id> SketchEditor::constraintOnScreen(QPointF pos) const
+{
+    const double wpp = worldPerPixel();
+    if (!(wpp > 0.0)) {
+        return std::nullopt;
+    }
+    const sketch::Sketch& s = shownSketch();
+    const gp_Ax3 ax = plane();
+    const Vec2 cursor{pos.x(), pos.y()};
+    const auto screen = [&](Vec2 p) {
+        const QPointF at = toScreen(sketch::toWorld(ax, p));
+        return Vec2{at.x(), at.y()};
+    };
+    std::optional<Id> onPanel;
+    double panelBest = std::numeric_limits<double>::infinity();
+    const auto considerPanel = [&](Id id, const QRectF& rect) {
+        if (!rect.contains(pos)) {
+            return;
+        }
+        if (const double d = sketch::distance(Vec2{rect.center().x(), rect.center().y()}, cursor); d < panelBest) {
+            panelBest = d;
+            onPanel = id;
+        }
+    };
+    std::optional<Id> onLine;
+    double lineBest = kDimensionPickPixels;
+    const auto considerSegment = [&](Id id, Vec2 a, Vec2 b) {
+        if (const double d = sketch::distance(closestOnSegment(cursor, a, b), cursor); d <= lineBest) {
+            lineBest = d;
+            onLine = id;
+        }
+    };
+
+    if (m_display.constraints) {
+        const double half = kConstraintBadgePixels / 2.0;
+        for (const BadgePlace& badge : placeBadges(s)) {
+            const Vec2 center = screen(badge.center(wpp));
+            considerPanel(badge.constraint,
+                          QRectF(QPointF(center.x - half, center.y - half), QSizeF(2.0 * half, 2.0 * half)));
+        }
+    }
+    if (m_display.dimensions) {
+        const Vec2 middle = sketch::dimensionMiddle(s);
+        for (const auto& [id, constraint] : s.constraints()) {
+            const std::optional<sketch::DimensionLayout> layout = sketch::layoutDimension(s, constraint, wpp, middle);
+            if (!layout) {
+                continue;
+            }
+            if (id != m_editingLabel) {
+                considerPanel(id, labelRect(*layout));
+            }
+            for (const sketch::DimensionSegment& line : layout->lines) {
+                considerSegment(id, screen(line.from), screen(line.to));
+            }
+            for (std::size_t i = 1; i < layout->arc.size(); ++i) {
+                considerSegment(id, screen(layout->arc[i - 1]), screen(layout->arc[i]));
+            }
+            for (const sketch::DimensionArrow& arrow : layout->arrows) {
+                const Vec2 tip = screen(arrow.tip);
+                const Vec2 left = screen(arrow.left);
+                const Vec2 right = screen(arrow.right);
+                considerSegment(id, tip, left);
+                considerSegment(id, left, right);
+                considerSegment(id, right, tip);
+            }
+        }
+    }
+    const std::optional<Id> found = onPanel ? onPanel : onLine;
+    if (!found || current().constraint(*found) == nullptr) {
+        return std::nullopt;
+    }
+    return found;
+}
+
+std::optional<Id> SketchEditor::constraintAt(QPointF pos) const
+{
+    if (m_cameraInput) {
+        return constraintOnScreen(pos);
+    }
+    m_view->detectAt(pos);
+    return detectedConstraint();
+}
+
 SketchEditor::Hit SketchEditor::hitAt(QPointF pos) const
 {
-    m_view->detectAt(pos);
+    if (!m_cameraInput) {
+        m_view->detectAt(pos);
+    }
     const std::optional<Vec2> p = toSketch(pos);
     const Hit geometry = p ? geometryAt(*p) : Hit{};
     if (geometry.kind == Hit::Kind::Point) {
         return geometry;
     }
-    if (const std::optional<Id> constraint = detectedConstraint()) {
+    if (const std::optional<Id> constraint = m_cameraInput ? constraintOnScreen(pos) : detectedConstraint()) {
         return {Hit::Kind::Constraint, *constraint};
     }
     return geometry;

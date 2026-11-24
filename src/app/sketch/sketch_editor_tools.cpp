@@ -10,8 +10,6 @@
 #include "sketch/draft.h"
 #include "sketch/edit.h"
 #include "sketch/profiles.h"
-#include "viewer/occt_view_widget.h"
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -345,7 +343,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
         return;
     }
     const gp_Ax3 ax = plane();
-    const auto screen = [&](Vec2 p) { return m_view->toScreen(sketch::toWorld(ax, p)); };
+    const auto screen = [&](Vec2 p) { return toScreen(sketch::toWorld(ax, p)); };
     const auto unitScreen = [](QPointF v) {
         const double n = std::hypot(v.x(), v.y());
         return n > 1e-9 ? v / n : QPointF(0.0, -1.0);

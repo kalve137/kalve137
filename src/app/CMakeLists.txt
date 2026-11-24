@@ -70,6 +70,8 @@ add_library(kalve137_app STATIC
     shell/toolbar_fit.h
     shell/version_dialog.cpp
     shell/version_dialog.h
+    sketch/badge_placement.cpp
+    sketch/badge_placement.h
     sketch/constraint_badge.cpp
     sketch/constraint_badge.h
     sketch/dimension_label.cpp
@@ -82,10 +84,13 @@ add_library(kalve137_app STATIC
     sketch/sketch_editor_move.cpp
     sketch/sketch_editor_shapes.cpp
     sketch/sketch_editor_tools.cpp
+    sketch/sketch_editor_view.cpp
     sketch/sketch_inputs.cpp
     sketch/sketch_inputs.h
     sketch/sketch_palette.cpp
     sketch/sketch_palette.h
+    sketch/sketch_view_items.cpp
+    sketch/sketch_view_items.h
     theme/fonts.cpp
     theme/fonts.h
     theme/icons.cpp
@@ -111,6 +116,8 @@ add_library(kalve137_app STATIC
     view/scene.h
     view/scene_construction.cpp
     view/scene_detail.h
+    view/sketch_snapshots.cpp
+    view/sketch_snapshots.h
     view/view_controls.cpp
     view/view_controls.h
     view/view_cube_arrows.cpp

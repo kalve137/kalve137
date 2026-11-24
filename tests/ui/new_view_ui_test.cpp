@@ -14,6 +14,7 @@
 #include "app/view/pick.h"
 #include "camera/camera.h"
 #include "camera/navigation.h"
+#include "camera/views.h"
 #include "core/document.h"
 #include "core/feature.h"
 #include "geometry/exchange.h"
@@ -28,7 +29,9 @@
 #include "render/rhi/rhi_backend.h"
 #include "render/rhi/rhi_view.h"
 #include "render/style.h"
+#include "sketch/sketch.h"
 #include "snapshot/body.h"
+#include "snapshot/sketch.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QApplication>
@@ -700,6 +703,101 @@ TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
     }
 }
 
+TEST_F(NewViewTest, FitsASketchOnlyDesignToTheSketch)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const camera::Box drawn{{-150.0, -40.0, 0.0}, {250.0, 120.0, 0.0}};
+    core::Document document;
+    core::SketchFeature outline;
+    sketch::Sketch& s = outline.sketch;
+    const std::array corners{s.addPoint({drawn.min.x, drawn.min.y}), s.addPoint({drawn.max.x, drawn.min.y}),
+                             s.addPoint({drawn.max.x, drawn.max.y}), s.addPoint({drawn.min.x, drawn.max.y})};
+    for (std::size_t i = 0; i < corners.size(); ++i) {
+        s.addLine(corners[i], corners[(i + 1) % corners.size()]);
+    }
+    document.add(std::move(outline));
+    ui->session().reset(document, {});
+    ui->settle();
+    ASSERT_EQ(canvas->sketches().size(), 1U);
+    EXPECT_TRUE(canvas->scene().bodies.empty());
+
+    app::CameraCommands& commands = *ui->window().cameraCommands();
+    ui->trigger("Home");
+    ui->trigger("Fit All");
+    waitForCamera(commands);
+    camera::Camera expected = commands.camera();
+    ASSERT_TRUE(camera::fit(expected, drawn));
+    EXPECT_NEAR(commands.camera().scale(), expected.scale(), 1e-6 * expected.scale());
+    EXPECT_LT(camera::distance(commands.camera().center(), expected.center()), 1e-6 * expected.scale());
+    const camera::Viewport viewport = *commands.viewport();
+    double left = viewport.width;
+    double right = 0.0;
+    for (const camera::Vec3& corner : drawn.corners()) {
+        const camera::ScreenPoint at = commands.camera().project(corner, viewport);
+        EXPECT_GE(at.x, 0.0);
+        EXPECT_LE(at.x, viewport.width);
+        EXPECT_GE(at.y, 0.0);
+        EXPECT_LE(at.y, viewport.height);
+        left = std::min(left, at.x);
+        right = std::max(right, at.x);
+    }
+    EXPECT_GT(right - left, viewport.width * 0.5) << "the sketch fills the view";
+}
+
+TEST_F(NewViewTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const GridHidden gridOff(*canvas);
+    const auto box = render::test::shared(
+        render::test::bodyOf(render::test::edgedBox({-20.0, -10.0, 0.0}, {20.0, 10.0, 15.0}), {}, 1));
+    const snapshot::Scene scene{.bodies = {box}, .origin = {}, .hidden = {}};
+    canvas->setScene(scene);
+    canvas->setCamera(obliqueAt({0.0, 0.0, 7.5}, 120.0));
+    const camera::Mat4 projection = canvas->camera().projection();
+    const render::Frame before = canvas->frame();
+
+    const std::array distant{snapshot::Point{-400.0, 300.0, 2000.0}, snapshot::Point{500.0, -600.0, -1500.0}};
+    snapshot::Sketch sketch;
+    sketch.feature = 9;
+    sketch.curves.push_back(
+        {.id = 2, .kind = snapshot::SketchCurveKind::Line, .construction = false, .points = {distant[0], distant[1]}});
+    canvas->setSketches({sketch});
+    ASSERT_EQ(canvas->sketches().size(), 1U);
+    const std::optional<camera::Box>& bounds = canvas->sceneBounds();
+    ASSERT_TRUE(bounds);
+    EXPECT_EQ(bounds->min.z, 0.0);
+    EXPECT_EQ(bounds->max.z, 15.0);
+    EXPECT_EQ(bounds->min.y, -10.0);
+    expectSameMatrix(canvas->camera().projection(), projection, "projection");
+    const render::Frame after = canvas->frame();
+    EXPECT_EQ(after.viewProjection, before.viewProjection) << "the body depth range stays";
+    EXPECT_EQ(after.exactViewProjection, before.exactViewProjection);
+    for (const snapshot::Point& point : distant) {
+        const std::array<float, 16>& m = after.wideViewProjection;
+        std::array<double, 4> clip{};
+        for (std::size_t row = 0; row < clip.size(); ++row) {
+            clip.at(row) =
+                (m.at(row) * point[0]) + (m.at(row + 4) * point[1]) + (m.at(row + 8) * point[2]) + m.at(row + 12);
+        }
+        const double depth = clip[2] / clip[3];
+        EXPECT_GE(depth, -1.0) << "the sketch clamps into the depth range instead of clipping";
+        EXPECT_LE(depth, 1.0);
+    }
+    const std::optional<camera::Box> fitted = canvas->fitBounds(60.0);
+    ASSERT_TRUE(fitted);
+    EXPECT_EQ(fitted->max.z, 2000.0);
+    EXPECT_EQ(fitted->min.y, -600.0);
+
+    canvas->setSketches({});
+    EXPECT_EQ(canvas->frame().wideViewProjection, before.wideViewProjection);
+}
+
 TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
 {
     render::RhiView* canvas = ui->newView();
@@ -922,6 +1020,75 @@ QPointF devicePixelOf(const render::RhiView& canvas, const snapshot::Point& poin
 QPointF logicalPixelOf(const render::RhiView& canvas, const snapshot::Point& point)
 {
     return devicePixelOf(canvas, point) / canvas.viewport().pixelRatio;
+}
+
+void expectMarkersFollowTheCamera(render::RhiView& canvas, const std::string& api)
+{
+    constexpr int kSearch = 14;
+    constexpr double kMarkerSpacing = 6.0;
+    const GridHidden gridOff(canvas);
+    const snapshot::Point origin{1000.0, -1000.0, 0.0};
+    canvas.setScene({.bodies = {}, .origin = origin, .hidden = {}});
+    const std::array shapes{render::MarkerShape::Ball, render::MarkerShape::Ring, render::MarkerShape::Plus,
+                            render::MarkerShape::RingPlus, render::MarkerShape::Star};
+    std::vector<render::MarkerItem> items;
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        const double offset = (static_cast<double>(i) - 2.0) * kMarkerSpacing;
+        items.push_back({.anchor = {origin[0] + offset, origin[1] - offset, origin[2]},
+                         .shape = shapes.at(i),
+                         .scale = render::MarkerScale::Medium,
+                         .color = {1.0F, 0.8F, 0.2F},
+                         .flags = render::kMarkerTopmost,
+                         .pick = 0});
+    }
+    canvas.setMarkers(items);
+    const std::array frames{obliqueAt({1000.0, -1000.0, 0.0}, 50.0), obliqueAt({1004.0, -998.0, 2.0}, 70.0),
+                            obliqueAt({996.0, -1003.0, -2.0}, 40.0)};
+    for (std::size_t frame = 0; frame < frames.size(); ++frame) {
+        canvas.setCamera(frames.at(frame));
+        const QImage image = grabbed(canvas);
+        ASSERT_FALSE(image.isNull());
+        const QRgb background = image.pixel(0, 0);
+        for (const render::MarkerItem& item : items) {
+            const std::string where = std::format("{} frame {} shape {}", api, frame, static_cast<int>(item.shape));
+            const QPointF at = devicePixelOf(canvas, {item.anchor.x, item.anchor.y, item.anchor.z});
+            const int x = static_cast<int>(std::floor(at.x()));
+            const int y = static_cast<int>(std::floor(at.y()));
+            QRect box;
+            for (int row = std::max(0, y - kSearch); row <= std::min(image.height() - 1, y + kSearch); ++row) {
+                for (int column = std::max(0, x - kSearch); column <= std::min(image.width() - 1, x + kSearch);
+                     ++column) {
+                    if (!sameColor(image.pixelColor(column, row), QColor(background))) {
+                        box = box.united(QRect(column, row, 1, 1));
+                    }
+                }
+            }
+            ASSERT_FALSE(box.isNull()) << where << " draws";
+            EXPECT_NEAR((box.left() + box.right()) / 2.0, x, 1.0) << where << " sits on its anchor";
+            EXPECT_NEAR((box.top() + box.bottom()) / 2.0, y, 1.0) << where << " sits on its anchor";
+        }
+    }
+    canvas.setMarkers({});
+}
+
+TEST_F(NewViewTest, DrawsMarkersOnTheirAnchorsAcrossCameraMovesOnEveryApi)
+{
+    render::RhiView* canvas = ui->newView();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    expectMarkersFollowTheCamera(*canvas, "main");
+    for (const render::GraphicsApi api : kOtherApis) {
+        if (!render::canStart(api)) {
+            continue;
+        }
+        render::RhiView view(api);
+        view.setAttribute(Qt::WA_DontShowOnScreen);
+        view.resize(canvas->size());
+        view.show();
+        view.setViewportStyle(canvas->viewportStyle());
+        expectMarkersFollowTheCamera(view, std::string(render::graphicsApiName(api)));
+    }
 }
 
 QPointF toward(QPointF from, QPointF to, double distance)
