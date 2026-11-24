@@ -160,6 +160,37 @@ TEST(PickId, APointBeatsAnEdgeAndAnEdgeBeatsAFaceThenTheNearestWins)
     EXPECT_EQ(hit->y, 4) << "the nearest pixel of the edge, straight across";
 }
 
+TEST(PickId, PlanesAndAxesReachLessAndTheOriginGroupComesFirst)
+{
+    IdImage image{.width = 9, .height = 9, .ids = {}, .depths = {}};
+    image.ids.assign(81, encodePickId(0, PickKind::Face, 1));
+    image.depths.assign(81, 0.5F);
+    const auto put = [&image](int x, int y, std::uint32_t id) { image.ids[image.indexOf(x, y)] = id; };
+    const std::uint32_t axis = encodePickId(kDatumChunk, PickKind::Edge, 1);
+    const std::uint32_t outline = encodePickId(kDatumChunk, PickKind::Point, 2);
+    const std::uint32_t originPlane = encodePickId(kOriginChunk, PickKind::Face, 0);
+    const PickKinds planes{.faces = true, .edges = true, .points = false, .planes = true};
+    const PickKinds axes{.faces = true, .edges = true, .points = false, .axes = true};
+    const auto pick = [&](const PickKinds& kinds) {
+        const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kinds, kDatumPickTolerance);
+        return hit ? hit->id : 0U;
+    };
+    for (int y = 0; y < 9; ++y) {
+        put(7, y, axis);
+    }
+    EXPECT_EQ(pick(axes), encodePickId(0, PickKind::Face, 1)) << "an axis three pixels off is past its reach";
+    for (int y = 0; y < 9; ++y) {
+        put(6, y, axis);
+    }
+    EXPECT_EQ(pick(axes), axis);
+    EXPECT_EQ(pick(planes), encodePickId(0, PickKind::Face, 1)) << "axes pick only where axes are wanted";
+    put(3, 4, outline);
+    EXPECT_EQ(pick(planes), outline) << "a plane outline picks the plane";
+    put(2, 2, originPlane);
+    EXPECT_EQ(pick(planes), originPlane) << "the origin group wins over nearer items";
+    EXPECT_EQ(pick(axes), axis) << "origin planes pick only where planes are wanted";
+}
+
 TEST(CpuIds, PickAnEdgeFromThreePixelsAway)
 {
     const auto mesh = test::edgedBox({-10.0, -10.0, -10.0}, {10.0, 10.0, 10.0});

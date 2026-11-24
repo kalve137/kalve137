@@ -49,7 +49,22 @@ private:
         float span = 0.0F;
         bool valid = false;
     };
-    enum class Pass : std::uint8_t { Face, GoldFill, MaskFill, Halo, Edge, GridFill, GridLine, HiddenFace, HiddenEdge };
+    enum class Pass : std::uint8_t {
+        Face,
+        GoldFill,
+        MaskFill,
+        Halo,
+        Edge,
+        GridFill,
+        GridLine,
+        DatumFill,
+        DatumLine,
+        HiddenFace,
+        HiddenEdge,
+        DepthReset,
+        OriginFill,
+        OriginLine
+    };
     struct Triangle {
         std::uint32_t a = 0;
         std::uint32_t b = 0;
@@ -66,6 +81,7 @@ private:
         float biasUnits = 0.0F;
         bool alongX = false;
         std::uint32_t id = 0;
+        std::uint16_t pattern = 0;
     };
     struct TileBuffers {
         std::vector<std::uint32_t> color;
@@ -91,6 +107,12 @@ private:
     void projectGrid(const DrawList& list);
     void addGridLine(const DrawList& list, const OverlayLine& line,
                      const std::optional<std::array<double, 3>>& onPlane);
+    void projectDatums(const DrawList& list);
+    void projectOrigin(const DrawList& list);
+    void addFills(const DrawList& list, std::span<const OverlayVertex> fills, Pass pass, float biasSlope,
+                  int biasUnits);
+    void addDatumLine(const DrawList& list, const DatumLine& line, Pass pass);
+    bool stippledOff(const Triangle& triangle, int x, int y) const;
     void bin();
     void shadeTile(int tile, int worker);
     void resolveTile(int tile, int worker, Image& image) const;
@@ -111,6 +133,7 @@ private:
     double m_haloPixels = 0.0;
     float m_dash = 0.0F;
     float m_gap = 0.0F;
+    double m_datumDash = 1.0;
     bool m_highlightedEdgesOnly = false;
     bool m_ids = false;
     std::vector<Projected> m_vertices;

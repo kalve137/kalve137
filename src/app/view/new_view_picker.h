@@ -7,6 +7,7 @@
 #include "core/document.h"
 #include "core/recompute.h"
 #include "render/chunk_set.h"
+#include "render/datums.h"
 #include "render/pick_id.h"
 
 #include <QPointF>
@@ -69,6 +70,9 @@ private:
         render::PickedItem item;
         std::shared_ptr<const snapshot::Mesh> mesh;
         std::optional<gp_Pnt> point;
+        std::optional<render::DatumKey> datum;
+
+        bool same(const Found& other) const { return item == other.item && datum == other.datum; }
     };
     using ShapeMap = NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>;
     struct Items {
@@ -83,6 +87,8 @@ private:
     const Items& itemsOf(const core::Body& body) const;
     void addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const;
     std::optional<Pick> pickOf(const Found& found) const;
+    std::optional<Pick> datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const;
+    void showDatumMarks();
     const core::Body* bodyOf(const render::PickedItem& item) const;
     std::shared_ptr<const snapshot::Mesh> meshOf(const render::PickedItem& item) const;
     void press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);

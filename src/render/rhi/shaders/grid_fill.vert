@@ -44,4 +44,7 @@ void main()
     vec4 body = viewProjection * vec4(position, 1.0);
     depthAndW = vec2(body.z, body.w);
     gl_Position = wideViewProjection * vec4(position, 1.0);
+    if (overlayScale.z > 0.5) {
+        gl_Position.z = body.z / body.w * gl_Position.w;
+    }
 }

@@ -35,6 +35,7 @@ add_executable(kalve137_tests
     platform/crash_test.cpp
     render/box_select_test.cpp
     render/cpu_backend_test.cpp
+    render/datums_test.cpp
     render/draw_list_test.cpp
     render/edge_quad_test.cpp
     render/grid_overlay_test.cpp
@@ -104,6 +105,7 @@ add_executable(kalve137_uitests
     ui/new_view_ui_test.cpp
     ui/pair_shots.cpp
     ui/pair_shots.h
+    ui/plane_pair_ui_test.cpp
     ui/preferences_ui_test.cpp
     ui/recent_values_ui_test.cpp
     ui/scenario.cpp

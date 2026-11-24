@@ -10,6 +10,8 @@ add_library(kalve137_render STATIC
     chunk_set.h
     cpu_backend.cpp
     cpu_backend.h
+    datums.cpp
+    datums.h
     draw_list.cpp
     draw_list.h
     edge_quad.cpp

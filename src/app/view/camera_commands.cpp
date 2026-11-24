@@ -244,10 +244,11 @@ void CameraCommands::change(Move move, const std::function<void(camera::Camera&)
 
 void CameraCommands::fitTo(camera::Camera& camera)
 {
-    if (m_sceneIsEmpty() || !sceneBounds()) {
+    const std::optional<camera::Box> bounds = m_newView->fitBounds(kEmptySceneHalfSize);
+    if (!bounds) {
         camera::fitAround(camera, kEmptySceneHalfSize);
     } else {
-        camera::fit(camera, sceneBounds());
+        camera::fit(camera, bounds);
     }
 }
 

@@ -4,6 +4,7 @@
 #include "render/pick_id.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <tuple>
 
 namespace kalve137::render {
@@ -45,6 +46,15 @@ bool PickKinds::has(PickKind kind) const
     return false;
 }
 
+bool PickKinds::allows(std::uint32_t id) const
+{
+    const PickId pick = decodePickId(id);
+    if (pick.chunk < kBodyChunks) {
+        return has(pick.kind);
+    }
+    return pick.kind == PickKind::Edge ? axes : pick.kind != PickKind::None && planes;
+}
+
 std::uint32_t encodePickId(std::uint32_t chunk, PickKind kind, std::uint32_t entry)
 {
     return (chunk << kPickChunkShift) | (static_cast<std::uint32_t>(kind) << kPickKindShift) | (entry & kEntryMask);
@@ -57,20 +67,25 @@ PickId decodePickId(std::uint32_t id)
             .entry = id & kEntryMask};
 }
 
-std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds)
+std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
+                                 int datumRadius)
 {
     std::optional<IdHit> best;
-    std::tuple<int, int> bestRank{};
+    std::tuple<int, int, int> bestRank{};
     for (int row = std::max(0, y - radius); row <= std::min(image.height - 1, y + radius); ++row) {
         for (int column = std::max(0, x - radius); column <= std::min(image.width - 1, x + radius); ++column) {
             const std::uint32_t id = image.idAt(column, row);
-            const PickKind kind = decodePickId(id).kind;
-            if (!kinds.has(kind)) {
+            if (!kinds.allows(id)) {
                 continue;
             }
+            const PickId pick = decodePickId(id);
             const int dx = column - x;
             const int dy = row - y;
-            const std::tuple<int, int> rank{-priorityOf(kind), (dx * dx) + (dy * dy)};
+            if (pick.chunk >= kBodyChunks && std::max(std::abs(dx), std::abs(dy)) > datumRadius) {
+                continue;
+            }
+            const std::tuple<int, int, int> rank{pick.chunk == kOriginChunk ? 0 : 1, -priorityOf(pick.kind),
+                                                 (dx * dx) + (dy * dy)};
             if (!best || rank < bestRank) {
                 best = IdHit{.id = id, .x = column, .y = row, .depth = image.depthAt(column, row)};
                 bestRank = rank;

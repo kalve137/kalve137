@@ -27,8 +27,9 @@ std::uint8_t byteOf(double linear)
     return static_cast<std::uint8_t>(std::lround(toSrgb(static_cast<float>(linear)) * kByte));
 }
 
-VertexColor faded(const LinearColor& color, const LinearColor& background, double weight)
+VertexColor faded(const LinearColor& color, const LinearColor& background, double fade)
 {
+    const double weight = 1.0 - (kGridLineStrength * (1.0 - fade));
     const auto mixed = [&](std::size_t c) { return color.at(c) + ((background.at(c) - color.at(c)) * weight); };
     return {byteOf(mixed(0)), byteOf(mixed(1)), byteOf(mixed(2)), static_cast<std::uint8_t>(kByte)};
 }

@@ -9,6 +9,8 @@
 #include "viewer/occt_view_widget.h"
 #include "viewer/style.h"
 
+#include <QColor>
+
 #include <AIS_Point.hxx>
 #include <AIS_Shape.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
@@ -19,6 +21,8 @@
 #include <Prs3d_PointAspect.hxx>
 #include <gp_Pln.hxx>
 
+#include <array>
+#include <cstdint>
 #include <utility>
 
 namespace kalve137::app {
@@ -48,12 +52,68 @@ void pinTo(const Handle(AIS_InteractiveObject)& object, const gp_Pnt& anchor)
     object->SetTransformPersistence(new Graphic3d_TransformPers(Graphic3d_TMF_ZoomPers, anchor));
 }
 
-bool axesPickable(PickMode mode)
+camera::Vec3 vecOf(const gp_XYZ& xyz)
 {
-    return mode == PickMode::Lines || mode == PickMode::ProfilesAndLines || mode == PickMode::Faces;
+    return {xyz.X(), xyz.Y(), xyz.Z()};
 }
 
+snapshot::Color colorOf(const QColor& color)
+{
+    return {static_cast<float>(color.redF()), static_cast<float>(color.greenF()), static_cast<float>(color.blueF()),
+            static_cast<float>(color.alphaF())};
+}
+
+constexpr std::array kOriginPlanes{core::OriginPlane::XY, core::OriginPlane::XZ, core::OriginPlane::YZ};
+
 } // namespace
+
+render::Datums Scene::datums() const
+{
+    const theme::Palette& colors = theme::palette();
+    render::Datums datums;
+    datums.planeColor = colorOf(colors.viewport.originPlane);
+    if (m_originVisible || m_mode == PickMode::Planes || m_mode == PickMode::Lines) {
+        for (const core::OriginPlane plane : kOriginPlanes) {
+            const gp_Ax3 frame = core::originPlane(plane);
+            datums.originPlanes.push_back({.id = static_cast<std::uint64_t>(plane),
+                                           .anchor = {},
+                                           .u = vecOf(frame.XDirection().XYZ()),
+                                           .v = vecOf(frame.YDirection().XYZ())});
+        }
+        const std::array axes{std::pair{core::AxisKind::X, camera::Vec3{1.0, 0.0, 0.0}},
+                              std::pair{core::AxisKind::Y, camera::Vec3{0.0, 1.0, 0.0}},
+                              std::pair{core::AxisKind::Z, camera::Vec3{0.0, 0.0, 1.0}}};
+        for (const auto& [kind, direction] : axes) {
+            const QColor& color = kind == core::AxisKind::X   ? colors.viewport.axisX
+                                  : kind == core::AxisKind::Y ? colors.viewport.axisY
+                                                              : colors.viewport.axisZ;
+            datums.originAxes.push_back({.id = static_cast<std::uint64_t>(kind),
+                                         .anchor = {},
+                                         .direction = direction,
+                                         .color = colorOf(color)});
+        }
+    }
+    for (const auto& [id, plane] : m_model.planes) {
+        if (m_hidden.contains(id)) {
+            continue;
+        }
+        const gp_Ax3 local(gp::Origin(), plane.frame.Direction(), plane.frame.XDirection());
+        datums.planes.push_back({.id = static_cast<std::uint64_t>(id),
+                                 .anchor = vecOf(plane.center.XYZ()),
+                                 .u = vecOf(local.XDirection().XYZ()),
+                                 .v = vecOf(local.YDirection().XYZ())});
+    }
+    for (const auto& [id, axis] : m_model.axes) {
+        if (m_hidden.contains(id)) {
+            continue;
+        }
+        datums.axes.push_back({.id = static_cast<std::uint64_t>(id),
+                               .anchor = vecOf(axis.Location().XYZ()),
+                               .direction = vecOf(axis.Direction().XYZ()),
+                               .color = datums.planeColor});
+    }
+    return datums;
+}
 
 void Scene::showOrigin()
 {
@@ -71,7 +131,7 @@ void Scene::showOrigin()
         Pick pick;
         pick.kind = Pick::Kind::OriginPlane;
         pick.plane = plane;
-        display(object, m_mode == PickMode::Planes ? kWholeObject : kNotSelectable, pick);
+        display(object, planesPickable(m_mode) ? kWholeObject : kNotSelectable, pick);
     }
     const std::pair<core::AxisKind, QColor> axes[] = {{core::AxisKind::X, theme::palette().viewport.axisX},
                                                       {core::AxisKind::Y, theme::palette().viewport.axisY},
@@ -113,7 +173,7 @@ void Scene::showConstructionPlanes()
         pick.kind = Pick::Kind::ConstructionPlane;
         pick.feature = id;
         pick.construction = plane;
-        display(object, m_mode == PickMode::Planes ? kWholeObject : kNotSelectable, pick);
+        display(object, planesPickable(m_mode) ? kWholeObject : kNotSelectable, pick);
     }
 }
 

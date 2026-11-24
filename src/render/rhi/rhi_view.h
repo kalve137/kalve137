@@ -5,6 +5,7 @@
 
 #include "camera/camera.h"
 #include "render/chunk_set.h"
+#include "render/datums.h"
 #include "render/graphics_api.h"
 #include "render/grid_overlay.h"
 #include "render/pick_id.h"
@@ -43,6 +44,7 @@ enum class StartProblem { None, NoDevice, TooOld };
 struct IdPick {
     PickedItem item;
     IdHit hit;
+    std::optional<DatumKey> datum;
 };
 
 StartProblem startProblem(const DeviceProbe& probe);
@@ -65,6 +67,12 @@ public:
     const ViewportStyle& viewportStyle() const { return m_style; }
     void setGrid(const GridSettings& settings);
     const GridOverlay& grid() const { return m_grid; }
+    void setDatums(Datums datums);
+    const Datums& datums() const { return m_datums; }
+    void setDatumMarks(DatumMarks marks);
+    const DatumMarks& datumMarks() const { return m_datumMarks; }
+    DatumDraw datumDraw() const;
+    std::optional<camera::Box> fitBounds(double emptyHalfSize) const;
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
     const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
@@ -118,6 +126,7 @@ private:
     struct IdTargets;
 
     void updateChunks();
+    void refreshDatums();
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
     bool ensureIdTargets(QSize size);
     QRhiTexture* resolvedTexture() const;
@@ -130,6 +139,10 @@ private:
     std::optional<camera::Box> m_bounds;
     camera::Camera m_camera;
     GridOverlay m_grid;
+    Datums m_datums;
+    DatumMarks m_datumMarks;
+    DatumGeometry m_datumGeometry;
+    std::uint64_t m_datumRevision = 0;
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;
     std::unique_ptr<IdTargets> m_ids;

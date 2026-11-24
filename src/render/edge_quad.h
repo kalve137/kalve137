@@ -12,7 +12,9 @@ using Clip = std::array<double, 4>;
 
 inline constexpr int kEdgeCorners = 4;
 
+enum class Cap { Square, Butt };
+
 std::optional<Clip> expandEdge(const Clip& start, const Clip& end, int corner, double widthPixels, double width,
-                               double height);
+                               double height, Cap cap = Cap::Square);
 
 } // namespace kalve137::render
