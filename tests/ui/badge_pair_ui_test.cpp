@@ -100,6 +100,8 @@ QString iconName(render::BadgeIcon icon)
     switch (icon) {
     case render::BadgeIcon::Coincident:
         return QStringLiteral("coincident");
+    case render::BadgeIcon::Concentric:
+        return QStringLiteral("concentric");
     case render::BadgeIcon::Equal:
         return QStringLiteral("equal");
     case render::BadgeIcon::Horizontal:
@@ -108,6 +110,8 @@ QString iconName(render::BadgeIcon icon)
         return QStringLiteral("lock");
     case render::BadgeIcon::Midpoint:
         return QStringLiteral("midpoint");
+    case render::BadgeIcon::Offset:
+        return QStringLiteral("sketch_offset");
     case render::BadgeIcon::Parallel:
         return QStringLiteral("parallel");
     case render::BadgeIcon::Perpendicular:
@@ -393,11 +397,12 @@ protected:
         const double ratio = m_old->oldView()->devicePixelRatioF();
         const Handle(AIS_InteractiveContext)& context = m_old->oldView()->aisContext();
         const std::vector<BadgeSample> badges = everyBadge();
+        const double badgeRows = std::ceil(static_cast<double>(badges.size()) / kBadgeColumns);
         for (std::size_t i = 0; i < badges.size(); ++i) {
             const double column = static_cast<double>(i % kBadgeColumns) - ((kBadgeColumns - 1) / 2.0);
             const std::size_t line = i / kBadgeColumns;
             const auto row = static_cast<double>(line);
-            const camera::Vec3 at = worldAt(column * kBadgeStepX, (row - 2.0) * kBadgeStepY);
+            const camera::Vec3 at = worldAt(column * kBadgeStepX, (row - badgeRows + 0.5) * kBadgeStepY);
             m_anchors.push_back(at);
             m_names.push_back(std::format("{} {}", iconName(badges[i].icon).toStdString(), lookName(badges[i].look)));
             Handle(AIS_InteractiveObject) badge =
@@ -415,7 +420,7 @@ protected:
             const double column = static_cast<double>(i % kLabelColumns) - ((kLabelColumns - 1) / 2.0);
             const std::size_t line = i / kLabelColumns;
             const auto row = static_cast<double>(line);
-            const camera::Vec3 at = worldAt(column * kLabelStepX, (row + 0.5) * kLabelStepY);
+            const camera::Vec3 at = worldAt(column * kLabelStepX, (row + 1.0) * kLabelStepY);
             m_anchors.push_back(at);
             m_names.push_back(std::format("label {} {}", labels[i].text.toStdString(), lookName(labels[i].look)));
             const app::DimensionLabel label = app::makeDimensionLabel(

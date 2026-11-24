@@ -234,7 +234,8 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
         const auto build = [&](QString& text, std::optional<double>& flyout) {
             Handle(PrsDim_Dimension) dimension;
             switch (constraint.kind) {
-            case ConstraintKind::Distance: {
+            case ConstraintKind::Distance:
+            case ConstraintKind::Offset: {
                 const auto ends = sketch::measuredPoints(s, constraint);
                 if (ends && sketch::distance(ends->first, ends->second) > 1e-9) {
                     const auto [a, b] = *ends;
@@ -628,6 +629,7 @@ void SketchEditor::redrawPreview()
         }
         break;
     case Tool::Select:
+    case Tool::Offset:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:

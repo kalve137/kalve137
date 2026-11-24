@@ -7,9 +7,11 @@
 #include "app/sketch/sketch_inputs.h"
 
 #include "sketch/build.h"
+#include "sketch/offset.h"
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -87,6 +89,50 @@ void SketchEditor::clickMirror(Vec2 pos)
         return;
     }
     commit(tr("Mirror"), std::move(candidate));
+}
+
+void SketchEditor::clickOffset(QPointF screen, Vec2 pos)
+{
+    const Hit hit = curveAt(pos);
+    if (hit.kind != Hit::Kind::Curve) {
+        emit message(hint());
+        return;
+    }
+    const sketch::Sketch& s = current();
+    std::vector<Id> curves;
+    if (m_selection.contains(hit.id)) {
+        std::ranges::copy_if(m_selection, std::back_inserter(curves), [&](Id id) { return s.isCurve(id); });
+    }
+    if (curves.empty() || !sketch::orderChain(s, curves)) {
+        curves = sketch::chainThrough(s, hit.id);
+    }
+    if (!sketch::orderChain(s, curves)) {
+        emit message(tr("Pick curves joined end to end, without branches"));
+        return;
+    }
+    m_offsetSide = 1;
+    m_selection = {curves.begin(), curves.end()};
+    redraw();
+    const auto offsetBy = [this](double typed) { return typed * m_offsetSide; };
+    promptValue(
+        screen, m_offsetDistance, core::Quantity::Length, 0,
+        [this, curves, offsetBy](double typed) {
+            sketch::Sketch candidate = current();
+            if (!sketch::addOffset(candidate, curves, offsetBy(typed))) {
+                emit message(tr("A %1 mm offset doesn't fit these curves").arg(formatValue(std::abs(typed))));
+                return;
+            }
+            m_offsetDistance = std::abs(typed);
+            m_selection.clear();
+            commit(tr("Offset"), std::move(candidate));
+        },
+        [this, curves, offsetBy](double typed) {
+            sketch::Sketch candidate = current();
+            sketch::addOffset(candidate, curves, offsetBy(typed), false);
+            return candidate;
+        });
+    m_offsetChain = curves;
+    emit stateChanged();
 }
 
 int SketchEditor::polygonSides() const

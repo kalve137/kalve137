@@ -56,6 +56,7 @@ inline constexpr double kPickPointWidth = 6.0;
 inline constexpr double kPickMarkerWidth = 12.0;
 inline constexpr int kPickTolerance = 4;
 inline constexpr int kDatumPickTolerance = 2;
+inline constexpr int kAxisPickTolerance = 3;
 
 struct IdStyle {
     bool points = false;
@@ -94,6 +95,6 @@ struct IdHit {
 };
 
 std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
-                                 int datumRadius = 0, std::span<const std::uint32_t> exactIds = {});
+                                 int datumRadius = 0, int axisRadius = 0, std::span<const std::uint32_t> exactIds = {});
 
 } // namespace kalve137::render

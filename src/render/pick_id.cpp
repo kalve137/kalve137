@@ -34,6 +34,11 @@ bool isProfile(const PickId& pick)
     return pick.chunk == kSketchChunk && pick.kind == PickKind::Face;
 }
 
+bool isAxis(const PickId& pick)
+{
+    return pick.chunk > kMarkerChunk && pick.kind == PickKind::Edge;
+}
+
 } // namespace
 
 bool PickKinds::has(PickKind kind) const
@@ -89,10 +94,18 @@ PickId decodePickId(std::uint32_t id)
 }
 
 std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
-                                 int datumRadius, std::span<const std::uint32_t> exactIds)
+                                 int datumRadius, int axisRadius, std::span<const std::uint32_t> exactIds)
 {
     std::optional<IdHit> best;
     std::tuple<int, int, int, int> bestRank{};
+    std::optional<float> faceDepth;
+    if (x >= 0 && y >= 0 && x < image.width && y < image.height) {
+        const std::uint32_t under = image.idAt(x, y);
+        const PickId pick = decodePickId(under);
+        if (pick.chunk < kBodyChunks && pick.kind == PickKind::Face && kinds.allows(under)) {
+            faceDepth = image.depthAt(x, y);
+        }
+    }
     for (int row = std::max(0, y - radius); row <= std::min(image.height - 1, y + radius); ++row) {
         for (int column = std::max(0, x - radius); column <= std::min(image.width - 1, x + radius); ++column) {
             const std::uint32_t id = image.idAt(column, row);
@@ -102,7 +115,12 @@ std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius,
             const PickId pick = decodePickId(id);
             const int dx = column - x;
             const int dy = row - y;
-            if (pick.chunk >= kMarkerChunk && std::max(std::abs(dx), std::abs(dy)) > datumRadius) {
+            const int reach = faceDepth || !isAxis(pick) ? datumRadius : axisRadius;
+            if (pick.chunk >= kMarkerChunk && std::max(std::abs(dx), std::abs(dy)) > reach) {
+                continue;
+            }
+            if (faceDepth && pick.chunk < kBodyChunks && pick.kind == PickKind::Edge &&
+                (image.depthAt(column, row) > *faceDepth || (dx * dx) + (dy * dy) > radius * radius)) {
                 continue;
             }
             if ((dx != 0 || dy != 0) && std::ranges::find(exactIds, id) != exactIds.end()) {

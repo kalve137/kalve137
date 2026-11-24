@@ -6,6 +6,7 @@ find_package(nlohmann_json CONFIG REQUIRED)
 include(GoogleTest)
 
 add_executable(kalve137_tests
+    app/badge_placement_test.cpp
     app/batch_import_test.cpp
     app/design_session_test.cpp
     app/startup_options_test.cpp
@@ -51,6 +52,7 @@ add_executable(kalve137_tests
     sketch/dimension_test.cpp
     sketch/draft_test.cpp
     sketch/edit_test.cpp
+    sketch/offset_test.cpp
     sketch/select_test.cpp
     sketch/sketch_test.cpp
     sketch/snapshot_test.cpp
@@ -117,6 +119,7 @@ add_executable(kalve137_uitests
     ui/select_ui_test.cpp
     ui/sketch_input_ui_test.cpp
     ui/sketch_move_ui_test.cpp
+    ui/offset_ui_test.cpp
     ui/slot_ui_test.cpp
     ui/scenario.h
     ui/screen_ui_test.cpp
@@ -171,6 +174,7 @@ set(new_view_sketch
     ConstraintTest.*
     DimensionTest.*
     LineTest.*
+    OffsetTest.*
     ScreenTest.FloorFitsTheWindowAndBothToolbars
     SelectTest.SketchWindowTakesTheWholeRectangle
     SelectTest.SketchCrossingTakesWhatItTouches

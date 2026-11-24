@@ -23,19 +23,22 @@ using AnnotationColor = std::array<std::uint8_t, 4>;
 
 enum class BadgeIcon : std::uint8_t {
     Coincident,
+    Concentric,
     Equal,
     Horizontal,
     Lock,
     Midpoint,
+    Offset,
     Parallel,
     Perpendicular,
     Symmetric,
     Tangent,
     Vertical
 };
-inline constexpr std::array kBadgeIcons{
-    BadgeIcon::Coincident, BadgeIcon::Equal,         BadgeIcon::Horizontal, BadgeIcon::Lock,    BadgeIcon::Midpoint,
-    BadgeIcon::Parallel,   BadgeIcon::Perpendicular, BadgeIcon::Symmetric,  BadgeIcon::Tangent, BadgeIcon::Vertical};
+inline constexpr std::array kBadgeIcons{BadgeIcon::Coincident, BadgeIcon::Concentric, BadgeIcon::Equal,
+                                        BadgeIcon::Horizontal, BadgeIcon::Lock,       BadgeIcon::Midpoint,
+                                        BadgeIcon::Offset,     BadgeIcon::Parallel,   BadgeIcon::Perpendicular,
+                                        BadgeIcon::Symmetric,  BadgeIcon::Tangent,    BadgeIcon::Vertical};
 
 struct BadgeItem {
     camera::Vec3 anchor;

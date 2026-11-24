@@ -4,15 +4,29 @@
 #include "scenario.h"
 
 #include "app/session/design_session.h"
+#include "app/shell/main_window.h"
+#include "app/sketch/sketch_editor.h"
 #include "core/feature.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "viewer/occt_view_widget.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <optional>
 #include <utility>
+#include <variant>
 
 namespace kalve137::uitest {
+
+namespace {
+
+constexpr double kGlidePixels = 2.0;
+constexpr double kProbeLength = 10.0;
+
+} // namespace
 
 core::Document blockDocument()
 {
@@ -90,6 +104,53 @@ int faces(const UiDriver& ui, std::size_t body)
 {
     const nlohmann::json state = ui.state();
     return body < state["bodies"].size() ? state["bodies"][body]["faces"].get<int>() : 0;
+}
+
+void glide(UiDriver& ui, const gp_Pnt& from, const gp_Pnt& to)
+{
+    const QPointF span = ui.at(to) - ui.at(from);
+    const int steps = std::max(1, static_cast<int>(std::ceil(std::hypot(span.x(), span.y()) / kGlidePixels)));
+    for (int step = 1; step <= steps; ++step) {
+        const double t = static_cast<double>(step) / steps;
+        ui.move(ui.at(gp_Pnt(from.XYZ() + (to.XYZ() - from.XYZ()) * t)));
+    }
+}
+
+void startSketch(UiDriver& ui, const QString& tool)
+{
+    ui.trigger("Create Sketch");
+    ui.click(ui.originPlane(core::OriginPlane::XY));
+    ASSERT_NE(ui.state()["sketch"], 0) << ui.state().dump(2);
+    ui.trigger(tool);
+}
+
+const sketch::Sketch* lastSketch(const UiDriver& ui)
+{
+    const auto* feature = std::get_if<core::SketchFeature>(&ui.document().features().back().data);
+    return feature != nullptr ? &feature->sketch : nullptr;
+}
+
+void editDimension(UiDriver& ui, sketch::Id id, const QString& value)
+{
+    const sketch::Sketch* s = lastSketch(ui);
+    ASSERT_NE(s, nullptr);
+    ASSERT_NE(s->constraint(id), nullptr);
+    const QPointF origin = ui.at(gp_Pnt(0, 0, 0));
+    const QPointF probe = ui.at(gp_Pnt(kProbeLength, 0, 0));
+    const double wpp = kProbeLength / std::hypot(probe.x() - origin.x(), probe.y() - origin.y());
+    const std::optional<sketch::DimensionLayout> layout =
+        sketch::layoutDimension(*s, *s->constraint(id), wpp, sketch::dimensionMiddle(*s));
+    ASSERT_TRUE(layout);
+    const QPointF label = ui.at(gp_Pnt(layout->text.x, layout->text.y, 0));
+    ui.trigger("Select");
+    const auto* editor = ui.window().findChild<app::SketchEditor*>();
+    ASSERT_NE(editor, nullptr);
+    const app::SketchEditor::Hit hit = editor->hitAt(label);
+    ASSERT_EQ(hit.kind, app::SketchEditor::Hit::Kind::Constraint);
+    ASSERT_EQ(hit.id, id);
+    ui.doubleClick(label);
+    ui.type(value);
+    ui.key(Qt::Key_Return);
 }
 
 } // namespace kalve137::uitest

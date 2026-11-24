@@ -11,6 +11,27 @@ namespace kalve137::app {
 
 using namespace sketch_editor_detail;
 
+namespace {
+
+std::vector<Id> concentricCurves(const sketch::Sketch& s, const sketch::Constraint& constraint)
+{
+    std::vector<Id> curves;
+    for (Id ref : constraint.refs) {
+        const std::size_t before = curves.size();
+        for (const auto& [id, curve] : s.curves()) {
+            if (curve.kind != CurveKind::Line && curve.points.front() == ref) {
+                curves.push_back(id);
+            }
+        }
+        if (curves.size() == before) {
+            return {};
+        }
+    }
+    return curves;
+}
+
+} // namespace
+
 std::vector<BadgePlace> placeBadges(const sketch::Sketch& s)
 {
     std::vector<BadgePlace> badges;
@@ -38,6 +59,12 @@ std::vector<BadgePlace> placeBadges(const sketch::Sketch& s)
     };
 
     for (const auto& [id, constraint] : s.constraints()) {
+        if (constraint.kind == ConstraintKind::Coincident) {
+            for (Id curve : concentricCurves(s, constraint)) {
+                near(id, curve, QStringLiteral("concentric"));
+            }
+            continue;
+        }
         const QString icon = glyphFor(constraint.kind);
         if (icon.isEmpty()) {
             continue;
@@ -67,6 +94,11 @@ std::vector<BadgePlace> placeBadges(const sketch::Sketch& s)
         case ConstraintKind::Equal:
             for (Id ref : constraint.refs) {
                 near(id, ref, icon);
+            }
+            break;
+        case ConstraintKind::Offset:
+            if (const std::vector<sketch::OffsetPair> pairs = sketch::offsetPairs(constraint); !pairs.empty()) {
+                near(id, pairs.front().offset, icon);
             }
             break;
         case ConstraintKind::Coincident:

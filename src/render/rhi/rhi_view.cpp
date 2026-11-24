@@ -661,7 +661,8 @@ std::optional<IdPick> RhiView::pickAt(QPointF position, const PickKinds& kinds, 
     }
     std::optional<IdHit> hit =
         resolvePick(*image, center.x() - rect.x(), center.y() - rect.y(), radius, kinds,
-                    static_cast<int>(std::lround(kDatumPickTolerance * ratio)), m_sketchGeometry.exactIds);
+                    static_cast<int>(std::lround(kDatumPickTolerance * ratio)),
+                    static_cast<int>(std::lround(kAxisPickTolerance * ratio)), m_sketchGeometry.exactIds);
     if (!hit) {
         return std::nullopt;
     }

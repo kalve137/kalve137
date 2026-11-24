@@ -9,6 +9,7 @@
 #include "geometry/exchange.h"
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
+#include "sketch/offset.h"
 
 #include <gtest/gtest.h>
 
@@ -21,6 +22,8 @@
 
 #include <filesystem>
 #include <numbers>
+#include <optional>
+#include <vector>
 
 using namespace kalve137;
 using namespace kalve137::core;
@@ -569,6 +572,93 @@ TEST(Serialization, RejectsDamagedSketches)
                                     {"kind", "horizontal"},
                                     {"refs", nlohmann::json::array({s["curves"][1]["id"]})},
                                     {"value", 0.0}});
+    });
+}
+
+TEST(Serialization, OffsetRoundTripsWithItsSides)
+{
+    Document doc = blockWithHole();
+    sketch::Sketch& s = std::get<SketchFeature>(doc.find(doc.features().front().id)->data).sketch;
+    std::vector<sketch::Id> sides;
+    for (const auto& [id, curve] : s.curves()) {
+        sides.push_back(id);
+    }
+    const std::optional<sketch::Offset> offset = sketch::addOffset(s, sides, 3.0);
+    ASSERT_TRUE(offset);
+    ShapeStore shapes;
+    const std::string text = toJson(doc, shapes);
+    const nlohmann::json saved = nlohmann::json::parse(text)["features"][0]["data"]["sketch"]["constraints"].back();
+    EXPECT_EQ(saved["kind"], "offset");
+    EXPECT_EQ(saved["refs"].size(), 8U);
+    EXPECT_EQ(saved["sides"].size(), 4U);
+    EXPECT_EQ(saved["value"], 3.0);
+    const Document loaded = fromJson(text, shapes);
+    EXPECT_EQ(toJson(loaded, shapes), text);
+    const sketch::Sketch& read = std::get<SketchFeature>(loaded.find(loaded.features().front().id)->data).sketch;
+    const sketch::Constraint* constraint = read.constraint(offset->constraint);
+    ASSERT_NE(constraint, nullptr);
+    EXPECT_EQ(constraint->refs, s.constraint(offset->constraint)->refs);
+    EXPECT_EQ(constraint->sides, s.constraint(offset->constraint)->sides);
+    EXPECT_NEAR(totalVolume(recompute(loaded)), kBlockWithHoleVolume, 1e-3);
+}
+
+TEST(Serialization, RejectsDamagedOffsets)
+{
+    ShapeStore shapes;
+    const nlohmann::json good = nlohmann::json::parse(toJson(blockWithHole(), shapes));
+    const auto rejects = [&](const char* what, const auto& damage) {
+        nlohmann::json design = good;
+        nlohmann::json& s = design["features"][0]["data"]["sketch"];
+        nlohmann::json offset = {{"id", 900}, {"kind", "offset"}, {"value", 2.0}};
+        damage(s, offset);
+        s["constraints"].push_back(offset);
+        try {
+            fromJson(design.dump(), shapes);
+            ADD_FAILURE() << what << " loaded";
+        } catch (const std::runtime_error& error) {
+            EXPECT_NE(std::string(error.what()).find("damaged"), std::string::npos) << what << ": " << error.what();
+        }
+    };
+    const auto curve = [](const nlohmann::json& s, int i) { return s["curves"][i]["id"]; };
+    rejects("unknown curve", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), 999};
+        o["sides"] = {1};
+    });
+    rejects("unpaired curves", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2)};
+        o["sides"] = {1};
+    });
+    rejects("missing sides", [&](nlohmann::json& s, nlohmann::json& o) { o["refs"] = {curve(s, 0), curve(s, 2)}; });
+    rejects("extra sides", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1, 1};
+    });
+    rejects("point as curve", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), s["points"][1]["id"]};
+        o["sides"] = {1};
+    });
+    rejects("line paired with circle", [&](nlohmann::json& s, nlohmann::json& o) {
+        s["curves"].push_back({{"id", 800}, {"kind", "circle"}, {"points", {s["points"][1]["id"]}}, {"radius", 3.0}});
+        o["refs"] = {curve(s, 0), 800};
+        o["sides"] = {1};
+    });
+    rejects("curve used twice", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2), curve(s, 1)};
+        o["sides"] = {1, 1};
+    });
+    rejects("no side", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {0};
+    });
+    rejects("no distance", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["value"] = 0.0;
+    });
+    rejects("sides on another kind", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["kind"] = "parallel";
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
     });
 }
 

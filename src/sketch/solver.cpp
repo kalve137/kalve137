@@ -8,8 +8,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <map>
 #include <numbers>
+#include <numeric>
 #include <optional>
 #include <unordered_set>
 #include <vector>
@@ -19,16 +21,33 @@ namespace kalve137::sketch {
 namespace {
 
 constexpr double kDegToRad = std::numbers::pi / 180.0;
+constexpr double kQuarterTurn = std::numbers::pi / 2.0;
+constexpr double kTangentSine = 1e-6;
+constexpr std::size_t kOffsetParamsPerRef = 8;
+
+struct OffsetEnd {
+    std::size_t pair = 0;
+    std::size_t end = 0;
+};
 
 class SolverModel {
 public:
-    explicit SolverModel(const Sketch& sketch) : m_sketch(sketch)
+    SolverModel(const Sketch& sketch, bool holdOffsetSources) : m_sketch(sketch)
     {
+        if (holdOffsetSources) {
+            for (const auto& [id, constraint] : sketch.constraints()) {
+                for (const OffsetPair& pair : offsetPairs(constraint)) {
+                    m_held.insert(pair.source);
+                }
+            }
+        }
         std::size_t count = 2 * sketch.points().size();
         for (const auto& [id, curve] : sketch.curves()) {
             count += curve.kind == CurveKind::Arc ? 3 : (curve.kind == CurveKind::Circle ? 1 : 0);
         }
-        count += 2 * sketch.constraints().size();
+        for (const auto& [id, constraint] : sketch.constraints()) {
+            count += 2 + kOffsetParamsPerRef * (constraint.kind == ConstraintKind::Offset ? constraint.refs.size() : 0);
+        }
         m_params.reserve(count);
 
         for (const auto& [id, point] : sketch.points()) {
@@ -175,7 +194,7 @@ private:
         }
         std::set<Id> fixedCurves;
         for (const auto& [id, curve] : m_sketch.curves()) {
-            if (curve.fixed) {
+            if (curve.fixed || m_held.contains(id)) {
                 fixedCurves.insert(id);
                 fixedPoints.insert(curve.points.begin(), curve.points.end());
             }
@@ -384,7 +403,161 @@ private:
                 sys.addConstraintP2PSymmetric(*p0, *p1, *axis, tag);
             }
             break;
+        case ConstraintKind::Offset:
+            addOffset(sys, tag, c);
+            break;
         }
+    }
+
+    GCS::Point helperPoint(Vec2 at)
+    {
+        const std::size_t index = push(at.x);
+        push(at.y);
+        m_unknowns.push_back(&m_params[index]);
+        m_unknowns.push_back(&m_params[index + 1]);
+        return {&m_params[index], &m_params[index + 1]};
+    }
+
+    GCS::Line& helperLine(const GCS::Point& from, const GCS::Point& to)
+    {
+        GCS::Line& line = m_helperLines.emplace_back();
+        line.p1 = from;
+        line.p2 = to;
+        return line;
+    }
+
+    void addOffset(GCS::System& sys, Id tag, const Constraint& c)
+    {
+        const std::vector<OffsetPair> pairs = offsetPairs(c);
+        for (const OffsetPair& pair : pairs) {
+            const Curve* source = m_sketch.curve(pair.source);
+            const Curve* offset = m_sketch.curve(pair.offset);
+            if (source == nullptr || offset == nullptr || source->kind != offset->kind) {
+                return;
+            }
+        }
+        std::map<Id, std::vector<OffsetEnd>> ends;
+        for (std::size_t i = 0; i < pairs.size(); ++i) {
+            const std::vector<Id> offsetEnds = endsOf(pairs[i].offset);
+            for (std::size_t k = 0; k < offsetEnds.size(); ++k) {
+                ends[offsetEnds[k]].push_back({.pair = i, .end = k});
+            }
+        }
+        std::vector<std::size_t> parent(pairs.size());
+        std::iota(parent.begin(), parent.end(), std::size_t{0});
+        const auto rootOf = [&](std::size_t i) {
+            while (parent[i] != i) {
+                i = parent[i];
+            }
+            return i;
+        };
+        std::vector<bool> parallel(pairs.size(), true);
+        for (const auto& [point, touching] : ends) {
+            if (touching.size() == 1) {
+                anchorEnd(sys, tag, pairs[touching[0].pair], touching[0].end);
+                continue;
+            }
+            if (touching.size() != 2 ||
+                !isTangentJoint(sys, pairs[touching[0].pair].offset, pairs[touching[1].pair].offset, point)) {
+                continue;
+            }
+            const OffsetEnd& anchor = lineRef(pairs[touching[0].pair].offset) != nullptr ? touching[1] : touching[0];
+            anchorEnd(sys, tag, pairs[anchor.pair], anchor.end);
+            const std::size_t first = rootOf(touching[0].pair);
+            const std::size_t second = rootOf(touching[1].pair);
+            if (first != second) {
+                parent[std::max(first, second)] = std::min(first, second);
+                continue;
+            }
+            for (const OffsetEnd& end : touching) {
+                if (lineRef(pairs[end.pair].offset) != nullptr) {
+                    parallel[end.pair] = false;
+                    break;
+                }
+            }
+        }
+        double* distance = value(c.value);
+        for (std::size_t i = 0; i < pairs.size(); ++i) {
+            const bool root = rootOf(i) == i;
+            GCS::Line* sourceLine = lineRef(pairs[i].source);
+            GCS::Line* offsetLine = lineRef(pairs[i].offset);
+            if (sourceLine != nullptr && offsetLine != nullptr) {
+                addLineOffset(sys, tag, pairs[i], *sourceLine, *offsetLine, parallel[i], root ? distance : nullptr);
+            } else {
+                addRoundOffset(sys, tag, pairs[i], root ? std::optional(c.value) : std::nullopt);
+            }
+        }
+    }
+
+    bool isTangentJoint(GCS::System& sys, Id first, Id second, Id joint)
+    {
+        GCS::Curve* a = curveRef(first);
+        GCS::Curve* b = curveRef(second);
+        if (a == nullptr || b == nullptr) {
+            return false;
+        }
+        return std::abs(std::sin(sys.calculateAngleViaPoint(*a, *b, m_points.at(joint)))) < kTangentSine;
+    }
+
+    void anchorEnd(GCS::System& sys, Id tag, const OffsetPair& pair, std::size_t end)
+    {
+        GCS::Point& from = m_points.at(endsOf(pair.source).at(end));
+        GCS::Point& to = m_points.at(endsOf(pair.offset).at(end));
+        if (GCS::Line* line = lineRef(pair.source)) {
+            sys.addConstraintL2LAngle(*line, helperLine(from, to), value(pair.side * kQuarterTurn), tag);
+            return;
+        }
+        GCS::Point& sourceCenter = m_points.at(m_sketch.curve(pair.source)->points[0]);
+        GCS::Point& offsetCenter = m_points.at(m_sketch.curve(pair.offset)->points[0]);
+        sys.addConstraintL2LAngle(helperLine(sourceCenter, from), helperLine(offsetCenter, to), value(0.0), tag);
+    }
+
+    void addLineOffset(GCS::System& sys, Id tag, const OffsetPair& pair, GCS::Line& source, GCS::Line& offset,
+                       bool parallel, double* distance)
+    {
+        if (parallel) {
+            sys.addConstraintParallel(offset, source, tag);
+        }
+        if (distance == nullptr) {
+            return;
+        }
+        const double side = pair.side;
+        const Vec2 from{*source.p1.x, *source.p1.y};
+        const Vec2 along = Vec2{*source.p2.x, *source.p2.y} - from;
+        const double length = std::hypot(along.x, along.y);
+        const Vec2 normal = length > 0.0 ? Vec2{-along.y / length, along.x / length} : Vec2{0.0, 1.0};
+        GCS::Point foot = helperPoint(from + normal * (side * *distance));
+        sys.addConstraintP2PDistance(source.p1, foot, distance, tag);
+        sys.addConstraintL2LAngle(source, helperLine(source.p1, foot), value(side * kQuarterTurn), tag);
+        sys.addConstraintPointOnLine(foot, offset, tag);
+    }
+
+    void addRoundOffset(GCS::System& sys, Id tag, const OffsetPair& pair, std::optional<double> distance)
+    {
+        const Curve* source = m_sketch.curve(pair.source);
+        const Curve* offset = m_sketch.curve(pair.offset);
+        double* sourceRadius = radiusOf(pair.source);
+        double* offsetRadius = radiusOf(pair.offset);
+        if (sourceRadius == nullptr || offsetRadius == nullptr) {
+            return;
+        }
+        if (source->points[0] != offset->points[0]) {
+            sys.addConstraintP2PCoincident(m_points.at(offset->points[0]), m_points.at(source->points[0]), tag);
+        }
+        if (distance) {
+            sys.addConstraintDifference(sourceRadius, offsetRadius, value(pair.side * *distance), tag);
+        }
+    }
+
+    double* radiusOf(Id id)
+    {
+        if (GCS::Circle* circle = circleRef(id)) {
+            return circle->rad;
+        }
+        if (GCS::Arc* arc = arcRef(id)) {
+            return arc->rad;
+        }
+        return nullptr;
     }
 
     void addTangent(GCS::System& sys, Id tag, const Constraint& c)
@@ -431,12 +604,14 @@ private:
     }
 
     const Sketch& m_sketch;
+    std::set<Id> m_held;
     std::vector<double> m_params;
     std::map<Id, std::size_t> m_pointIndex;
     std::map<Id, GCS::Point> m_points;
     std::map<Id, GCS::Line> m_lines;
     std::map<Id, GCS::Circle> m_circles;
     std::map<Id, GCS::Arc> m_arcs;
+    std::deque<GCS::Line> m_helperLines;
     GCS::VEC_pD m_unknowns;
 };
 
@@ -453,11 +628,9 @@ std::vector<Id> toIds(const GCS::VEC_I& tags)
     return ids;
 }
 
-} // namespace
-
-SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
+SolveResult solveOnce(Sketch& sketch, const std::vector<DragTarget>& targets, bool holdOffsetSources)
 {
-    SolverModel model(sketch);
+    SolverModel model(sketch, holdOffsetSources);
     GCS::System system;
     model.addConstraints(system);
     std::vector<double> goals;
@@ -497,6 +670,26 @@ SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
     K137_TRACE(Sketch, "Solve status {} solved {} dof {} conflicting {} redundant {}", status, result.solved,
                result.dof, result.conflicting.size(), result.redundant.size());
     return result;
+}
+
+} // namespace
+
+SolveResult solve(Sketch& sketch, const std::vector<DragTarget>& targets)
+{
+    const bool offsets = std::ranges::any_of(
+        sketch.constraints(), [](const auto& entry) { return entry.second.kind == ConstraintKind::Offset; });
+    if (!offsets) {
+        return solveOnce(sketch, targets, false);
+    }
+    Sketch settled = sketch;
+    if (solveOnce(settled, targets, true).solved) {
+        SolveResult result = solveOnce(settled, targets, false);
+        if (result.solved) {
+            sketch = std::move(settled);
+            return result;
+        }
+    }
+    return solveOnce(sketch, targets, false);
 }
 
 } // namespace kalve137::sketch

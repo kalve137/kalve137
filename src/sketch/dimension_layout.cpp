@@ -364,6 +364,7 @@ std::string dimensionLabel(ConstraintKind kind, double value)
     case ConstraintKind::HorizontalDistance:
     case ConstraintKind::VerticalDistance:
     case ConstraintKind::Symmetric:
+    case ConstraintKind::Offset:
         break;
     }
     return text;
@@ -394,7 +395,8 @@ std::optional<DimensionLayout> layoutDimension(const Sketch& sketch, const Const
     switch (constraint.kind) {
     case ConstraintKind::Distance:
     case ConstraintKind::HorizontalDistance:
-    case ConstraintKind::VerticalDistance: {
+    case ConstraintKind::VerticalDistance:
+    case ConstraintKind::Offset: {
         const auto ends = measuredPoints(sketch, constraint);
         if (!ends || !(distance(ends->first, ends->second) > kMinLength)) {
             break;

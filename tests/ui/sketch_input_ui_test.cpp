@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QPointF>
 #include <QRectF>
+#include <QSignalSpy>
 #include <QWidget>
 
 #include <gtest/gtest.h>
@@ -221,6 +222,27 @@ TEST_F(SketchInputTest, DrawsAndEditsWithoutTheOldView)
     EXPECT_NEAR(center.y(), at.y(), kEditorSlack) << "Editor sits on the label";
     ui->save("dimension editor");
     ui->key(Qt::Key_Escape);
+}
+
+TEST_F(SketchInputTest, ANavigationDragOverALineSkipsTheRedrawThatAPlainMoveMakes)
+{
+    sketch::Vec2 label;
+    app::SketchEditor* editor = openInputSketch(*ui, label);
+    ASSERT_NE(editor, nullptr);
+    ui->trigger("Top");
+    ui->trigger("Fit All");
+    ui->settle(kRescaleSettleMs);
+    const gp_Pnt empty(19.0, -5.0, 0.0);
+    const gp_Pnt line(19.0, -15.0, 0.0);
+    ui->move(ui->at(empty));
+    QSignalSpy redraws(editor, &app::SketchEditor::stateChanged);
+    ui->press(ui->at(empty), Qt::MiddleButton);
+    ui->move(ui->at(line), Qt::MiddleButton);
+    ui->release(ui->at(line), Qt::MiddleButton);
+    EXPECT_EQ(redraws.count(), 0);
+    ui->move(ui->at(empty));
+    ui->move(ui->at(line));
+    EXPECT_GT(redraws.count(), 0);
 }
 
 constexpr int kCameraMoves = 5;
