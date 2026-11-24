@@ -47,6 +47,7 @@ class DesignSession;
 class FeaturePanel;
 class MeasurePanel;
 class NewViewPicker;
+class ParametersDialog;
 class PickSource;
 class ProjectPanel;
 class Scene;
@@ -134,6 +135,7 @@ private:
 
     void showAbout();
     void showPreferences();
+    void showParameters();
     void showGridSettings();
     void applyPreferences();
     void applyViewportTheme();
@@ -204,6 +206,7 @@ private:
     QAction* m_showOrigin = nullptr;
     QAction* m_repeat = nullptr;
     CommandSearch* m_commandSearch = nullptr;
+    ParametersDialog* m_parameters = nullptr;
     std::vector<QAction*> m_recentCommands;
     QActionGroup* m_sketchTools = nullptr;
     std::map<SketchEditor::Tool, QAction*> m_toolActions;

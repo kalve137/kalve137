@@ -240,6 +240,7 @@ void FeaturePanel::buildOffsetFaceForm(core::OffsetFaceFeature& f, QFormLayout* 
 {
     m_size = makeLengthBox(f.distance, -kMaxLength, m_form);
     m_size->setToolTip(tr("Negative distances remove material"));
+    bindField(m_size, "distance");
     auto* clear = new QPushButton(tr("Clear faces"), m_form);
     fields->addRow(tr("Distance"), m_size);
     fields->addRow(QString(), clear);
@@ -270,6 +271,12 @@ void FeaturePanel::buildHoleForm(core::HoleFeature& f, QFormLayout* fields)
     auto* sinkAngle = makeAngleBox(f.countersinkAngle, kMinConeAngle, kMaxConeAngle, m_form);
     auto* tipAngle = makeAngleBox(f.tipAngle, 0.0, kMaxConeAngle, m_form);
     tipAngle->setToolTip(tr("0 for flat bottom"));
+    bindField(diameter, "diameter");
+    bindField(m_size, "depth");
+    bindField(headDiameter, "head_diameter");
+    bindField(headDepth, "head_depth");
+    bindField(sinkAngle, "countersink_angle");
+    bindField(tipAngle, "tip_angle");
     auto* flip = new QCheckBox(tr("Flip direction"), m_form);
     flip->setChecked(f.flip);
     flip->setToolTip(tr("Drills along sketch normal, for holes on sketch points"));

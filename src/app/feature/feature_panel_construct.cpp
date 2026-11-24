@@ -303,10 +303,12 @@ void FeaturePanel::buildPlaneForm(core::PlaneFeature& f, QFormLayout* fields)
     switch (f.kind) {
     case core::PlaneKind::Offset:
         m_size = makeLengthBox(f.offset, -kMaxLength, m_form);
+        bindField(m_size, "offset");
         fields->addRow(tr("Distance"), m_size);
         break;
     case core::PlaneKind::Angle:
         m_size = makeAngleBox(f.angleDegrees, -360.0, 360.0, m_form);
+        bindField(m_size, "angle");
         fields->addRow(tr("Angle"), m_size);
         break;
     case core::PlaneKind::Midplane:

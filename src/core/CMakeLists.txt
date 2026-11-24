@@ -14,6 +14,10 @@ add_library(kalve137_core STATIC
     history.h
     naming.cpp
     naming.h
+    parameter_table.cpp
+    parameter_table.h
+    parameters.cpp
+    parameters.h
     project.cpp
     project.h
     projection.cpp

@@ -3,6 +3,7 @@
 
 #include "core/document.h"
 #include "core/naming.h"
+#include "core/parameter_table.h"
 #include "core/projection.h"
 #include "core/recompute.h"
 #include "core/serialization.h"
@@ -761,6 +762,35 @@ TEST(Sweep, VersionEightFixtureLoadsItsOffset)
     ASSERT_NE(offset, s.constraints().end());
     EXPECT_EQ(sketch::offsetPairs(offset->second).size(), 4U);
     EXPECT_DOUBLE_EQ(offset->second.value, 2.0);
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsParameters)
+{
+    ShapeStore shapes;
+    const std::string text = readFile(kFixtures / "every-kind-v8.k137");
+    Document loaded = fromJson(text, shapes);
+    ASSERT_EQ(loaded.parameters().size(), 4U);
+    EXPECT_EQ(loaded.parameters()[1].name, "rim");
+    EXPECT_EQ(loaded.parameters()[1].expression, "height / 5");
+    const auto named = [&](const char* name) -> const Feature& { return *loaded.featureNamed(name); };
+    EXPECT_EQ(named("Extrude1").expressions.at("distance"), "height");
+    EXPECT_EQ(named("Fillet1").expressions.at("sets.0.radius"), "rim");
+    EXPECT_EQ(named("Pattern1").expressions.at("count"), "copies");
+    EXPECT_EQ(named("Plane2").expressions.at("angle"), "tilt");
+    const sketch::Sketch& s = std::get<SketchFeature>(named("Sketch1").data).sketch;
+    EXPECT_EQ(s.constraint(10)->expression, "4 * height");
+    EXPECT_EQ(s.constraint(11)->expression, "2 * height");
+    const std::string saved = toJson(loaded, shapes);
+    EXPECT_EQ(nlohmann::json::parse(saved)["parameters"], nlohmann::json::parse(text)["parameters"]);
+    EXPECT_EQ(toJson(fromJson(saved, shapes), shapes), saved);
+
+    ASSERT_FALSE(setParameterExpression(loaded, "height", "12 mm"));
+    EXPECT_DOUBLE_EQ(std::get<ExtrudeFeature>(named("Extrude1").data).distance, 12.0);
+    EXPECT_DOUBLE_EQ(std::get<PatternFeature>(named("Pattern1").data).spacing, 36.0);
+    EXPECT_DOUBLE_EQ(std::get<SketchFeature>(named("Sketch1").data).sketch.constraint(10)->value, 48.0);
+    const Model model = recompute(loaded);
+    EXPECT_EQ(model.status.at(named("Sketch1").id).health, FeatureHealth::Ok);
+    EXPECT_EQ(model.status.at(named("Extrude1").id).health, FeatureHealth::Ok);
 }
 
 TEST(Sweep, VersionEightFixtureLoadsItsProjections)

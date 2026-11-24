@@ -38,7 +38,28 @@
         },
         "plane_name": "XY",
         "sketch": {
-          "constraints": [],
+          "constraints": [
+            {
+              "expression": "4 * height",
+              "id": 10,
+              "kind": "horizontal_distance",
+              "refs": [
+                2,
+                3
+              ],
+              "value": 40.0
+            },
+            {
+              "expression": "2 * height",
+              "id": 11,
+              "kind": "vertical_distance",
+              "refs": [
+                3,
+                4
+              ],
+              "value": 20.0
+            }
+          ],
           "curves": [
             {
               "construction": false,
@@ -128,6 +149,9 @@
       "data": {
         "body_name": "Body1",
         "distance": 10.0,
+        "expressions": {
+          "distance": "height"
+        },
         "extent": "one_side",
         "operation": "new_body",
         "profiles": {
@@ -148,6 +172,9 @@
     },
     {
       "data": {
+        "expressions": {
+          "sets.0.radius": "rim"
+        },
         "sets": [
           {
             "edges": [
@@ -396,6 +423,10 @@
         "body": 8,
         "body_part": 0,
         "count": 2,
+        "expressions": {
+          "count": "copies",
+          "spacing": "3 * height"
+        },
         "kind": "linear",
         "spacing": 30.0
       },
@@ -643,6 +674,9 @@
           0.0,
           0.0
         ],
+        "expressions": {
+          "angle": "tilt"
+        },
         "hinge": {
           "direction": [
             1.0,
@@ -1075,6 +1109,24 @@
   "format": "kalve137-design",
   "marker": 20,
   "next_id": 21,
+  "parameters": [
+    {
+      "expression": "10 mm",
+      "name": "height"
+    },
+    {
+      "expression": "height / 5",
+      "name": "rim"
+    },
+    {
+      "expression": "2",
+      "name": "copies"
+    },
+    {
+      "expression": "30 deg",
+      "name": "tilt"
+    }
+  ],
   "units": "mm",
   "version": 8
 }

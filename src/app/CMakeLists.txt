@@ -21,12 +21,16 @@ add_library(kalve137_app STATIC
     feature/measure_panel.h
     feature/recent_values.cpp
     feature/recent_values.h
+    feature/field_names.cpp
+    feature/field_names.h
     feature/value_edit.cpp
     feature/value_edit.h
     panels/browser_panel.cpp
     panels/browser_panel.h
     panels/project_panel.cpp
     panels/project_panel.h
+    panels/parameters_dialog.cpp
+    panels/parameters_dialog.h
     panels/properties_dialog.cpp
     panels/properties_dialog.h
     panels/timeline_widget.cpp

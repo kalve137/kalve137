@@ -7,6 +7,7 @@
 #include "app/feature/feature_panel.h"
 #include "app/feature/measure_panel.h"
 #include "app/panels/browser_panel.h"
+#include "app/panels/parameters_dialog.h"
 #include "app/panels/project_panel.h"
 #include "app/panels/properties_dialog.h"
 #include "app/panels/timeline_widget.h"
@@ -239,6 +240,8 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
     connect(m_featurePanel, &FeaturePanel::message, this,
             [this](const QString& text) { statusBar()->showMessage(text, kMessageTimeoutMs); });
     connect(m_featurePanel, &FeaturePanel::selectionSummary, m_selectionStatus, &QLabel::setText);
+    connect(m_session, &DesignSession::editRefused, this,
+            [this](const QString& text) { statusBar()->showMessage(text, kMessageTimeoutMs); });
     connect(theme::notifier(), &theme::Notifier::changed, this, [this] {
         applyViewportTheme();
         if (m_view->isReady()) {
@@ -503,6 +506,7 @@ void MainWindow::createMenus()
     editMenu->addAction(m_breakLink);
     editMenu->addAction(m_pickAgain);
     editMenu->addSeparator();
+    editMenu->addAction(tr("P&arameters..."), this, &MainWindow::showParameters);
     editMenu->addAction(tr("&Preferences..."), QKeySequence(Qt::CTRL | Qt::Key_Comma), this,
                         &MainWindow::showPreferences);
 
@@ -931,6 +935,16 @@ void MainWindow::showPreferences()
     m_preferences = dialog.preferences();
     m_preferences.save();
     applyPreferences();
+}
+
+void MainWindow::showParameters()
+{
+    if (m_parameters == nullptr) {
+        m_parameters = new ParametersDialog(*m_session, this);
+    }
+    m_parameters->show();
+    m_parameters->raise();
+    m_parameters->activateWindow();
 }
 
 void MainWindow::showGridSettings()

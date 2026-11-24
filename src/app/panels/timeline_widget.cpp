@@ -6,6 +6,7 @@
 #include "app/session/design_session.h"
 #include "app/theme/icons.h"
 #include "app/theme/theme.h"
+#include "core/parameter_table.h"
 
 #include "viewer/style.h"
 
@@ -14,6 +15,7 @@
 #include <QHelpEvent>
 #include <QInputDialog>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -353,8 +355,12 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event)
         const QString text =
             QInputDialog::getText(this, tr("Rename"), tr("Name"), QLineEdit::Normal, name, &ok).trimmed();
         if (ok && !text.isEmpty() && text != name) {
-            m_session.edit(tr("Rename %1").arg(name),
-                           [id, text](core::Document& document) { document.find(id)->name = text.toStdString(); });
+            if (const auto taken = core::checkFeatureName(m_session.document(), text.toStdString())) {
+                QMessageBox::warning(this, tr("Rename"), QString::fromStdString(taken->message));
+            } else {
+                m_session.edit(tr("Rename %1").arg(name),
+                               [id, text](core::Document& document) { document.find(id)->name = text.toStdString(); });
+            }
         }
     } else if (chosen == suppress) {
         const bool suppressed = !feature->suppressed;

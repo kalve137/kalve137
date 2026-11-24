@@ -290,7 +290,7 @@ std::optional<Chain> orderChain(const Sketch& sketch, const std::vector<Id>& cur
     chain.closed = !open && joint == start && chain.curves.size() > 1;
     if (chain.closed && signedArea(sketch, chain) > 0.0) {
         std::ranges::reverse(chain.curves);
-        std::ranges::reverse(chain.reversed);
+        std::reverse(chain.reversed.begin(), chain.reversed.end());
         for (std::size_t i = 0; i < chain.reversed.size(); ++i) {
             chain.reversed[i] = !chain.reversed[i];
         }

@@ -11,6 +11,7 @@
 #include "app/theme/fonts.h"
 #include "app/theme/theme.h"
 #include "app/view/band_overlay.h"
+#include "core/parameter_table.h"
 #include "core/projection.h"
 
 #include "geometry/shapes.h"
@@ -62,18 +63,32 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
             m_valueEditor->selectAll();
             previewValue(m_valueEditor->text());
         });
+    m_valueNames = new NameCompleter(m_valueEditor, [this]() -> std::optional<core::ParameterValues> {
+        if (!m_valueTakesNames) {
+            return std::nullopt;
+        }
+        return core::parameterValues(m_session.document());
+    });
+    m_valueError = new FieldError(m_valueEditor);
     connect(m_valueEditor, &QLineEdit::returnPressed, this, [this] {
-        const std::optional<double> parsed = parseValue(m_valueEditor->text(), m_valueQuantity);
-        if (!parsed) {
-            emit message(tr("Type a number or an expression, such as 30/2 or 1in"));
+        if (m_valueNames->justCompleted()) {
             return;
         }
-        const double value = *parsed;
-        m_recentValues->commit(value);
-        std::function<void(double)> apply = std::move(m_valueApply);
+        m_valueNames->hide();
+        const TypedValue typed = readTyped(m_valueEditor->text(), m_valueQuantity, valueNames());
+        if (typed.error) {
+            if (m_valueTakesNames) {
+                m_valueError->showError(*typed.error);
+            } else {
+                emit message(tr("Type a number or an expression, such as 30/2 or 1in"));
+            }
+            return;
+        }
+        m_recentValues->commit(typed.value);
+        std::function<void(double, const std::string&)> apply = std::move(m_valueApply);
         closeValueEditor();
         if (apply) {
-            apply(value);
+            apply(typed.value, typed.canonical);
         }
     });
     connect(theme::notifier(), &theme::Notifier::changed, this, [this] {
@@ -888,14 +903,17 @@ bool SketchEditor::commit(const QString& label, sketch::Sketch candidate)
     }
     const core::FeatureId id = m_sketchId;
     const QScopedValueRollback committing(m_committing, true);
-    m_session.edit(label, [id, &candidate](core::Document& document) {
+    const bool committed = m_session.edit(label, [id, &candidate](core::Document& document) {
         if (core::Feature* f = document.find(id)) {
             auto& data = std::get<core::SketchFeature>(f->data);
             data.sketch = std::move(candidate);
             core::dropBrokenProjections(data);
         }
     });
-    return true;
+    if (!committed) {
+        redraw();
+    }
+    return committed;
 }
 
 void SketchEditor::addDimension(sketch::Constraint constraint, QPointF pos)
@@ -903,22 +921,24 @@ void SketchEditor::addDimension(sketch::Constraint constraint, QPointF pos)
     const ConstraintKind kind = constraint.kind;
     const double value = constraint.value;
     const Id label = current().nextId();
-    const auto build = [this, constraint = std::move(constraint)](double typed) {
+    const auto build = [this, constraint = std::move(constraint)](double typed, const std::string& expression) {
         sketch::Sketch candidate = current();
         const Id id = candidate.addConstraint(constraint.kind, constraint.refs, typed);
         candidate.constraint(id)->labelOffset = constraint.labelOffset;
+        candidate.constraint(id)->expression = expression;
         return candidate;
     };
     promptValue(
         pos, value, quantityOf(kind), label,
-        [this, kind, build](double typed) {
+        [this, kind, build](double typed, const std::string& expression) {
             if (typed <= 0.0 && kind != ConstraintKind::Angle) {
                 emit message(tr("Dimensions must be greater than zero"));
                 return;
             }
-            commit(tr("Dimension"), build(typed));
+            commit(tr("Dimension"), build(typed, expression));
         },
-        build);
+        [build](double typed) { return build(typed, {}); },
+        core::takesExpression(kind) ? std::optional(QString()) : std::nullopt);
 }
 
 void SketchEditor::editDimension(Id constraint, QPointF pos)
@@ -931,33 +951,47 @@ void SketchEditor::editDimension(Id constraint, QPointF pos)
     if (const std::optional<QPointF> label = labelOnScreen(constraint)) {
         pos = *label;
     }
-    const auto build = [this, constraint](double typed) {
+    const auto build = [this, constraint](double typed, const std::string& expression) {
         sketch::Sketch candidate = current();
         if (sketch::Constraint* edited = candidate.constraint(constraint)) {
             edited->value = typed;
+            edited->expression = expression;
         }
         return candidate;
     };
+    const std::optional<QString> expression =
+        core::takesExpression(kind) ? std::optional(QString::fromStdString(c->expression)) : std::nullopt;
     promptValue(
         pos, c->value, quantityOf(kind), constraint,
-        [this, kind, build](double typed) {
+        [this, kind, build](double typed, const std::string& typedExpression) {
             if (typed <= 0.0 && kind != ConstraintKind::Angle) {
                 emit message(tr("Dimensions must be greater than zero"));
                 return;
             }
-            commit(tr("Edit Dimension"), build(typed));
+            commit(tr("Edit Dimension"), build(typed, typedExpression));
         },
-        build);
+        [build](double typed) { return build(typed, {}); }, expression);
+}
+
+ParameterSource SketchEditor::valueNames() const
+{
+    if (!m_valueTakesNames) {
+        return {};
+    }
+    return [this] { return core::parameterValues(m_session.document()); };
 }
 
 void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quantity, Id label,
-                               std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview)
+                               std::function<void(double, const std::string&)> apply,
+                               std::function<sketch::Sketch(double)> preview, std::optional<QString> expression)
 {
     m_valueApply = std::move(apply);
     m_valuePreview = std::move(preview);
     m_valueQuantity = quantity;
     m_editingLabel = label;
-    m_valueEditor->setText(formatValue(initial));
+    m_valueTakesNames = expression.has_value();
+    m_valueError->dismiss();
+    m_valueEditor->setText(expression && !expression->isEmpty() ? *expression : formatValue(initial));
     m_recentValues->reset();
     previewValue(m_valueEditor->text());
     const int trailing = recentValues(quantity).empty() ? 0 : kRecentValuesPixels;
@@ -993,9 +1027,10 @@ void SketchEditor::previewValue(const QString& text)
     if (!m_valuePreview) {
         return;
     }
+    m_valueError->dismiss();
     std::optional<sketch::Sketch> shown;
-    if (const std::optional<double> typed = parseValue(text, m_valueQuantity)) {
-        sketch::Sketch candidate = m_valuePreview(*typed);
+    if (const TypedValue typed = readTyped(text, m_valueQuantity, valueNames()); !typed.error) {
+        sketch::Sketch candidate = m_valuePreview(typed.value);
         const sketch::SolveResult result = sketch::solve(candidate);
         if (result.solved && result.conflicting.empty()) {
             shown = std::move(candidate);
@@ -1011,6 +1046,9 @@ void SketchEditor::closeValueEditor()
     m_offsetChain.clear();
     m_valueApply = nullptr;
     m_valuePreview = nullptr;
+    m_valueTakesNames = false;
+    m_valueError->dismiss();
+    m_valueNames->hide();
     const bool labelHidden = std::exchange(m_editingLabel, 0) != 0;
     if (std::exchange(m_previewingValue, false)) {
         m_dragPreview.reset();

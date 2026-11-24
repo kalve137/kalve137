@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/feature/field_names.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/expression.h"
@@ -26,6 +27,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -265,7 +267,10 @@ private:
     void addDimension(sketch::Constraint constraint, QPointF pos);
     void editDimension(sketch::Id constraint, QPointF pos);
     void promptValue(QPointF pos, double initial, core::Quantity quantity, sketch::Id label,
-                     std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview = {});
+                     std::function<void(double, const std::string&)> apply,
+                     std::function<sketch::Sketch(double)> preview = {},
+                     std::optional<QString> expression = std::nullopt);
+    ParameterSource valueNames() const;
     void previewValue(const QString& text);
     void closeValueEditor();
     void resetProgress();
@@ -339,7 +344,10 @@ private:
 
     QLineEdit* m_valueEditor = nullptr;
     RecentValuesMenu* m_recentValues = nullptr;
-    std::function<void(double)> m_valueApply;
+    NameCompleter* m_valueNames = nullptr;
+    FieldError* m_valueError = nullptr;
+    bool m_valueTakesNames = false;
+    std::function<void(double, const std::string&)> m_valueApply;
     std::function<sketch::Sketch(double)> m_valuePreview;
     bool m_previewingValue = false;
     sketch::Id m_editingLabel = 0;

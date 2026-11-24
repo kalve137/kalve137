@@ -131,6 +131,9 @@ void FeaturePanel::buildForm()
                 m_target->setToolTip(tr("Click, then pick flat face or construction plane to stop at"));
                 auto* taper = feature_panel_detail::makeAngleBox(f.taperDegrees, -kMaxTaper, kMaxTaper, m_form);
                 taper->setStep(1.0);
+                bindField(distance, "distance");
+                bindField(second, "second_distance");
+                bindField(taper, "taper");
                 m_distance = distance;
                 m_secondDistance = second;
                 m_flip = flip;
@@ -209,6 +212,7 @@ void FeaturePanel::buildForm()
                 angle->setRange(0.1, 360.0);
                 angle->setDecimals(2);
                 angle->setStep(15.0);
+                bindField(angle, "angle");
                 auto* operation = makeOperationBox(f.operation, m_form);
                 fields->addRow(tr("Axis"), m_axis);
                 fields->addRow(tr("Angle"), angle);
@@ -247,6 +251,7 @@ void FeaturePanel::buildForm()
                 auto* add = new QPushButton(tr("Add set"), m_form);
                 add->setToolTip(tr("Starts a new set of edges with its own radius"));
                 m_size = makeLengthBox(active.radius, 0.001, m_form);
+                bindField(m_size, "sets." + std::to_string(m_filletSet) + ".radius");
                 auto* clear = new QPushButton(tr("Clear edges"), m_form);
                 fields->addRow(tr("Set"), set);
                 fields->setRowVisible(set, f.sets.size() > 1);
@@ -285,6 +290,7 @@ void FeaturePanel::buildForm()
             },
             [&](core::ChamferFeature& f) {
                 m_size = makeLengthBox(f.distance, 0.001, m_form);
+                bindField(m_size, "distance");
                 auto* clear = new QPushButton(tr("Clear edges"), m_form);
                 fields->addRow(tr("Distance"), m_size);
                 addTangentChain();
@@ -301,6 +307,7 @@ void FeaturePanel::buildForm()
             },
             [&](core::ShellFeature& f) {
                 m_size = makeLengthBox(f.thickness, 0.001, m_form);
+                bindField(m_size, "thickness");
                 auto* direction = new QComboBox(m_form);
                 direction->addItems({tr("Inside"), tr("Outside")});
                 direction->setCurrentIndex(f.inside ? 0 : 1);
@@ -338,6 +345,8 @@ void FeaturePanel::buildForm()
                 angle->setRange(0.1, 360.0);
                 angle->setDecimals(2);
                 angle->setStep(15.0);
+                bindField(spacing, "spacing");
+                bindField(angle, "angle");
                 fields->addRow(tr("Type"), kind);
                 fields->addRow(tr("Axis"), axis);
                 fields->addRow(tr("Count"), count);
