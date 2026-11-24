@@ -43,14 +43,14 @@ std::vector<BadgePlace> placeBadges(const sketch::Sketch& s)
             at = anchorOf(s, entity);
             const sketch::Curve* curve = s.curve(entity);
             if (curve->kind == CurveKind::Line) {
-                const Vec2 d = normalized(s.point(curve->points[1])->pos - s.point(curve->points[0])->pos);
-                side = {-d.y, d.x};
+                const Vec2 d = unit(s.point(curve->points[1])->pos - s.point(curve->points[0])->pos);
+                side = leftOf(d);
             } else {
-                side = normalized(at - s.point(curve->points[0])->pos);
+                side = unit(at - s.point(curve->points[0])->pos);
             }
         } else if (const sketch::Point* point = s.point(entity)) {
             at = point->pos;
-            side = normalized(Vec2{1.0, 1.0});
+            side = unit(Vec2{1.0, 1.0});
         } else {
             return;
         }

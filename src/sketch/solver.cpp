@@ -24,11 +24,6 @@ constexpr double kDegToRad = std::numbers::pi / 180.0;
 constexpr double kQuarterTurn = std::numbers::pi / 2.0;
 constexpr double kShortest = 1e-6;
 
-double dot(Vec2 a, Vec2 b)
-{
-    return a.x * b.x + a.y * b.y;
-}
-
 Vec2 directionOf(const GCS::Line& line)
 {
     return Vec2{*line.p2.x, *line.p2.y} - Vec2{*line.p1.x, *line.p1.y};
@@ -109,7 +104,7 @@ public:
                     continue;
                 }
                 const Vec2 along = directionOf(source->second);
-                if (dot(along, directionOf(offset->second)) <= kShortest * std::hypot(along.x, along.y)) {
+                if (dot(along, directionOf(offset->second)) <= kShortest * length(along)) {
                     return false;
                 }
             }
@@ -430,7 +425,7 @@ private:
             if (l0 && l1) {
                 const Vec2 d0 = signDirection(ref(0));
                 const Vec2 d1 = signDirection(ref(1));
-                const double sign = d0.x * d1.y - d0.y * d1.x >= 0.0 ? 1.0 : -1.0;
+                const double sign = cross(d0, d1) >= 0.0 ? 1.0 : -1.0;
                 sys.addConstraintL2LAngle(*l0, *l1, value(sign * c.value * kDegToRad), tag);
             }
             break;

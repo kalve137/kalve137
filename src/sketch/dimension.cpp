@@ -12,7 +12,8 @@ namespace kalve137::sketch {
 
 namespace {
 
-constexpr double kParallelCross = 1e-12;
+constexpr double kMinLength = 1e-9;
+constexpr double kParallelSine = 1e-9;
 
 std::optional<Vec2> pointOf(const Sketch& sketch, Id id)
 {
@@ -37,11 +38,11 @@ std::optional<std::pair<Vec2, Vec2>> lineEnds(const Sketch& sketch, Id id)
 std::optional<Vec2> footOnLine(Vec2 p, Vec2 a, Vec2 b)
 {
     const Vec2 ab = b - a;
-    const double l2 = ab.x * ab.x + ab.y * ab.y;
+    const double l2 = dot(ab, ab);
     if (l2 <= 0.0) {
         return std::nullopt;
     }
-    const double t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / l2;
+    const double t = dot(p - a, ab) / l2;
     return a + ab * t;
 }
 
@@ -52,14 +53,7 @@ std::optional<Vec2> corner(const Sketch& sketch, Id first, Id second)
     if (!l1 || !l2) {
         return std::nullopt;
     }
-    const Vec2 da = l1->second - l1->first;
-    const Vec2 db = l2->second - l2->first;
-    const double cross = da.x * db.y - da.y * db.x;
-    if (std::abs(cross) <= kParallelCross) {
-        return std::nullopt;
-    }
-    const Vec2 gap = l2->first - l1->first;
-    return l1->first + da * ((gap.x * db.y - gap.y * db.x) / cross);
+    return lineCorner(l1->first, l1->second, l2->first, l2->second);
 }
 
 std::optional<Vec2> roundDirection(const Sketch& sketch, const Curve& curve)
@@ -114,6 +108,19 @@ std::optional<std::pair<Vec2, Vec2>> offsetEnds(const Sketch& sketch, const Cons
 }
 
 } // namespace
+
+std::optional<Vec2> lineCorner(Vec2 firstFrom, Vec2 firstTo, Vec2 secondFrom, Vec2 secondTo)
+{
+    const Vec2 da = firstTo - firstFrom;
+    const Vec2 db = secondTo - secondFrom;
+    if (length(da) <= kMinLength || length(db) <= kMinLength) {
+        return std::nullopt;
+    }
+    if (std::abs(cross(unit(da), unit(db))) <= kParallelSine) {
+        return std::nullopt;
+    }
+    return firstFrom + da * (cross(secondFrom - firstFrom, db) / cross(da, db));
+}
 
 std::optional<std::pair<Vec2, Vec2>> measuredPoints(const Sketch& sketch, const Constraint& constraint)
 {

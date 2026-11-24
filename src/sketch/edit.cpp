@@ -18,25 +18,6 @@ constexpr double kTiny = 1e-12;
 constexpr double kSamePosition = 1e-6;
 constexpr double kSameParameter = 1e-7;
 
-double dot(Vec2 a, Vec2 b)
-{
-    return a.x * b.x + a.y * b.y;
-}
-double cross(Vec2 a, Vec2 b)
-{
-    return a.x * b.y - a.y * b.x;
-}
-double norm(Vec2 a)
-{
-    return std::hypot(a.x, a.y);
-}
-
-Vec2 unit(Vec2 a)
-{
-    const double n = norm(a);
-    return n > kTiny ? a * (1.0 / n) : Vec2{1.0, 0.0};
-}
-
 double wrap(double angle)
 {
     angle = std::fmod(angle, kTwoPi);
@@ -79,7 +60,7 @@ std::optional<Shape> shapeOf(const Sketch& sketch, Id id)
         shape.center = sketch.point(curve->points[0])->pos;
         const Vec2 s = sketch.point(curve->points[1])->pos;
         const Vec2 e = sketch.point(curve->points[2])->pos;
-        shape.radius = norm(s - shape.center);
+        shape.radius = length(s - shape.center);
         shape.start = angleOf(s - shape.center);
         shape.sweep = wrap(angleOf(e - shape.center) - shape.start);
         if (shape.sweep < kSameParameter) {
@@ -111,8 +92,8 @@ bool contains(const Shape& shape, Vec2 p)
 {
     switch (shape.kind) {
     case CurveKind::Line: {
-        const double length = norm(shape.b - shape.a);
-        const double slack = length > kTiny ? kSamePosition / length : 0.0;
+        const double span = length(shape.b - shape.a);
+        const double slack = span > kTiny ? kSamePosition / span : 0.0;
         const double t = parameterOf(shape, p);
         return t >= -slack && t <= 1.0 + slack;
     }
@@ -164,7 +145,7 @@ std::vector<Vec2> rawCrossings(const Shape& p, const Shape& q)
         return out;
     }
     const Vec2 between = q.center - p.center;
-    const double distance = norm(between);
+    const double distance = length(between);
     if (distance < kTiny || distance > p.radius + q.radius + kSamePosition ||
         distance < std::abs(p.radius - q.radius) - kSamePosition) {
         return out;
@@ -173,7 +154,7 @@ std::vector<Vec2> rawCrossings(const Shape& p, const Shape& q)
     const double h = std::sqrt(std::max(0.0, p.radius * p.radius - along * along));
     const Vec2 u = between * (1.0 / distance);
     const Vec2 base = p.center + u * along;
-    const Vec2 normal{-u.y, u.x};
+    const Vec2 normal = leftOf(u);
     out.push_back(base + normal * h);
     if (h > kSamePosition) {
         out.push_back(base - normal * h);
@@ -205,7 +186,7 @@ std::vector<Cut> cutsOf(const Sketch& sketch, Id id, const Shape& shape)
             const double parameter = parameterOf(shape, p);
             switch (shape.kind) {
             case CurveKind::Line: {
-                const double slack = kSamePosition / std::max(kTiny, norm(shape.b - shape.a));
+                const double slack = kSamePosition / std::max(kTiny, length(shape.b - shape.a));
                 if (parameter <= slack || parameter >= 1.0 - slack) {
                     continue;
                 }
@@ -501,7 +482,7 @@ std::optional<Sketch> filletCorner(const Sketch& sketch, Id point, double radius
         const Id far = curve->points[0] == point ? curve->points[1] : curve->points[0];
         const Vec2 toFar = sketch.point(far)->pos - corner->pos;
         lines[i] = curves[i];
-        lengths[i] = norm(toFar);
+        lengths[i] = length(toFar);
         directions[i] = unit(toFar);
     }
     const double cosine = std::clamp(dot(directions[0], directions[1]), -1.0, 1.0);

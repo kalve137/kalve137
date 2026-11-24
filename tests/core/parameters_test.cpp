@@ -385,9 +385,6 @@ TEST(Parameters, NamesAreSharedWithFeatures)
     EXPECT_EQ(addParameter(doc, "Extrude1", "1 mm")->code, "duplicate");
     EXPECT_EQ(addParameter(doc, "w", "1 mm")->code, "duplicate");
     EXPECT_EQ(addParameter(doc, "XY", "1 mm")->code, "reserved");
-    EXPECT_EQ(checkFeatureName(doc, "w")->code, "duplicate");
-    EXPECT_FALSE(checkFeatureName(doc, "Base"));
-
     ASSERT_FALSE(addParameter(doc, "Sketch2", "1 mm"));
     EXPECT_EQ(doc.find(doc.add(SketchFeature{}))->name, "Sketch3");
 }

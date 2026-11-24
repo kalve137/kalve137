@@ -191,7 +191,7 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
 
     const Vec2 middle = sketch::dimensionMiddle(s);
     const auto outwardFlyout = [&](Vec2 first, Vec2 second, Vec2 measured) {
-        const Vec2 side{-measured.y, measured.x};
+        const Vec2 side = leftOf(measured);
         const double sign = dot(side, (first + second) * 0.5 - middle) < 0.0 ? -1.0 : 1.0;
         return sign * wpp * kDimensionFlyoutPixels;
     };
@@ -274,17 +274,17 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
                 const Vec2 b1 = s.point(l2->points[1])->pos;
                 const Vec2 da = a1 - a0;
                 const Vec2 db = b1 - b0;
-                const double denom = da.x * db.y - da.y * db.x;
+                const double denom = cross(da, db);
                 if (std::abs(denom) > 1e-12) {
-                    const double t = ((b0.x - a0.x) * db.y - (b0.y - a0.y) * db.x) / denom;
+                    const double t = cross(b0 - a0, db) / denom;
                     const Vec2 corner = a0 + da * t;
                     const Vec2 far1 = sketch::distance(a0, corner) > sketch::distance(a1, corner) ? a0 : a1;
                     const Vec2 far3 = sketch::distance(b0, corner) > sketch::distance(b1, corner) ? b0 : b1;
                     const double reach = std::min(sketch::distance(far1, corner), sketch::distance(far3, corner));
                     if (reach > 1e-9) {
                         const double radius = std::min(kAngleDimensionPixels * wpp, 0.6 * reach);
-                        const Vec2 p1 = corner + normalized(far1 - corner) * radius;
-                        const Vec2 p3 = corner + normalized(far3 - corner) * radius;
+                        const Vec2 p1 = corner + unit(far1 - corner) * radius;
+                        const Vec2 p3 = corner + unit(far3 - corner) * radius;
                         dimension = new PrsDim_AngleDimension(world(p1), world(corner), world(p3));
                     }
                 }
@@ -451,9 +451,9 @@ void SketchEditor::redrawPreview()
             const Vec2 end = draftLineEnd(cursor);
             addSegment(m_first->pos, end);
             if (sketch::distance(m_first->pos, end) > 1e-9) {
-                const Vec2 back = normalized(protractorReference() * -1.0);
-                const Vec2 dir = normalized(end - m_first->pos);
-                const double sweep = std::atan2(back.x * dir.y - back.y * dir.x, dot(back, dir));
+                const Vec2 back = unit(protractorReference() * -1.0);
+                const Vec2 dir = unit(end - m_first->pos);
+                const double sweep = std::atan2(cross(back, dir), dot(back, dir));
                 if (std::abs(sweep) > 1e-3) {
                     const double start = angleOf(back);
                     const double radius = worldPerPixel() * kAngleArcPixels;
@@ -527,8 +527,8 @@ void SketchEditor::redrawPreview()
             }
             const auto [a, b] = *centers;
             const double r = width / 2.0;
-            const Vec2 dir = normalized(b - a);
-            const Vec2 across = Vec2{-dir.y, dir.x} * r;
+            const Vec2 dir = unit(b - a);
+            const Vec2 across = leftOf(dir) * r;
             const double up = angleOf(across);
             addSegment(a, b);
             addSegment(a + across, b + across);

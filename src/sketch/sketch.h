@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string>
@@ -29,6 +30,33 @@ inline Vec2 operator-(Vec2 a, Vec2 b)
 inline Vec2 operator*(Vec2 a, double s)
 {
     return {a.x * s, a.y * s};
+}
+
+inline double dot(Vec2 a, Vec2 b)
+{
+    return (a.x * b.x) + (a.y * b.y);
+}
+
+inline double cross(Vec2 a, Vec2 b)
+{
+    return (a.x * b.y) - (a.y * b.x);
+}
+
+inline double length(Vec2 a)
+{
+    return std::hypot(a.x, a.y);
+}
+
+inline Vec2 unit(Vec2 a)
+{
+    constexpr double kZeroLength = 1e-12;
+    const double l = length(a);
+    return l > kZeroLength ? a * (1.0 / l) : Vec2{1.0, 0.0};
+}
+
+inline Vec2 leftOf(Vec2 a)
+{
+    return {-a.y, a.x};
 }
 
 double distance(Vec2 a, Vec2 b);

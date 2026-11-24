@@ -166,7 +166,7 @@ SketchEditor::Snap SketchEditor::snapAt(Vec2 pos, Id ignorePoint) const
         case CurveKind::Circle:
         case CurveKind::Arc: {
             const Vec2 c = s.point(curve->points[0])->pos;
-            snap.pos = c + normalized(pos - c) * curve->radius;
+            snap.pos = c + unit(pos - c) * curve->radius;
             break;
         }
         }

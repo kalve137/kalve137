@@ -83,12 +83,14 @@ add_library(kalve137_app STATIC
     sketch/sketch_editor.cpp
     sketch/sketch_editor.h
     sketch/sketch_editor_detail.h
+    sketch/sketch_editor_drag.cpp
     sketch/sketch_editor_draw.cpp
     sketch/sketch_editor_hit.cpp
     sketch/sketch_editor_move.cpp
     sketch/sketch_editor_project.cpp
     sketch/sketch_editor_shapes.cpp
     sketch/sketch_editor_tools.cpp
+    sketch/sketch_editor_value.cpp
     sketch/sketch_editor_view.cpp
     sketch/sketch_inputs.cpp
     sketch/sketch_inputs.h

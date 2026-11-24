@@ -12,10 +12,6 @@
 
 namespace kalve137::render {
 
-RhiBackend::RhiBackend(QRhi* rhi) : m_rhi(rhi) {}
-
-RhiBackend::~RhiBackend() = default;
-
 void RhiBackend::setTextFamily(const QString& family)
 {
     m_textFamily = family;

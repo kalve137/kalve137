@@ -12,6 +12,9 @@ add_library(kalve137_render STATIC
     chunk_set.h
     cpu_backend.cpp
     cpu_backend.h
+    cpu_backend_detail.h
+    cpu_overlays.cpp
+    cpu_projection.cpp
     datums.cpp
     datums.h
     draw_list.cpp

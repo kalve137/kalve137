@@ -66,8 +66,7 @@ void SketchEditor::clickLine(Snap snap)
         }
         if (dimensions && heldAngle && previous != nullptr) {
             const Vec2 d1 = candidate.point(previous->points[1])->pos - candidate.point(previous->points[0])->pos;
-            const double angle =
-                std::abs(std::atan2(d1.x * delta.y - d1.y * delta.x, dot(d1, delta))) * 180.0 / std::numbers::pi;
+            const double angle = std::abs(std::atan2(cross(d1, delta), dot(d1, delta))) * 180.0 / std::numbers::pi;
             if (angle > 1e-6 && angle < 180.0 - 1e-6) {
                 candidate.addConstraint(ConstraintKind::Angle, {m_chainLine, built.line}, angle);
             }
@@ -377,14 +376,14 @@ void SketchEditor::placeInputs(Vec2 cursor)
         const Vec2 inside = previous ? start - *previous : start + Vec2{0.0, -1.0};
         beside(0, sketch::distance(start, end), start, end, inside);
         const Vec2 reference = protractorReference();
-        const Vec2 back = normalized(reference * -1.0);
-        const Vec2 dir = sketch::distance(start, end) > 1e-9 ? normalized(end - start) : back;
+        const Vec2 back = unit(reference * -1.0);
+        const Vec2 dir = sketch::distance(start, end) > 1e-9 ? unit(end - start) : back;
         Vec2 bisector = back + dir;
         if (length(bisector) < 1e-6) {
-            bisector = {-back.y, back.x};
+            bisector = leftOf(back);
         }
         const QPointF joint = screen(start);
-        const QPointF along = unitScreen(screen(start + normalized(bisector)) - joint);
+        const QPointF along = unitScreen(screen(start + unit(bisector)) - joint);
         const QPointF ray = unitScreen(screen(start + dir) - joint);
         const QSizeF box = m_inputs->boxSize(1);
         const auto support = [&](QPointF n) {
@@ -411,7 +410,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
     }
     case Tool::Circle: {
         const double radius = draftRadius(cursor);
-        const Vec2 dir = sketch::distance(start, cursor) > 1e-9 ? normalized(cursor - start) : Vec2{1.0, 0.0};
+        const Vec2 dir = sketch::distance(start, cursor) > 1e-9 ? unit(cursor - start) : Vec2{1.0, 0.0};
         const QPointF rim = screen(start + dir * radius);
         const QPointF out = unitScreen(rim - screen(start));
         m_inputs->setLive(0, radius * 2.0, rim + out * kInputGapPixels, out);
@@ -437,8 +436,8 @@ void SketchEditor::placeInputs(Vec2 cursor)
     case Tool::OverallSlot: {
         const Vec2 end = m_second ? m_second->pos : draftSlotEnd(cursor);
         const Vec2 from = m_tool == Tool::CenterSlot ? start * 2.0 - end : start;
-        const Vec2 dir = sketch::distance(from, end) > 1e-9 ? normalized(end - from) : Vec2{1.0, 0.0};
-        const Vec2 side{-dir.y, dir.x};
+        const Vec2 dir = sketch::distance(from, end) > 1e-9 ? unit(end - from) : Vec2{1.0, 0.0};
+        const Vec2 side = leftOf(dir);
         const double span = sketch::distance(start, end) * (m_tool == Tool::CenterSlot ? 2.0 : 1.0);
         if (m_second) {
             const double width = draftSlotWidth(cursor);
@@ -634,8 +633,7 @@ void SketchEditor::clickDimension(QPointF pos, const Hit& hit)
             const sketch::Curve* other = s.curve(hit.id);
             const Vec2 d1 = s.point(line->points[1])->pos - s.point(line->points[0])->pos;
             const Vec2 d2 = s.point(other->points[1])->pos - s.point(other->points[0])->pos;
-            const double angle =
-                std::abs(std::atan2(d1.x * d2.y - d1.y * d2.x, dot(d1, d2))) * 180.0 / std::numbers::pi;
+            const double angle = std::abs(std::atan2(cross(d1, d2), dot(d1, d2))) * 180.0 / std::numbers::pi;
             if (angle < 1e-6 || angle > 180.0 - 1e-6) {
                 m_pending.reset();
                 emit message(tr("Parallel lines have no angle, use Parallel or a distance"));
@@ -647,7 +645,7 @@ void SketchEditor::clickDimension(QPointF pos, const Hit& hit)
         if (hit.kind == Hit::Kind::Point && std::ranges::find(line->points, hit.id) == line->points.end()) {
             const Vec2 p = s.point(hit.id)->pos;
             const Vec2 a = s.point(line->points[0])->pos;
-            const Vec2 dir = normalized(s.point(line->points[1])->pos - a);
+            const Vec2 dir = unit(s.point(line->points[1])->pos - a);
             const double d = std::abs((p.x - a.x) * dir.y - (p.y - a.y) * dir.x);
             startDimension(ConstraintKind::Distance, {hit.id, first.id}, d);
             return;

@@ -14,16 +14,6 @@ namespace kalve137::render {
 
 namespace {
 
-constexpr float kByte = 255.0F;
-constexpr std::uint32_t kLowByte = 0xFFU;
-constexpr unsigned kByteBits = 8;
-
-VertexColor idColor(std::uint32_t entry, PickKind kind)
-{
-    return {static_cast<std::uint8_t>(entry & kLowByte), static_cast<std::uint8_t>((entry >> kByteBits) & kLowByte),
-            static_cast<std::uint8_t>(kind), static_cast<std::uint8_t>(kByte)};
-}
-
 snapshot::Color opaque(snapshot::Color color)
 {
     color.alpha = 1.0F;

@@ -18,8 +18,6 @@ namespace {
 
 constexpr float kByte = 255.0F;
 constexpr int kQuadCorners = 4;
-constexpr std::uint32_t kLowByte = 0xFFU;
-constexpr unsigned kByteBits = 8;
 
 struct Square {
     std::array<camera::Vec3, kQuadCorners> corners;
@@ -29,12 +27,6 @@ struct Square {
 };
 
 using Offsets = std::array<std::array<double, 2>, kQuadCorners>;
-
-VertexColor idColor(std::uint32_t entry, PickKind kind)
-{
-    return {static_cast<std::uint8_t>(entry & kLowByte), static_cast<std::uint8_t>((entry >> kByteBits) & kLowByte),
-            static_cast<std::uint8_t>(kind), static_cast<std::uint8_t>(kByte)};
-}
 
 class Builder {
 public:

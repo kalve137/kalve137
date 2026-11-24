@@ -49,7 +49,7 @@ Vec2 SketchEditor::draftPolygonCorner(Vec2 cursor) const
         return cursor;
     }
     const Vec2 c = m_first->pos;
-    const Vec2 dir = sketch::distance(c, cursor) > 1e-9 ? normalized(cursor - c) : Vec2{1.0, 0.0};
+    const Vec2 dir = sketch::distance(c, cursor) > 1e-9 ? unit(cursor - c) : Vec2{1.0, 0.0};
     return c + dir * (*diameter / 2.0);
 }
 
@@ -208,7 +208,7 @@ Vec2 SketchEditor::draftSlotEnd(Vec2 cursor) const
         return cursor;
     }
     const Vec2 a = m_first->pos;
-    const Vec2 dir = sketch::distance(a, cursor) > 1e-9 ? normalized(cursor - a) : Vec2{1.0, 0.0};
+    const Vec2 dir = sketch::distance(a, cursor) > 1e-9 ? unit(cursor - a) : Vec2{1.0, 0.0};
     return a + dir * (m_tool == Tool::CenterSlot ? *length / 2.0 : *length);
 }
 
@@ -221,7 +221,7 @@ double SketchEditor::draftSlotWidth(Vec2 cursor) const
         return 0.0;
     }
     const Vec2 a = m_first->pos;
-    const Vec2 dir = normalized(m_second->pos - a);
+    const Vec2 dir = unit(m_second->pos - a);
     return 2.0 * std::abs((cursor.x - a.x) * dir.y - (cursor.y - a.y) * dir.x);
 }
 
