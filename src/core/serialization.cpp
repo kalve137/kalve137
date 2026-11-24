@@ -3,6 +3,7 @@
 
 #include "core/serialization.h"
 
+#include "core/parameter_table.h"
 #include "core/projection.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
@@ -89,6 +90,9 @@ json sketchToJson(const sketch::Sketch& s)
         if (c.kind == sketch::ConstraintKind::Offset) {
             constraint["sides"] = c.sides;
         }
+        if (!c.expression.empty()) {
+            constraint["expression"] = c.expression;
+        }
         constraints.push_back(std::move(constraint));
     }
     return {{"points", points}, {"curves", curves}, {"constraints", constraints}};
@@ -127,6 +131,7 @@ sketch::Sketch sketchFrom(const json& j)
             constraint.labelOffset = sketch::Vec2{xy[0], xy[1]};
         }
         constraint.sides = c.value("sides", std::vector<int>());
+        constraint.expression = c.value("expression", std::string());
         s.insertConstraint(c.at("id").get<int>(), std::move(constraint));
     }
     if (const std::optional<std::string> problem = sketch::validate(s)) {
@@ -653,16 +658,26 @@ std::string toJson(const Document& document, ShapeStore& shapes)
 {
     json features = json::array();
     for (const Feature& feature : document.features()) {
+        json data = dataToJson(feature.data, shapes);
+        if (!feature.expressions.empty()) {
+            data["expressions"] = feature.expressions;
+        }
         features.push_back({{"id", feature.id},
                             {"type", typeName(feature.data)},
                             {"name", feature.name},
                             {"suppressed", feature.suppressed},
-                            {"data", dataToJson(feature.data, shapes)}});
+                            {"data", std::move(data)}});
     }
-    const json root = {
-        {"format", "kalve137-design"}, {"version", kDesignFormatVersion}, {"units", "mm"},
-        {"marker", document.marker()}, {"next_id", document.nextId()},    {"counters", document.counters()},
-        {"features", features}};
+    json root = {{"format", "kalve137-design"}, {"version", kDesignFormatVersion}, {"units", "mm"},
+                 {"marker", document.marker()}, {"next_id", document.nextId()},    {"counters", document.counters()},
+                 {"features", features}};
+    if (!document.parameters().empty()) {
+        json parameters = json::array();
+        for (const Parameter& parameter : document.parameters()) {
+            parameters.push_back({{"name", parameter.name}, {"expression", parameter.expression}});
+        }
+        root["parameters"] = std::move(parameters);
+    }
     return root.dump(2) + "\n";
 }
 
@@ -682,12 +697,23 @@ Document fromJson(const std::string& text, ShapeStore& shapes)
             feature.name = f.at("name").get<std::string>();
             feature.suppressed = f.value("suppressed", false);
             feature.data = dataFrom(f.at("type").get<std::string>(), f.at("data"), shapes);
+            feature.expressions = f.at("data").value("expressions", std::map<std::string, std::string>());
             features.push_back(std::move(feature));
         }
         const std::size_t marker = root.value("marker", features.size());
         Document document;
         document.restore(std::move(features), marker, root.value("counters", std::map<std::string, int>()),
                          root.value("next_id", 1));
+        if (const auto list = root.find("parameters"); list != root.end()) {
+            std::vector<Parameter> parameters;
+            for (const json& p : list->get<std::vector<json>>()) {
+                parameters.push_back({p.at("name").get<std::string>(), p.at("expression").get<std::string>()});
+            }
+            document.setParameters(std::move(parameters));
+        }
+        if (const std::optional<ExpressionError> error = applyParameters(document)) {
+            throw std::runtime_error("The design file is damaged: " + error->message);
+        }
         return document;
     } catch (const json::exception& error) {
         throw std::runtime_error(std::string("The design file is damaged: ") + error.what());

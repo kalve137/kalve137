@@ -565,7 +565,7 @@ void SketchEditor::clickFillet(QPointF screen, Vec2 pos)
         return;
     }
     const Id point = *corner;
-    promptValue(screen, m_filletRadius, core::Quantity::Length, 0, [this, point](double radius) {
+    promptValue(screen, m_filletRadius, core::Quantity::Length, 0, [this, point](double radius, const std::string&) {
         std::optional<sketch::Sketch> rounded = sketch::filletCorner(current(), point, radius);
         if (!rounded) {
             emit message(tr("A %1 mm radius doesn't fit between those lines").arg(formatValue(radius)));

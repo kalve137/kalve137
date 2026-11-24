@@ -116,7 +116,7 @@ void SketchEditor::clickOffset(QPointF screen, Vec2 pos)
     const auto offsetBy = [this](double typed) { return typed * m_offsetSide; };
     promptValue(
         screen, m_offsetDistance, core::Quantity::Length, 0,
-        [this, curves, offsetBy](double typed) {
+        [this, curves, offsetBy](double typed, const std::string&) {
             sketch::Sketch candidate = current();
             if (!sketch::addOffset(candidate, curves, offsetBy(typed))) {
                 emit message(tr("A %1 mm offset doesn't fit these curves").arg(formatValue(std::abs(typed))));

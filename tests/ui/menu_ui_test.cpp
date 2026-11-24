@@ -7,6 +7,7 @@
 #include "app/panels/browser_panel.h"
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
+#include "core/parameter_table.h"
 #include "viewer/occt_view_widget.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -90,6 +91,16 @@ TEST_F(MenuTest, TimelineRenames)
     EXPECT_EQ(ui->state()["features"][1]["name"], "Base") << ui->state().dump(2);
     ui->trigger("Undo");
     EXPECT_EQ(ui->state()["features"][1]["name"], "Extrude1");
+}
+
+TEST_F(MenuTest, TimelineRenameRefusesAParameterName)
+{
+    ui->session().edit(QStringLiteral("Add w"),
+                       [](core::Document& document) { EXPECT_FALSE(core::addParameter(document, "w", "10 mm")); });
+    answerText("w");
+    answerMessage(QMessageBox::Ok);
+    ui->contextMenu(ui->timelineChip(kExtrude), "Rename...");
+    EXPECT_EQ(ui->state()["features"][1]["name"], "Extrude1") << ui->state().dump(2);
 }
 
 TEST_F(MenuTest, TimelineRollsBackAndToTheEnd)

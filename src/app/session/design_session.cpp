@@ -4,11 +4,13 @@
 #include "app/session/design_session.h"
 
 #include "app/session/paths.h"
+#include "core/parameter_table.h"
 
 #include "log/log.h"
 
 #include <QElapsedTimer>
 
+#include <utility>
 #include <variant>
 
 namespace kalve137::app {
@@ -63,10 +65,37 @@ DesignSession::DesignSession(QObject* parent) : QObject(parent)
     rebuild();
 }
 
-void DesignSession::edit(const QString& label, const std::function<void(core::Document&)>& change)
+bool DesignSession::edit(const QString& label, const std::function<void(core::Document&)>& change)
 {
-    const core::Document before = m_document;
-    change(m_document);
+    const std::optional<core::ExpressionError> error = tryEdit(label, [&change](core::Document& document) {
+        change(document);
+        return std::optional<core::ExpressionError>();
+    });
+    if (error) {
+        QString text = QString::fromStdString(error->message);
+        if (!error->hint.empty()) {
+            text += QStringLiteral(". ") + QString::fromStdString(error->hint);
+        }
+        emit editRefused(text);
+    }
+    return !error;
+}
+
+std::optional<core::ExpressionError>
+DesignSession::tryEdit(const QString& label,
+                       const std::function<std::optional<core::ExpressionError>(core::Document&)>& change)
+{
+    core::Document candidate = m_document;
+    std::optional<core::ExpressionError> error = change(candidate);
+    if (!error) {
+        core::reconcileExpressions(m_document, candidate);
+        error = core::applyParameters(candidate);
+    }
+    if (error) {
+        K137_INFO(App, "Edit refused: {}: {}", label.toStdString(), error->message);
+        return error;
+    }
+    const core::Document before = std::exchange(m_document, std::move(candidate));
     K137_INFO(App, "Edit: {}", label.toStdString());
     m_undo.push(label.toStdString(), before);
     m_dirty = true;
@@ -75,6 +104,7 @@ void DesignSession::edit(const QString& label, const std::function<void(core::Do
     }
     rebuild();
     emit fileStateChanged();
+    return std::nullopt;
 }
 
 QString DesignSession::undoLabel() const

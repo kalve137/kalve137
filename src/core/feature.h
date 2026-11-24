@@ -12,6 +12,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -244,6 +245,7 @@ struct Feature {
     std::string name;
     bool suppressed = false;
     FeatureData data;
+    std::map<std::string, std::string> expressions;
 };
 
 template <typename... Ts>

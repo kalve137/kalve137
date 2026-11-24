@@ -89,6 +89,7 @@ struct Constraint {
     double value = 0.0;
     std::optional<Vec2> labelOffset;
     std::vector<int> sides;
+    std::string expression;
 };
 
 struct OffsetPair {

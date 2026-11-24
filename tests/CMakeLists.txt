@@ -22,6 +22,8 @@ add_executable(kalve137_tests
     core/feature_test.cpp
     core/history_test.cpp
     core/naming_test.cpp
+    core/parameter_grammar_test.cpp
+    core/parameters_test.cpp
     core/projection_test.cpp
     core/sample_test.cpp
     core/shape_store_test.cpp
@@ -113,6 +115,7 @@ add_executable(kalve137_uitests
     ui/new_view_ui_test.cpp
     ui/pair_shots.cpp
     ui/pair_shots.h
+    ui/parameters_ui_test.cpp
     ui/plane_pair_ui_test.cpp
     ui/preferences_ui_test.cpp
     ui/recent_values_ui_test.cpp
@@ -183,6 +186,7 @@ set(new_view_sketch
     SelectTest.SketchCrossingTakesWhatItTouches
     SketchMoveTest.*
     SlotTest.*
+    ValueNamesTest.*
     WorkflowTest.*
 )
 list(JOIN new_view_sketch ":" new_view_sketch_filter)

@@ -8,6 +8,7 @@
 #include "app/feature/value_edit.h"
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
+#include "core/parameter_table.h"
 
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
@@ -574,6 +575,7 @@ void FeaturePanel::startFresh(core::FeatureData featureData)
 {
     m_base = m_session.document();
     m_baseModel = m_session.model();
+    m_expressions.clear();
     start(std::move(featureData), 0);
     const std::vector<Pick> preselection = m_scene.takePreselection();
     if (preselection.empty() || !takesPreselection(*m_data)) {
@@ -599,7 +601,23 @@ void FeaturePanel::edit(core::FeatureId id)
     m_base = m_session.document();
     m_base.setMarker(static_cast<std::size_t>(m_base.indexOf(id)));
     m_baseModel = core::recompute(m_base);
+    m_expressions = feature->expressions;
     start(feature->data, id);
+}
+
+void FeaturePanel::bindField(ValueEdit* box, const std::string& key)
+{
+    box->acceptNames([this] { return core::parameterValues(m_session.document()); });
+    if (const auto found = m_expressions.find(key); found != m_expressions.end()) {
+        box->setExpression(QString::fromStdString(found->second));
+    }
+    connect(box, &ValueEdit::expressionChanged, this, [this, key](const QString& canonical) {
+        if (canonical.isEmpty()) {
+            m_expressions.erase(key);
+        } else {
+            m_expressions[key] = canonical.toStdString();
+        }
+    });
 }
 
 void FeaturePanel::start(core::FeatureData featureData, core::FeatureId editing)
@@ -620,6 +638,7 @@ void FeaturePanel::accept()
         return;
     }
     core::FeatureData accepted = std::move(*m_data);
+    std::map<std::string, std::string> expressions = std::move(m_expressions);
     const core::FeatureId editing = m_editing;
     const QString title = titleOf(accepted);
     K137_INFO(App, "{} accepted{}", title.toStdString(), editing != 0 ? " as an edit" : "");
@@ -672,12 +691,15 @@ void FeaturePanel::accept()
         const QString name = QString::fromStdString(edited->name);
         m_session.edit(tr("Edit %1").arg(name), [&](core::Document& document) {
             nameBody(accepted, document);
-            document.find(editing)->data = std::move(accepted);
+            core::Feature* target = document.find(editing);
+            target->data = std::move(accepted);
+            target->expressions = std::move(expressions);
         });
     } else {
         m_session.edit(title, [&](core::Document& document) {
             nameBody(accepted, document);
-            document.add(std::move(accepted));
+            const core::FeatureId added = document.add(std::move(accepted));
+            document.find(added)->expressions = std::move(expressions);
         });
     }
 }
@@ -693,6 +715,7 @@ void FeaturePanel::cancel()
 void FeaturePanel::finish()
 {
     m_data.reset();
+    m_expressions.clear();
     m_editing = 0;
     m_pressPull = false;
     m_firstAxisPoint.reset();

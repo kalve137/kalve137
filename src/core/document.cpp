@@ -79,10 +79,21 @@ void Document::restore(std::vector<Feature> features, std::size_t marker, std::m
     setMarker(marker);
 }
 
+const Parameter* Document::parameter(std::string_view name) const
+{
+    auto it = std::ranges::find(m_parameters, name, &Parameter::name);
+    return it == m_parameters.end() ? nullptr : &*it;
+}
+
+const Feature* Document::featureNamed(std::string_view name) const
+{
+    auto it = std::ranges::find(m_features, name, &Feature::name);
+    return it == m_features.end() ? nullptr : &*it;
+}
+
 std::string Document::defaultName(const FeatureData& data)
 {
     const std::string type(typeName(data));
-    const int number = ++m_counters[type];
     std::string prefix;
     bool upper = true;
     for (const char c : type) {
@@ -93,7 +104,11 @@ std::string Document::defaultName(const FeatureData& data)
         prefix += upper ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c;
         upper = false;
     }
-    return prefix + std::to_string(number);
+    std::string name = prefix + std::to_string(++m_counters[type]);
+    while (parameter(name) != nullptr) {
+        name = prefix + std::to_string(++m_counters[type]);
+    }
+    return name;
 }
 
 } // namespace kalve137::core

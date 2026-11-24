@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -34,7 +35,9 @@ public:
     pick::SceneRays& rays() { return m_rays; }
     gp_Ax3 sketchPlane(core::FeatureId sketch) const;
 
-    void edit(const QString& label, const std::function<void(core::Document&)>& change);
+    bool edit(const QString& label, const std::function<void(core::Document&)>& change);
+    std::optional<core::ExpressionError>
+    tryEdit(const QString& label, const std::function<std::optional<core::ExpressionError>(core::Document&)>& change);
     bool canUndo() const { return m_undo.canUndo(); }
     bool canRedo() const { return m_undo.canRedo(); }
     QString undoLabel() const;
@@ -63,6 +66,7 @@ signals:
     void visibilityChanged();
     void bodiesVisibilityChanged(const std::vector<core::BodyKey>& keys, bool visible);
     void historyJumped();
+    void editRefused(const QString& message);
 
 private:
     void rebuild();

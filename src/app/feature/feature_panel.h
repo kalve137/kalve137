@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -94,6 +95,7 @@ private:
     void startFresh(core::FeatureData featureData);
     void finish();
     void buildForm();
+    void bindField(ValueEdit* box, const std::string& key);
     void buildOffsetFaceForm(core::OffsetFaceFeature& f, QFormLayout* fields);
     void buildHoleForm(core::HoleFeature& f, QFormLayout* fields);
     void buildMoveForm(core::MoveFeature& f, QFormLayout* fields);
@@ -149,6 +151,7 @@ private:
     viewer::OcctViewWidget* m_view;
 
     std::optional<core::FeatureData> m_data;
+    std::map<std::string, std::string> m_expressions;
     core::FeatureId m_editing = 0;
     core::Document m_base;
     core::Model m_baseModel;
