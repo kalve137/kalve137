@@ -22,12 +22,12 @@ class OcctViewWidget;
 }
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::app {
 
-class NewViewNavigation;
+class ViewportNavigation;
 
 class CameraCommands : public QObject {
     Q_OBJECT
@@ -37,7 +37,7 @@ public:
 
     static constexpr double kEmptySceneHalfSize = 60.0;
 
-    CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView, std::function<bool()> sceneIsEmpty,
+    CameraCommands(viewer::OcctViewWidget& view, render::Viewport* newView, std::function<bool()> sceneIsEmpty,
                    QObject* parent);
 
     void home(Move move);
@@ -71,9 +71,9 @@ private:
     bool isReady() const;
 
     viewer::OcctViewWidget* m_view;
-    render::RhiView* m_newView;
+    render::Viewport* m_viewport;
     std::function<bool()> m_sceneIsEmpty;
-    NewViewNavigation* m_navigation = nullptr;
+    ViewportNavigation* m_navigation = nullptr;
     camera::Navigation m_navigationSettings;
     QVariantAnimation* m_animation = nullptr;
     bool m_animateTransitions = true;

@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
 #include "render/graphics_api.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 
 #include <QLabel>
 #include <QMenuBar>
@@ -23,7 +23,7 @@ constexpr render::GraphicsApi kUnavailableApi = render::GraphicsApi::Metal;
 constexpr render::GraphicsApi kUnavailableApi = render::GraphicsApi::Direct3D11;
 #endif
 
-TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
+TEST_F(ViewportTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
 {
     allowProblem("graphics device");
     EXPECT_FALSE(render::canStart(kUnavailableApi));
@@ -32,7 +32,7 @@ TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
     window.resize(kWindowSize);
     window.show();
     QTest::qWait(kSettleMs);
-    EXPECT_EQ(window.newView(), nullptr);
+    EXPECT_EQ(window.viewport(), nullptr);
     const QList<QLabel*> messages = window.findChildren<QLabel*>(QStringLiteral("viewFailure"));
     ASSERT_EQ(messages.size(), 1);
     EXPECT_TRUE(messages.front()->isVisible());
@@ -42,7 +42,7 @@ TEST_F(NewViewTest, AnUnavailableApiShowsOneMessageInAPaintedWindow)
     EXPECT_FALSE(window.menuBar()->grab().isNull());
 }
 
-TEST_F(NewViewTest, AnOpenGlBelowThreePointTwoShowsTheRequirementOnce)
+TEST_F(ViewportTest, AnOpenGlBelowThreePointTwoShowsTheRequirementOnce)
 {
     const render::DeviceProbe old{
         .created = true, .texelFetch = true, .openGl = true, .openGlEs = false, .major = 3, .minor = 1};

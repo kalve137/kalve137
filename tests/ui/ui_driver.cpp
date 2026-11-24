@@ -16,7 +16,7 @@
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "log/log.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "sketch/dimension.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
@@ -431,19 +431,19 @@ UiDriver::UiDriver(const app::StartupOptions& options) : m_window(std::make_uniq
     m_window->resize(kWindowSize);
     m_window->show();
     keepActive();
-    m_newView = m_window->newView();
-    m_view = m_newView == nullptr ? m_window->oldView() : nullptr;
+    m_viewport = m_window->viewport();
+    m_view = m_viewport == nullptr ? m_window->oldView() : nullptr;
     m_session = m_window->findChild<app::DesignSession*>();
-    EXPECT_TRUE(m_view != nullptr || m_newView != nullptr);
+    EXPECT_TRUE(m_view != nullptr || m_viewport != nullptr);
     EXPECT_NE(m_session, nullptr);
     settle();
-    if (m_newView != nullptr) {
+    if (m_viewport != nullptr) {
         QElapsedTimer clock;
         clock.start();
-        while (!m_newView->isReady() && !m_newView->hasFailed() && clock.elapsed() < kAnimationLimitMs) {
+        while (!m_viewport->isReady() && !m_viewport->hasFailed() && clock.elapsed() < kAnimationLimitMs) {
             QTest::qWait(kFrameMs);
         }
-        EXPECT_TRUE(m_newView->isReady()) << "The new view did not initialize off screen";
+        EXPECT_TRUE(m_viewport->isReady()) << "The viewport did not initialize off screen";
     } else {
         EXPECT_TRUE(m_view->isReady()) << "The view did not initialize off screen";
     }
@@ -509,8 +509,8 @@ void UiDriver::frame()
     if (m_view != nullptr) {
         m_view->grabFramebuffer();
     }
-    if (m_newView != nullptr && m_newView->isReady()) {
-        m_newView->grabFramebuffer();
+    if (m_viewport != nullptr && m_viewport->isReady()) {
+        m_viewport->grabFramebuffer();
     }
     QCoreApplication::processEvents();
 }
@@ -565,7 +565,7 @@ QPointF UiDriver::at(const gp_Pnt& world) const
         return m_view->toScreen(world);
     }
     const camera::ScreenPoint point =
-        m_newView->camera().project({world.X(), world.Y(), world.Z()}, m_newView->viewport());
+        m_viewport->camera().project({world.X(), world.Y(), world.Z()}, m_viewport->viewport());
     return {point.x, point.y};
 }
 
@@ -574,13 +574,13 @@ QWidget* UiDriver::canvas() const
     if (m_view != nullptr) {
         return m_view;
     }
-    return m_newView;
+    return m_viewport;
 }
 
 QImage UiDriver::canvasImage()
 {
     settle();
-    return m_view != nullptr ? m_view->grabFramebuffer() : m_newView->grabFramebuffer();
+    return m_view != nullptr ? m_view->grabFramebuffer() : m_viewport->grabFramebuffer();
 }
 
 void UiDriver::sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,

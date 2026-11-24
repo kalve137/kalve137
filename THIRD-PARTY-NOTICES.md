@@ -28,7 +28,7 @@ Qt, Open CASCADE Technology and PlaneGCS are linked dynamically. You may replace
 
 ## Code adapted from Open CASCADE Technology
 
-The new viewport's camera moves exactly like the 3D view built on Open CASCADE Technology 8.0.1, so parts of the files below are translated from its source. That code stays under LGPL-2.1-only with the Open CASCADE exception 1.0 and is carried under GPL-3.0-or-later as section 3 of the LGPL allows. Each file names both in its SPDX header.
+The viewportport's camera moves exactly like the 3D view built on Open CASCADE Technology 8.0.1, so parts of the files below are translated from its source. That code stays under LGPL-2.1-only with the Open CASCADE exception 1.0 and is carried under GPL-3.0-or-later as section 3 of the LGPL allows. Each file names both in its SPDX header.
 
 | File | Follows |
 | --- | --- |

@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "../render/test_meshes.h"
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_navigation.h"
-#include "app/view/new_view_picker.h"
+#include "app/view/viewport_navigation.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "camera/views.h"
 #include "core/document.h"
@@ -18,7 +18,7 @@
 #include "pick/scene_rays.h"
 #include "render/chunk_set.h"
 #include "render/draw_list.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "sketch/sketch.h"
 #include "snapshot/body.h"
@@ -44,9 +44,9 @@
 namespace kalve137::uitest {
 namespace {
 
-TEST_F(NewViewTest, FitsASketchOnlyDesignToTheSketch)
+TEST_F(ViewportTest, FitsASketchOnlyDesignToTheSketch)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -88,9 +88,9 @@ TEST_F(NewViewTest, FitsASketchOnlyDesignToTheSketch)
     EXPECT_GT(right - left, viewport.width * 0.5) << "the sketch fills the view";
 }
 
-TEST_F(NewViewTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
+TEST_F(ViewportTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -139,9 +139,9 @@ TEST_F(NewViewTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
     EXPECT_EQ(canvas->frame().wideViewProjection, before.wideViewProjection);
 }
 
-TEST_F(NewViewTest, AChangeShowsInTheNextFrame)
+TEST_F(ViewportTest, AChangeShowsInTheNextFrame)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -205,9 +205,9 @@ std::size_t displayedObjects(viewer::OcctViewWidget& view)
     return static_cast<std::size_t>(shown.Size());
 }
 
-TEST_F(NewViewTest, HideAndShowRewriteOnlyThePalette)
+TEST_F(ViewportTest, HideAndShowRewriteOnlyThePalette)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }

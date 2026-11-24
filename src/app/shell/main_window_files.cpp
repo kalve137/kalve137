@@ -19,7 +19,7 @@
 #include "core/serialization.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QCloseEvent>
@@ -388,10 +388,10 @@ void MainWindow::openDesignWhenShown(const std::filesystem::path& path)
         connections->clear();
         QTimer::singleShot(0, this, [this, path] { openDesignAt(path); });
     };
-    if (m_rhiView != nullptr) {
-        connections->push_back(connect(m_rhiView, &QRhiWidget::frameSubmitted, this, [open] { open(true); }));
-        connections->push_back(connect(m_rhiView, &render::RhiView::ready, this, [open] { open(false); }));
-        connections->push_back(connect(m_rhiView, &QRhiWidget::renderFailed, this, [open] { open(false); }));
+    if (m_viewport != nullptr) {
+        connections->push_back(connect(m_viewport, &QRhiWidget::frameSubmitted, this, [open] { open(true); }));
+        connections->push_back(connect(m_viewport, &render::Viewport::ready, this, [open] { open(false); }));
+        connections->push_back(connect(m_viewport, &QRhiWidget::renderFailed, this, [open] { open(false); }));
     } else if (centralWidget() == m_view) {
         connections->push_back(connect(m_view, &viewer::OcctViewWidget::rendered, this, [open] { open(true); }));
     } else {
@@ -616,8 +616,8 @@ void MainWindow::addImport(const std::filesystem::path& path, ImportedStep impor
     const auto logFirstFrame = [timer, file = path.filename().string()] {
         K137_INFO(Io, "Imported {}: {} ms on the UI thread until the first frame", file, timer.elapsed());
     };
-    if (m_rhiView != nullptr) {
-        connect(m_rhiView, &QRhiWidget::frameSubmitted, this, logFirstFrame, Qt::SingleShotConnection);
+    if (m_viewport != nullptr) {
+        connect(m_viewport, &QRhiWidget::frameSubmitted, this, logFirstFrame, Qt::SingleShotConnection);
     } else {
         connect(m_view, &viewer::OcctViewWidget::rendered, this, logFirstFrame, Qt::SingleShotConnection);
     }

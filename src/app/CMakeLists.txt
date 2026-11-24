@@ -50,10 +50,13 @@ add_library(kalve137_app STATIC
     shell/batch_import.h
     shell/bench_orbit.cpp
     shell/bench_orbit.h
+    shell/bench_orbit_runs.cpp
+    shell/bench_orbit_sketch.cpp
     shell/command_search.cpp
     shell/command_search.h
     shell/main_window.cpp
     shell/main_window.h
+    shell/main_window_widgets.cpp
     shell/main_window_commands.cpp
     shell/main_window_files.cpp
     shell/main_window_help.cpp
@@ -113,10 +116,10 @@ add_library(kalve137_app STATIC
     view/camera_commands.h
     view/grid_settings.cpp
     view/grid_settings.h
-    view/new_view_navigation.cpp
-    view/new_view_navigation.h
-    view/new_view_picker.cpp
-    view/new_view_picker.h
+    view/viewport_navigation.cpp
+    view/viewport_navigation.h
+    view/viewport_picker.cpp
+    view/viewport_picker.h
     view/pick.h
     view/pick_source.h
     view/scene.cpp

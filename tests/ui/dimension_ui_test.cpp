@@ -229,7 +229,7 @@ bool sameAs(const Shown& item, const Shown& expected)
 
 TEST_F(DimensionTest, LayoutPutsTextAndArrowsWhereTheOldViewDoes)
 {
-    if (ui->newView() != nullptr) {
+    if (ui->viewport() != nullptr) {
         GTEST_SKIP() << "Reads the old view's dimensions";
     }
     core::Document document;

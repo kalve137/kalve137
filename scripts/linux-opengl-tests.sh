@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Run the new view UI tests of ctest's NewView.* on OpenGL with Mesa llvmpipe under Xvfb, after a
+# Run the viewport UI tests of ctest's Viewport.* on OpenGL with Mesa llvmpipe under Xvfb, after a
 # linux-release build. Tests in EXCLUDED don't run here and are printed with their reason. Fails
-# when a test fails, when no test ran, when the new view found no OpenGL device or when a
+# when a test fails, when no test ran, when the viewport found no OpenGL device or when a
 # reference color test skipped.
 
 set -euo pipefail
@@ -89,7 +89,7 @@ for test in plan["tests"]:
         status = 1
 
 for name in sorted(set(EXCLUDED) - listed):
-    print(f"{name} is excluded but no NewView test lists it", file=sys.stderr)
+    print(f"{name} is excluded but no Viewport test lists it", file=sys.stderr)
     status = 1
 
 ran = []
@@ -110,10 +110,10 @@ print(f"{len(ran)} ran, {len(skipped)} skipped, {len(EXCLUDED)} excluded")
 for name, message in skipped:
     print(f"skipped {name}: {message}")
 if not ran:
-    print("No new view test ran", file=sys.stderr)
+    print("No viewport test ran", file=sys.stderr)
     status = 1
 if any("no usable" in message for _, message in skipped):
-    print("The new view found no OpenGL device", file=sys.stderr)
+    print("The viewport found no OpenGL device", file=sys.stderr)
     status = 1
 if any("OpenGL 3.2" in message for _, message in skipped):
     print("A reference color test skipped although llvmpipe has OpenGL 4.5", file=sys.stderr)
@@ -123,6 +123,6 @@ EOF
 
 xvfb-run -a -s "-screen 0 1920x1080x24" bash -euo pipefail -c '
     glxinfo -B | grep -E "OpenGL (renderer|core profile version) string"
-    ctest --preset linux-release -R "^NewView\." --show-only=json-v1 > "$1/opengl-tests.json"
+    ctest --preset linux-release -R "^Viewport\." --show-only=json-v1 > "$1/opengl-tests.json"
     python3 "$1/opengl-tests.py" "$1"
 ' bash "$build"

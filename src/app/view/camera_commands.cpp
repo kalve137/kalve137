@@ -3,9 +3,9 @@
 
 #include "app/view/camera_commands.h"
 
-#include "app/view/new_view_navigation.h"
+#include "app/view/viewport_navigation.h"
 #include "camera/views.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QEasingCurve>
@@ -29,11 +29,11 @@ camera::Vec3 toVec(const gp_Dir& direction)
 
 } // namespace
 
-CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::RhiView* newView,
+CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::Viewport* newView,
                                std::function<bool()> sceneIsEmpty, QObject* parent)
-    : QObject(parent), m_view(&view), m_newView(newView), m_sceneIsEmpty(std::move(sceneIsEmpty))
+    : QObject(parent), m_view(&view), m_viewport(newView), m_sceneIsEmpty(std::move(sceneIsEmpty))
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         return;
     }
     m_camera = m_view->currentCamera();
@@ -43,14 +43,14 @@ CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::RhiView* ne
     m_animation->setEasingCurve(QEasingCurve::Linear);
     connect(m_animation, &QVariantAnimation::valueChanged, this,
             [this](const QVariant& value) { show(m_transition.at(value.toDouble() * m_transition.seconds())); });
-    m_navigation = new NewViewNavigation(*m_newView, *this);
-    connect(m_navigation, &NewViewNavigation::menuRequested, this, &CameraCommands::menuRequested);
-    connect(m_newView, &render::RhiView::resized, this, &CameraCommands::syncViewport);
+    m_navigation = new ViewportNavigation(*m_viewport, *this);
+    connect(m_navigation, &ViewportNavigation::menuRequested, this, &CameraCommands::menuRequested);
+    connect(m_viewport, &render::Viewport::resized, this, &CameraCommands::syncViewport);
 }
 
 void CameraCommands::home(Move move)
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         const auto homeAndFit = [this] {
             m_view->homeView();
             fitOldView();
@@ -70,7 +70,7 @@ void CameraCommands::home(Move move)
 
 void CameraCommands::standardView(camera::StandardView view)
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         m_view->animateCamera([this, view] {
             m_view->standardView(view);
             fitOldView();
@@ -85,7 +85,7 @@ void CameraCommands::standardView(camera::StandardView view)
 
 void CameraCommands::fit(Move move)
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         if (move == Move::Animate) {
             m_view->animateCamera([this] { fitOldView(); });
         } else {
@@ -98,7 +98,7 @@ void CameraCommands::fit(Move move)
 
 void CameraCommands::lookAt(const gp_Ax3& plane)
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         m_view->animateCamera([this, &plane] {
             m_view->lookAt(plane);
             fitOldView();
@@ -113,7 +113,7 @@ void CameraCommands::lookAt(const gp_Ax3& plane)
 
 void CameraCommands::saveView()
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         m_view->saveView();
         return;
     }
@@ -124,12 +124,12 @@ void CameraCommands::saveView()
 
 bool CameraCommands::hasSavedView() const
 {
-    return m_newView == nullptr ? m_view->hasSavedView() : m_savedView.has_value();
+    return m_viewport == nullptr ? m_view->hasSavedView() : m_savedView.has_value();
 }
 
 void CameraCommands::restoreSavedView()
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         m_view->restoreSavedView();
         return;
     }
@@ -153,7 +153,7 @@ void CameraCommands::dropSavedView()
 void CameraCommands::setPerspective(bool perspective)
 {
     const bool changed = isPerspective() != perspective;
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         m_view->setPerspective(perspective);
         if (changed && m_view->isReady()) {
             fitOldView();
@@ -170,7 +170,7 @@ void CameraCommands::setPerspective(bool perspective)
 
 bool CameraCommands::isPerspective() const
 {
-    return m_newView == nullptr ? m_view->isPerspective() : !m_camera.isOrthographic();
+    return m_viewport == nullptr ? m_view->isPerspective() : !m_camera.isOrthographic();
 }
 
 void CameraCommands::setNavigation(const camera::Navigation& navigation)
@@ -185,7 +185,7 @@ void CameraCommands::setNavigation(const camera::Navigation& navigation)
 
 bool CameraCommands::isAnimating() const
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         return m_view->isAnimating();
     }
     return m_animation->state() == QAbstractAnimation::Running;
@@ -193,16 +193,16 @@ bool CameraCommands::isAnimating() const
 
 std::optional<camera::Viewport> CameraCommands::viewport() const
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         return m_view->viewport();
     }
-    const camera::Viewport viewport = m_newView->viewport();
+    const camera::Viewport viewport = m_viewport->viewport();
     return viewport.isValid() ? std::optional(viewport) : std::nullopt;
 }
 
 void CameraCommands::syncViewport()
 {
-    if (m_newView != nullptr) {
+    if (m_viewport != nullptr) {
         show(m_camera);
     }
 }
@@ -210,7 +210,7 @@ void CameraCommands::syncViewport()
 void CameraCommands::navigate(const std::function<bool(camera::Camera&, const camera::Viewport&)>& step)
 {
     const std::optional<camera::Viewport> size = viewport();
-    if (m_newView == nullptr || !size) {
+    if (m_viewport == nullptr || !size) {
         return;
     }
     camera::Camera next = m_camera;
@@ -244,7 +244,7 @@ void CameraCommands::change(Move move, const std::function<void(camera::Camera&)
 
 void CameraCommands::fitTo(camera::Camera& camera)
 {
-    const std::optional<camera::Box> bounds = m_newView->fitBounds(kEmptySceneHalfSize);
+    const std::optional<camera::Box> bounds = m_viewport->fitBounds(kEmptySceneHalfSize);
     if (!bounds) {
         camera::fitAround(camera, kEmptySceneHalfSize);
     } else {
@@ -263,24 +263,24 @@ void CameraCommands::fitOldView()
 
 void CameraCommands::show(camera::Camera camera)
 {
-    const camera::Viewport size = m_newView->viewport();
+    const camera::Viewport size = m_viewport->viewport();
     if (size.isValid()) {
         camera.setAspect(size.aspect());
     }
     camera.fitDepth(sceneBounds());
     m_camera = camera;
     m_view->setSyncedCamera(m_camera, size);
-    m_newView->setCamera(m_camera);
+    m_viewport->setCamera(m_camera);
 }
 
 const std::optional<camera::Box>& CameraCommands::sceneBounds() const
 {
-    return m_newView->sceneBounds();
+    return m_viewport->sceneBounds();
 }
 
 bool CameraCommands::isReady() const
 {
-    return m_newView == nullptr ? m_view->isReady() : m_newView->isReady();
+    return m_viewport == nullptr ? m_view->isReady() : m_viewport->isReady();
 }
 
 } // namespace kalve137::app

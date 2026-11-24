@@ -16,7 +16,7 @@
 #include "core/projection.h"
 #include "core/recompute.h"
 #include "geometry/modeling.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "sketch/sketch.h"
 #include "viewer/occt_view_widget.h"
 
@@ -351,7 +351,7 @@ TEST_F(ProjectTest, OpensLinkedSketchesOnTheModelSolve)
 
 void lookDown(app::MainWindow& window)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     camera.setProjectionType(camera::Projection::Orthographic);
     EXPECT_TRUE(camera.setEyeAndCenter({0.0, 0.0, kReach}, {0.0, 0.0, 0.0}));
@@ -397,7 +397,7 @@ protected:
             return false;
         }
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -429,7 +429,7 @@ TEST_F(ProjectPairTest, ProjectedCurvesDrawInTheirColorAndLostOnesInTheConflictC
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Shots shots = grabPair(*m_old, *m_new, lookDown);
     savePair(shots, m_folder, "projected and lost");
     const double ratio = shots.viewport.pixelRatio;

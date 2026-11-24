@@ -41,7 +41,7 @@ class OcctViewWidget;
 }
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::app {
@@ -97,7 +97,7 @@ public:
         bool operator==(const Hit&) const = default;
     };
 
-    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::RhiView* newView,
+    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::Viewport* newView,
                  QObject* parent = nullptr);
     ~SketchEditor() override;
 
@@ -315,7 +315,7 @@ private:
     DesignSession& m_session;
     const Scene& m_scene;
     viewer::OcctViewWidget* m_view;
-    render::RhiView* m_newView;
+    render::Viewport* m_viewport;
     bool m_cameraInput = false;
     BandOverlay* m_band = nullptr;
     core::FeatureId m_sketchId = 0;

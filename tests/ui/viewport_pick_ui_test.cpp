@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "../render/test_meshes.h"
 #include "app/session/design_session.h"
@@ -9,9 +9,9 @@
 #include "app/theme/theme.h"
 #include "app/view/band_overlay.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_navigation.h"
-#include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
+#include "app/view/viewport_navigation.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "render/chunk_set.h"
 #include "render/cpu_backend.h"
@@ -20,7 +20,7 @@
 #include "render/graphics_api.h"
 #include "render/pick_id.h"
 #include "render/rhi/rhi_backend.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 #include "snapshot/sketch.h"
@@ -66,13 +66,13 @@ std::optional<render::PickedItem> itemOf(std::uint32_t id, const render::ChunkSe
     return found->second;
 }
 
-render::Frame frameOf(const render::RhiView& canvas)
+render::Frame frameOf(const render::Viewport& canvas)
 {
     return render::makeFrame(canvas.camera(), canvas.viewport(), canvas.scene().origin,
                              canvas.viewportStyle().background);
 }
 
-QPointF devicePixelOf(const render::RhiView& canvas, const snapshot::Point& point)
+QPointF devicePixelOf(const render::Viewport& canvas, const snapshot::Point& point)
 {
     const render::Frame frame = frameOf(canvas);
     const snapshot::Point& origin = canvas.scene().origin;
@@ -86,12 +86,12 @@ QPointF devicePixelOf(const render::RhiView& canvas, const snapshot::Point& poin
     return {(clip[0] / clip[3] + 1.0) * 0.5 * frame.width, (1.0 - clip[1] / clip[3]) * 0.5 * frame.height};
 }
 
-QPointF logicalPixelOf(const render::RhiView& canvas, const snapshot::Point& point)
+QPointF logicalPixelOf(const render::Viewport& canvas, const snapshot::Point& point)
 {
     return devicePixelOf(canvas, point) / canvas.viewport().pixelRatio;
 }
 
-void expectMarkersFollowTheCamera(render::RhiView& canvas, const std::string& api)
+void expectMarkersFollowTheCamera(render::Viewport& canvas, const std::string& api)
 {
     constexpr int kSearch = 14;
     constexpr double kMarkerSpacing = 6.0;
@@ -140,9 +140,9 @@ void expectMarkersFollowTheCamera(render::RhiView& canvas, const std::string& ap
     canvas.setMarkers({});
 }
 
-TEST_F(NewViewTest, DrawsMarkersOnTheirAnchorsAcrossCameraMovesOnEveryApi)
+TEST_F(ViewportTest, DrawsMarkersOnTheirAnchorsAcrossCameraMovesOnEveryApi)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -151,7 +151,7 @@ TEST_F(NewViewTest, DrawsMarkersOnTheirAnchorsAcrossCameraMovesOnEveryApi)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -166,7 +166,7 @@ QPointF toward(QPointF from, QPointF to, double distance)
     return from + (step / std::hypot(step.x(), step.y()) * distance);
 }
 
-void expectCpuIds(render::RhiView& canvas, const std::string& api)
+void expectCpuIds(render::Viewport& canvas, const std::string& api)
 {
     const render::IdStyle style{.points = true};
     const camera::Viewport port = canvas.viewport();
@@ -220,9 +220,9 @@ void expectCpuIds(render::RhiView& canvas, const std::string& api)
     EXPECT_EQ(seen.size(), 3U) << api << ": faces, edges and points all reach the id buffer";
 }
 
-TEST_F(NewViewTest, TheIdPassMatchesTheCpuIds)
+TEST_F(ViewportTest, TheIdPassMatchesTheCpuIds)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -242,7 +242,7 @@ TEST_F(NewViewTest, TheIdPassMatchesTheCpuIds)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -254,9 +254,9 @@ TEST_F(NewViewTest, TheIdPassMatchesTheCpuIds)
     }
 }
 
-TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
+TEST_F(ViewportTest, PicksOnDemandAndOnlyWhenStale)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -313,9 +313,9 @@ TEST_F(NewViewTest, PicksOnDemandAndOnlyWhenStale)
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
 
-TEST_F(NewViewTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
+TEST_F(ViewportTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -377,7 +377,7 @@ TEST_F(NewViewTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
     EXPECT_EQ(picked({8.0, -8.0, 0.0}, lines), line) << "picks right after an edit";
 }
 
-void expectDatumPicksFollowTheCamera(render::RhiView& canvas, const std::string& api)
+void expectDatumPicksFollowTheCamera(render::Viewport& canvas, const std::string& api)
 {
     constexpr double kIntoPlane = 25.0;
     const render::PickKinds kinds{.faces = false, .edges = false, .planes = true, .axes = true};
@@ -420,9 +420,9 @@ void expectDatumPicksFollowTheCamera(render::RhiView& canvas, const std::string&
     canvas.setDatums({});
 }
 
-TEST_F(NewViewTest, PicksPlanesAndAxesAfterTheCameraMovesOnEveryApi)
+TEST_F(ViewportTest, PicksPlanesAndAxesAfterTheCameraMovesOnEveryApi)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -431,7 +431,7 @@ TEST_F(NewViewTest, PicksPlanesAndAxesAfterTheCameraMovesOnEveryApi)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -440,9 +440,9 @@ TEST_F(NewViewTest, PicksPlanesAndAxesAfterTheCameraMovesOnEveryApi)
     }
 }
 
-TEST_F(NewViewTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
+TEST_F(ViewportTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -510,7 +510,7 @@ TEST_F(NewViewTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
     }
 }
 
-void click(render::RhiView& canvas, QPointF position, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+void click(render::Viewport& canvas, QPointF position, Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     QMouseEvent press(QEvent::MouseButtonPress, position, canvas.mapToGlobal(position), Qt::LeftButton, Qt::LeftButton,
                       modifiers);
@@ -521,13 +521,13 @@ void click(render::RhiView& canvas, QPointF position, Qt::KeyboardModifiers modi
     QApplication::processEvents();
 }
 
-TEST_F(NewViewTest, HoverAndClicksSelectThroughTheIdPass)
+TEST_F(ViewportTest, HoverAndClicksSelectThroughTheIdPass)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
-    auto* picker = ui->window().findChild<app::NewViewPicker*>();
+    auto* picker = ui->window().findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     ui->window().openDesignAt(std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples" / "dodecahedron.k137");
     ui->settle();
@@ -621,7 +621,7 @@ TEST_F(NewViewTest, HoverAndClicksSelectThroughTheIdPass)
     ui->settle();
 }
 
-void boxDrag(render::RhiView& canvas, QPointF from, QPointF to, Qt::KeyboardModifiers modifiers,
+void boxDrag(render::Viewport& canvas, QPointF from, QPointF to, Qt::KeyboardModifiers modifiers,
              const std::function<void()>& during = {})
 {
     const auto send = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons) {
@@ -640,7 +640,7 @@ void boxDrag(render::RhiView& canvas, QPointF from, QPointF to, Qt::KeyboardModi
     QApplication::processEvents();
 }
 
-std::vector<render::PickedItem> selectedItems(const render::RhiView& canvas)
+std::vector<render::PickedItem> selectedItems(const render::Viewport& canvas)
 {
     const std::set<render::PickedItem>& selected = canvas.chunks().highlight().selected;
     return {selected.begin(), selected.end()};
@@ -652,13 +652,13 @@ std::size_t countOf(const std::vector<render::PickedItem>& items, render::PickKi
         std::ranges::count_if(items, [kind](const render::PickedItem& item) { return item.kind == kind; }));
 }
 
-TEST_F(NewViewTest, BoxSelectsWithTheOldViewsRule)
+TEST_F(ViewportTest, BoxSelectsWithTheOldViewsRule)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
-    auto* picker = ui->window().findChild<app::NewViewPicker*>();
+    auto* picker = ui->window().findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     ui->window().openDesignAt(std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples" / "dodecahedron.k137");
     ui->settle();

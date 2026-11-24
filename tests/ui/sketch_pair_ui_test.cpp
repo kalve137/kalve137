@@ -5,16 +5,16 @@
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
 #include "app/theme/theme.h"
-#include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
 #include "app/view/pick_source.h"
 #include "app/view/scene.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
 #include "core/recompute.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/sketches.h"
 #include "scenario.h"
 #include "sketch/profiles.h"
@@ -125,7 +125,7 @@ Design sketchedBlock()
 
 void lookAcross(app::MainWindow& window)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     camera.setProjectionType(camera::Projection::Perspective);
     EXPECT_TRUE(camera.setEyeAndCenter({kCenter.x + 250.0, kCenter.y - 250.0, kCenter.z + 200.0}, kCenter));
@@ -253,7 +253,7 @@ protected:
             return false;
         }
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -309,7 +309,7 @@ TEST_F(SketchPairTest, IdleCurvesDrawOnTheFaceAndTheFloorLikeTheOldView)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Design design = sketchedBlock();
     const bool colors = drawsReferenceColors(*m_old->oldView());
     std::ofstream table(m_folder / "sketch-curves.tsv");
@@ -365,7 +365,7 @@ TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Design design = sketchedBlock();
     const bool colors = drawsReferenceColors(*m_old->oldView());
     load(design.document);
@@ -412,7 +412,7 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
     const Shots idle = grab();
@@ -426,7 +426,7 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
     std::ofstream(m_folder / "sketch-points.tsv")
         << "old\t" << old.width() << 'x' << old.height() << "\tnew\t" << fresh.width() << 'x' << fresh.height() << '\n';
     ASSERT_FALSE(old.isNull()) << "the point shows in the old view";
-    ASSERT_FALSE(fresh.isNull()) << "the point shows in the new view";
+    ASSERT_FALSE(fresh.isNull()) << "the point shows in the viewport";
     EXPECT_NEAR(fresh.width(), old.width(), kSizeTolerance * ratio);
     EXPECT_NEAR(fresh.height(), old.height(), kSizeTolerance * ratio);
     if (drawsReferenceColors(*m_old->oldView())) {
@@ -435,7 +435,7 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
         EXPECT_LE(gapOf(newColor, oldColor), kColorTolerance) << hex(newColor) << " against " << hex(oldColor);
     }
 
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     const QPointF corner = screenOf(shots.camera, shots.viewport, kFloorCorner);
     picker->hoverAt(corner);
@@ -453,7 +453,7 @@ TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     core::Document document = blockDocument();
     core::SketchFeature drawn;
     sketch::Sketch& s = drawn.sketch;
@@ -471,7 +471,7 @@ TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
     const gp_Pnt solvedAt = sketch::toWorld(state.plane, solved->pos);
     ASSERT_GT(solvedAt.Distance(gp_Pnt(kDrivenFrom.x, kDrivenFrom.y, kDrivenFrom.z)), 1.0) << "the solver moves it";
     const Shots shots = grab();
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     for (const auto& [name, at] : {std::pair{"solved", camera::Vec3{solvedAt.X(), solvedAt.Y(), solvedAt.Z()}},
                                    std::pair{"drawn", kDrivenFrom}}) {
@@ -491,10 +491,10 @@ TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     const std::string floorLine = std::format("line {} {}", design.floor, design.floorFree);
     const std::string topLine = std::format("line {} {}", design.top, design.topFree);
@@ -545,12 +545,12 @@ TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     Design design = sketchedBlock();
     design.document.add(
         core::AxisFeature{core::AxisSource::TwoPoints, gp_Ax1(gp_Pnt(kFloorProfile.x, 0.0, 0.0), gp::DX()), "Points"});
     load(design.document);
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     std::ofstream record(m_folder / "sketch-pick-record.tsv");
     record << "mode\tx\ty\told\tnew\tnearby\n";
@@ -582,7 +582,7 @@ TEST_F(SketchPairTest, PicksFollowTheOldViewAcrossAGridOfPixels)
         setMode(mode);
         const Shots shots = grab();
         savePair(shots, m_folder, std::format("sketch picking {}", name));
-        const QSize size = m_new->newView()->size();
+        const QSize size = m_new->viewport()->size();
         std::vector<QPointF> probes;
         for (int y = kPickStep / 2; y < size.height(); y += kPickStep) {
             for (int x = kPickStep / 2; x < size.width(); x += kPickStep) {
@@ -648,14 +648,14 @@ TEST_F(SketchPairTest, SketchesKeepDrawingAcrossCameraMovesHereAndOnOpenGl)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const Design design = sketchedBlock();
     load(design.document);
     setMode(app::PickMode::Profiles);
-    render::RhiView& canvas = *m_new->newView();
+    render::Viewport& canvas = *m_new->viewport();
     const std::vector<snapshot::Sketch> sketches = canvas.sketches();
     const camera::Camera start = canvas.camera();
-    const auto check = [&](render::RhiView& view, const std::string& name) {
+    const auto check = [&](render::Viewport& view, const std::string& name) {
         for (int move = 0; move < kCameraMoves; ++move) {
             camera::Camera camera = start;
             const double angle = 0.6 * move;
@@ -685,7 +685,7 @@ TEST_F(SketchPairTest, SketchesKeepDrawingAcrossCameraMovesHereAndOnOpenGl)
     if (!render::canStart(render::GraphicsApi::OpenGL)) {
         return;
     }
-    render::RhiView view(render::GraphicsApi::OpenGL);
+    render::Viewport view(render::GraphicsApi::OpenGL);
     view.setAttribute(Qt::WA_DontShowOnScreen);
     view.resize(canvas.size());
     view.show();

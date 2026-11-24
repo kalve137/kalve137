@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
@@ -9,7 +9,7 @@
 #include "render/chunk_set.h"
 #include "render/cpu_backend.h"
 #include "render/draw_list.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QApplication>
@@ -56,8 +56,8 @@ void expectFollowed(UiDriver& ui, const std::string& step)
     EXPECT_EQ(hidden.isOrthographic(), leading.isOrthographic()) << step;
     expectSameMatrix(hidden.view(), leading.view(), step + " hidden view");
     expectSameMatrix(hidden.projection(), leading.projection(), step + " hidden projection");
-    expectSameMatrix(ui.newView()->camera().view(), leading.view(), step + " new view");
-    expectSameMatrix(ui.newView()->camera().projection(), leading.projection(), step + " new projection");
+    expectSameMatrix(ui.viewport()->camera().view(), leading.view(), step + " viewport");
+    expectSameMatrix(ui.viewport()->camera().projection(), leading.projection(), step + " new projection");
 }
 
 void expectDirection(const camera::Camera& camera, const camera::Vec3& direction, const std::string& step)
@@ -65,7 +65,7 @@ void expectDirection(const camera::Camera& camera, const camera::Vec3& direction
     EXPECT_LT(camera::distance(camera.direction(), camera::normalized(direction)), kDirectionTolerance) << step;
 }
 
-void sendMouse(render::RhiView& canvas, QEvent::Type type, QPointF pos, Qt::MouseButton button,
+void sendMouse(render::Viewport& canvas, QEvent::Type type, QPointF pos, Qt::MouseButton button,
                Qt::MouseButtons buttons)
 {
     QMouseEvent event(type, pos, canvas.mapToGlobal(pos), button, buttons, Qt::NoModifier);
@@ -78,7 +78,7 @@ bool sameColor(const QColor& a, const QColor& b)
            std::abs(a.blue() - b.blue()) <= kColorTolerance;
 }
 
-render::Image cpuOf(const render::RhiView& canvas)
+render::Image cpuOf(const render::Viewport& canvas)
 {
     render::ChunkSet chunks;
     chunks.update(canvas.scene(), canvas.viewportStyle());
@@ -114,12 +114,12 @@ Comparison compare(const QImage& gpu, const render::Image& cpu)
     return result;
 }
 
-QImage grabbed(render::RhiView& canvas)
+QImage grabbed(render::Viewport& canvas)
 {
     return canvas.grabFramebuffer().convertToFormat(QImage::Format_ARGB32);
 }
 
-void expectShown(render::RhiView& canvas, const QImage& before, const std::string& step)
+void expectShown(render::Viewport& canvas, const QImage& before, const std::string& step)
 {
     const QImage gpu = grabbed(canvas);
     ASSERT_FALSE(gpu.isNull()) << step;

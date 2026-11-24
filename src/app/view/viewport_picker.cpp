@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "app/view/new_view_picker.h"
+#include "app/view/viewport_picker.h"
 
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
@@ -13,7 +13,7 @@
 #include "log/log.h"
 #include "pick/scene_rays.h"
 #include "render/box_select.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "snapshot/body.h"
 #include "viewer/box_band.h"
 
@@ -61,20 +61,20 @@ const typename Map::mapped_type* findIn(const Map& shown, const Map& saved, core
 
 } // namespace
 
-NewViewPicker::NewViewPicker(render::RhiView& view, const DesignSession& session, Scene& scene, pick::SceneRays& rays,
-                             QObject* parent)
+ViewportPicker::ViewportPicker(render::Viewport& view, const DesignSession& session, Scene& scene,
+                               pick::SceneRays& rays, QObject* parent)
     : PickSource(parent), m_view(&view), m_session(&session), m_scene(&scene), m_rays(&rays),
       m_band(new BandOverlay(&view))
 {
-    connect(m_view, &render::RhiView::mousePressed, this, &NewViewPicker::press);
-    connect(m_view, &render::RhiView::mouseReleased, this,
+    connect(m_view, &render::Viewport::mousePressed, this, &ViewportPicker::press);
+    connect(m_view, &render::Viewport::mouseReleased, this,
             [this](QPointF position, Qt::MouseButton button, Qt::MouseButtons, Qt::KeyboardModifiers modifiers) {
                 release(position, button, modifiers);
             });
-    connect(m_view, &render::RhiView::mouseMoved, this,
+    connect(m_view, &render::Viewport::mouseMoved, this,
             [this](QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { move(position, buttons); });
-    connect(m_view, &render::RhiView::mouseLeft, this, [this] { setHovered(std::nullopt); });
-    connect(m_view, &render::RhiView::sceneChanged, this, &NewViewPicker::dropStale);
+    connect(m_view, &render::Viewport::mouseLeft, this, [this] { setHovered(std::nullopt); });
+    connect(m_view, &render::Viewport::sceneChanged, this, &ViewportPicker::dropStale);
     connect(m_scene, &Scene::pickModeChanged, this, [this] {
         m_selected.clear();
         m_hovered.reset();
@@ -85,13 +85,13 @@ NewViewPicker::NewViewPicker(render::RhiView& view, const DesignSession& session
     });
 }
 
-bool NewViewPicker::canBox() const
+bool ViewportPicker::canBox() const
 {
     const PickMode mode = m_scene->pickMode();
     return mode == PickMode::None || mode == PickMode::Edges || mode == PickMode::Faces;
 }
 
-std::shared_ptr<const snapshot::Mesh> NewViewPicker::meshOf(const render::PickedItem& item) const
+std::shared_ptr<const snapshot::Mesh> ViewportPicker::meshOf(const render::PickedItem& item) const
 {
     for (const auto& body : m_view->scene().bodies) {
         if (body->feature == item.feature && body->part == item.part) {
@@ -101,7 +101,7 @@ std::shared_ptr<const snapshot::Mesh> NewViewPicker::meshOf(const render::Picked
     return nullptr;
 }
 
-std::vector<render::PickedItem> NewViewPicker::boxItems(QPointF from, QPointF to) const
+std::vector<render::PickedItem> ViewportPicker::boxItems(QPointF from, QPointF to) const
 {
     const camera::ScreenPoint start{from.x(), from.y()};
     const camera::ScreenPoint end{to.x(), to.y()};
@@ -165,7 +165,7 @@ std::vector<render::PickedItem> NewViewPicker::boxItems(QPointF from, QPointF to
     return items;
 }
 
-std::optional<std::vector<render::PickedItem>> NewViewPicker::boxIdItems(QPointF from, QPointF to) const
+std::optional<std::vector<render::PickedItem>> ViewportPicker::boxIdItems(QPointF from, QPointF to) const
 {
     const double ratio = m_view->devicePixelRatioF();
     const QRectF band = QRectF(from * ratio, to * ratio).normalized();
@@ -176,7 +176,7 @@ std::optional<std::vector<render::PickedItem>> NewViewPicker::boxIdItems(QPointF
                            {.points = wanted.points});
 }
 
-void NewViewPicker::boxSelect(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers)
+void ViewportPicker::boxSelect(QPointF from, QPointF to, Qt::KeyboardModifiers modifiers)
 {
     const bool additive = (modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) != 0;
     if (!additive) {
@@ -197,7 +197,7 @@ void NewViewPicker::boxSelect(QPointF from, QPointF to, Qt::KeyboardModifiers mo
     announce(&PickSource::selectionChanged);
 }
 
-render::PickKinds NewViewPicker::kinds() const
+render::PickKinds ViewportPicker::kinds() const
 {
     const PickMode mode = m_scene->pickMode();
     const std::vector<TopAbs_ShapeEnum> types = bodySelection(mode, m_scene->editingSketch() != 0);
@@ -213,7 +213,7 @@ render::PickKinds NewViewPicker::kinds() const
                 mode == PickMode::Profiles || mode == PickMode::ProfilesAndLines || mode == PickMode::PressPull};
 }
 
-std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) const
+std::optional<ViewportPicker::Found> ViewportPicker::pickAt(QPointF position) const
 {
     const render::PickKinds wanted = kinds();
     if (!wanted.any()) {
@@ -248,14 +248,14 @@ std::optional<NewViewPicker::Found> NewViewPicker::pickAt(QPointF position) cons
     return found;
 }
 
-const core::Body* NewViewPicker::bodyOf(const render::PickedItem& item) const
+const core::Body* ViewportPicker::bodyOf(const render::PickedItem& item) const
 {
     const core::BodyKey key{static_cast<core::FeatureId>(item.feature), item.part};
     const core::Body* body = m_shown.body(key);
     return body != nullptr ? body : m_session->model().body(key);
 }
 
-const NewViewPicker::Items& NewViewPicker::itemsOf(const core::Body& body) const
+const ViewportPicker::Items& ViewportPicker::itemsOf(const core::Body& body) const
 {
     Items& items = m_items[body.key()];
     if (!items.shape.IsEqual(body.shape)) {
@@ -268,7 +268,7 @@ const NewViewPicker::Items& NewViewPicker::itemsOf(const core::Body& body) const
     return items;
 }
 
-void NewViewPicker::addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const
+void ViewportPicker::addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const
 {
     const core::Body* body = bodyOf(face);
     if (face.kind != render::PickKind::Face || body == nullptr || body->shape.IsNull()) {
@@ -292,7 +292,7 @@ void NewViewPicker::addOutline(const render::PickedItem& face, std::set<render::
     }
 }
 
-std::optional<Pick> NewViewPicker::datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const
+std::optional<Pick> ViewportPicker::datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const
 {
     Pick pick;
     pick.point = point;
@@ -345,7 +345,7 @@ std::optional<Pick> NewViewPicker::datumPick(const render::DatumKey& key, const 
     return std::nullopt;
 }
 
-Pick NewViewPicker::sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point)
+Pick ViewportPicker::sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point)
 {
     Pick pick;
     switch (key.item) {
@@ -365,7 +365,7 @@ Pick NewViewPicker::sketchPick(const render::SketchKey& key, const std::optional
     return pick;
 }
 
-std::optional<Pick> NewViewPicker::pickOf(const Found& found) const
+std::optional<Pick> ViewportPicker::pickOf(const Found& found) const
 {
     if (found.datum) {
         return datumPick(*found.datum, found.point);
@@ -407,12 +407,12 @@ std::optional<Pick> NewViewPicker::pickOf(const Found& found) const
     return pick;
 }
 
-std::optional<Pick> NewViewPicker::hovered() const
+std::optional<Pick> ViewportPicker::hovered() const
 {
     return m_hovered ? pickOf(*m_hovered) : std::nullopt;
 }
 
-std::vector<Pick> NewViewPicker::selected() const
+std::vector<Pick> ViewportPicker::selected() const
 {
     std::vector<Pick> picks;
     picks.reserve(m_selected.size());
@@ -424,7 +424,7 @@ std::vector<Pick> NewViewPicker::selected() const
     return picks;
 }
 
-std::vector<Pick> NewViewPicker::takePicks()
+std::vector<Pick> ViewportPicker::takePicks()
 {
     std::vector<Pick> picks = selected();
     m_selected.clear();
@@ -432,7 +432,7 @@ std::vector<Pick> NewViewPicker::takePicks()
     return picks;
 }
 
-bool NewViewPicker::selectHovered()
+bool ViewportPicker::selectHovered()
 {
     if (!m_hovered || !pickOf(*m_hovered)) {
         return false;
@@ -442,18 +442,18 @@ bool NewViewPicker::selectHovered()
     return true;
 }
 
-void NewViewPicker::clearSelection()
+void ViewportPicker::clearSelection()
 {
     m_selected.clear();
     showHighlight();
 }
 
-void NewViewPicker::hoverAt(QPointF position)
+void ViewportPicker::hoverAt(QPointF position)
 {
     setHovered(pickAt(position));
 }
 
-void NewViewPicker::clickAt(QPointF position, Qt::KeyboardModifiers modifiers)
+void ViewportPicker::clickAt(QPointF position, Qt::KeyboardModifiers modifiers)
 {
     std::optional<Found> found = pickAt(position);
     if (modifiers.testFlag(Qt::ShiftModifier)) {
@@ -475,8 +475,8 @@ void NewViewPicker::clickAt(QPointF position, Qt::KeyboardModifiers modifiers)
     announce(&PickSource::selectionChanged);
 }
 
-void NewViewPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
-                          Qt::KeyboardModifiers modifiers)
+void ViewportPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
+                           Qt::KeyboardModifiers modifiers)
 {
     m_boxing = false;
     m_band->hideBand();
@@ -495,7 +495,7 @@ void NewViewPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseBut
     }
 }
 
-void NewViewPicker::release(QPointF position, Qt::MouseButton button, Qt::KeyboardModifiers modifiers)
+void ViewportPicker::release(QPointF position, Qt::MouseButton button, Qt::KeyboardModifiers modifiers)
 {
     const std::optional<QPointF> pressed = std::exchange(m_pressed, std::nullopt);
     if (button != Qt::LeftButton || !pressed) {
@@ -512,7 +512,7 @@ void NewViewPicker::release(QPointF position, Qt::MouseButton button, Qt::Keyboa
     }
 }
 
-void NewViewPicker::move(QPointF position, Qt::MouseButtons buttons)
+void ViewportPicker::move(QPointF position, Qt::MouseButtons buttons)
 {
     if (buttons == Qt::NoButton) {
         hoverAt(position);
@@ -532,7 +532,7 @@ void NewViewPicker::move(QPointF position, Qt::MouseButtons buttons)
     m_band->showBand(*m_pressed, position);
 }
 
-void NewViewPicker::setHovered(std::optional<Found> found)
+void ViewportPicker::setHovered(std::optional<Found> found)
 {
     const bool same = found.has_value() == m_hovered.has_value() && (!found || found->same(*m_hovered));
     m_hovered = std::move(found);
@@ -543,7 +543,7 @@ void NewViewPicker::setHovered(std::optional<Found> found)
     announce(&PickSource::hoverChanged);
 }
 
-void NewViewPicker::dropStale()
+void ViewportPicker::dropStale()
 {
     const auto stale = [this](const Found& found) {
         if (found.datum) {
@@ -571,7 +571,7 @@ void NewViewPicker::dropStale()
     }
 }
 
-void NewViewPicker::showModel(core::Model model)
+void ViewportPicker::showModel(core::Model model)
 {
     m_shown = std::move(model);
     if (!m_highlightedBodies.empty()) {
@@ -579,7 +579,7 @@ void NewViewPicker::showModel(core::Model model)
     }
 }
 
-void NewViewPicker::setHighlightedBodies(std::vector<core::BodyKey> keys)
+void ViewportPicker::setHighlightedBodies(std::vector<core::BodyKey> keys)
 {
     if (keys == m_highlightedBodies) {
         return;
@@ -588,7 +588,7 @@ void NewViewPicker::setHighlightedBodies(std::vector<core::BodyKey> keys)
     showHover();
 }
 
-void NewViewPicker::showHighlight()
+void ViewportPicker::showHighlight()
 {
     render::Highlight highlight;
     addHover(highlight);
@@ -603,7 +603,7 @@ void NewViewPicker::showHighlight()
     showMarks();
 }
 
-void NewViewPicker::showHover()
+void ViewportPicker::showHover()
 {
     render::Highlight highlight;
     addHover(highlight);
@@ -611,7 +611,7 @@ void NewViewPicker::showHover()
     showMarks();
 }
 
-void NewViewPicker::showMarks()
+void ViewportPicker::showMarks()
 {
     render::DatumMarks datums;
     render::SketchMarks sketches;
@@ -631,7 +631,7 @@ void NewViewPicker::showMarks()
     m_view->setSketchMarks(std::move(sketches));
 }
 
-void NewViewPicker::addHover(render::Highlight& highlight) const
+void ViewportPicker::addHover(render::Highlight& highlight) const
 {
     if (m_hovered && !m_hovered->overlay()) {
         highlight.hovered.insert(m_hovered->item);
@@ -656,7 +656,7 @@ void NewViewPicker::addHover(render::Highlight& highlight) const
     }
 }
 
-void NewViewPicker::announce(void (PickSource::*signal)())
+void ViewportPicker::announce(void (PickSource::*signal)())
 {
     QMetaObject::invokeMethod(this, signal, Qt::QueuedConnection);
 }

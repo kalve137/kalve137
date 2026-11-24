@@ -11,7 +11,7 @@
 #include "core/feature.h"
 #include "pair_shots.h"
 #include "render/draw_list.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "scenario.h"
 #include "ui_driver.h"
@@ -360,7 +360,7 @@ double bodyShare(const Shots& shots)
 
 void belowCamera(app::MainWindow& window)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     const camera::Vec3 center{0.0, 0.0, kBlockHeight / 2.0};
     EXPECT_TRUE(camera.setEyeAndCenter({center.x + 150.0, center.y + 300.0, center.z - 250.0}, center));
@@ -395,7 +395,7 @@ protected:
         }
     }
 
-    std::array<QWidget*, 2> views() { return {m_old->oldView(), m_new->newView()}; }
+    std::array<QWidget*, 2> views() { return {m_old->oldView(), m_new->viewport()}; }
 
     void pick(const Shots& plain, const camera::Vec3& point, bool click)
     {
@@ -433,14 +433,14 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
     m_rules << "rule\texpected\tnew\tgap\n";
 
     m_new = showPairWindow(app::ViewKind::New);
-    ASSERT_TRUE(m_new->newView() != nullptr && m_new->newView()->isReady()) << kNewViewDidNotStart;
+    ASSERT_TRUE(m_new->viewport() != nullptr && m_new->viewport()->isReady()) << kViewportDidNotStart;
     m_old = showPairWindow(app::ViewKind::Old);
     ASSERT_TRUE(m_old->oldView()->isReady());
     for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
         showOnlyBodies(*window, QStringLiteral("Shaded with Edges"));
     }
     reset(blockDocument());
-    render::RhiView& canvas = *m_new->newView();
+    render::Viewport& canvas = *m_new->viewport();
     const auto still = [](app::MainWindow&) {};
 
     for (const auto& [scheme, theme] :
@@ -472,7 +472,7 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
             const std::string lineName = state.kind == Kind::Face ? state.name + " outline" : state.name;
             record(lineName, line);
             EXPECT_GE(line.oldLift, kMinLift) << stem << ", " << lineName << ": the old view shows it";
-            EXPECT_GE(line.shown, kMinShownShare) << stem << ", " << lineName << ": the new view shows it";
+            EXPECT_GE(line.shown, kMinShownShare) << stem << ", " << lineName << ": the viewport shows it";
             rule(stem + (state.kind == Kind::Face ? " outline" : ""), newTarget, line.fresh, kColorTolerance);
             if (state.kind == Kind::Edge && state.selected) {
                 const double oldWidth = goldWidth(lit.old, plain.old, from * ratio, to * ratio, oldTarget);
@@ -533,7 +533,7 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
         }
         EXPECT_EQ(sawLight, light) << name << ": a light face sits on at least one side";
         act(*m_old->oldView(), kEmpty, true);
-        act(*m_new->newView(), kEmpty, true);
+        act(*m_new->viewport(), kEmpty, true);
     }
 
     reset(blockDocument());

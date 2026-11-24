@@ -38,7 +38,7 @@ struct Shots {
     QColor background;
 };
 
-inline constexpr const char* kNewViewDidNotStart = "The new view did not start on a device that can run it";
+inline constexpr const char* kViewportDidNotStart = "The viewport did not start on a device that can run it";
 
 std::filesystem::path pairFolder(const std::string& suite);
 std::optional<std::string> newViewMissing();

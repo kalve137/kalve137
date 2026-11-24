@@ -114,13 +114,13 @@ add_executable(kalve137_uitests
     ui/line_ui_test.cpp
     ui/marker_pair_ui_test.cpp
     ui/menu_ui_test.cpp
-    ui/new_view_api_ui_test.cpp
-    ui/new_view_camera_ui_test.cpp
-    ui/new_view_draw_ui_test.cpp
-    ui/new_view_pick_ui_test.cpp
-    ui/new_view_scene_ui_test.cpp
-    ui/new_view_ui_support.cpp
-    ui/new_view_ui_support.h
+    ui/viewport_api_ui_test.cpp
+    ui/viewport_camera_ui_test.cpp
+    ui/viewport_draw_ui_test.cpp
+    ui/viewport_pick_ui_test.cpp
+    ui/viewport_scene_ui_test.cpp
+    ui/viewport_ui_support.cpp
+    ui/viewport_ui_support.h
     ui/pair_shots.cpp
     ui/pair_shots.h
     ui/parameters_ui_test.cpp
@@ -176,14 +176,14 @@ foreach(scale 125 150 175)
         RUN_SERIAL TRUE
     )
 endforeach()
-add_test(NAME NewView.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:NewViewTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*:GridPairTest.*:MarkerPairTest.*)
-set_tests_properties(NewView.Harness PROPERTIES
+add_test(NAME Viewport.Harness
+    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:ViewportTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*:GridPairTest.*:MarkerPairTest.*)
+set_tests_properties(Viewport.Harness PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
 )
-set(new_view_sketch
+set(viewport_sketch
     ConstraintTest.*
     DimensionTest.*
     LineTest.*
@@ -197,14 +197,14 @@ set(new_view_sketch
     ValueNamesTest.*
     WorkflowTest.*
 )
-list(JOIN new_view_sketch ":" new_view_sketch_filter)
-add_test(NAME NewView.Sketch COMMAND kalve137_uitests --gtest_filter=${new_view_sketch_filter})
-set_tests_properties(NewView.Sketch PROPERTIES
+list(JOIN viewport_sketch ":" viewport_sketch_filter)
+add_test(NAME Viewport.Sketch COMMAND kalve137_uitests --gtest_filter=${viewport_sketch_filter})
+set_tests_properties(Viewport.Sketch PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
 )
-set(new_view_pairs
+set(viewport_pairs
     FeatureTest.DrillsAHoleInTheTopFace
     FeatureTest.FilletsAnEdge
     FeatureTest.IdleClickSelectsAFaceAndEscapeClears
@@ -231,9 +231,9 @@ set(new_view_pairs
     BadgePairTest.*
     ProjectPairTest.*
 )
-list(JOIN new_view_pairs ":" new_view_filter)
-add_test(NAME NewView.Pairs COMMAND kalve137_uitests --gtest_filter=${new_view_filter})
-set_tests_properties(NewView.Pairs PROPERTIES
+list(JOIN viewport_pairs ":" viewport_filter)
+add_test(NAME Viewport.Pairs COMMAND kalve137_uitests --gtest_filter=${viewport_filter})
+set_tests_properties(Viewport.Pairs PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE

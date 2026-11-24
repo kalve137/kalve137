@@ -70,7 +70,7 @@ void extrude(UiDriver& ui, const QString& distance)
 
 void block(UiDriver& ui)
 {
-    if (ui.newView() != nullptr) {
+    if (ui.viewport() != nullptr) {
         ui.session().reset(blockDocument(), {});
         homeView(ui);
         return;
@@ -84,7 +84,7 @@ void block(UiDriver& ui)
 
 void homeView(UiDriver& ui)
 {
-    if (ui.newView() != nullptr) {
+    if (ui.viewport() != nullptr) {
         ui.trigger("Home");
         ui.trigger("Fit All");
         return;

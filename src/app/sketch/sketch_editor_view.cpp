@@ -8,7 +8,7 @@
 #include "app/sketch/sketch_view_items.h"
 #include "app/theme/theme.h"
 
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "sketch/dimension.h"
 #include "sketch/dimension_layout.h"
@@ -90,7 +90,7 @@ void SketchEditor::redrawHover()
 {
     const sketch::Sketch& shown = m_dragPreview ? *m_dragPreview : current();
     const DrawCache* cache = shownCache(shown);
-    if (m_newView == nullptr || m_pending || cache == nullptr) {
+    if (m_viewport == nullptr || m_pending || cache == nullptr) {
         redraw();
         return;
     }
@@ -102,7 +102,7 @@ void SketchEditor::relayoutView()
 {
     const sketch::Sketch& shown = m_dragPreview ? *m_dragPreview : current();
     const DrawCache* cache = shownCache(shown);
-    if (m_newView == nullptr || m_pending || cache == nullptr) {
+    if (m_viewport == nullptr || m_pending || cache == nullptr) {
         redraw();
         return;
     }
@@ -296,14 +296,14 @@ void SketchEditor::publish()
         active.strokes.insert(active.strokes.end(), strokes->begin(), strokes->end());
     }
     active.arrows = m_viewConstraints.arrows;
-    m_newView->setActiveSketch(std::move(active));
-    m_newView->setMarkers(m_viewItems.markers);
-    m_newView->setAnnotations(m_viewConstraints.annotations);
+    m_viewport->setActiveSketch(std::move(active));
+    m_viewport->setMarkers(m_viewItems.markers);
+    m_viewport->setAnnotations(m_viewConstraints.annotations);
 }
 
 void SketchEditor::publishPreview()
 {
-    m_newView->setSketchPreview({.strokes = m_viewPreview, .markers = m_viewPreviewMarkers});
+    m_viewport->setSketchPreview({.strokes = m_viewPreview, .markers = m_viewPreviewMarkers});
 }
 
 void SketchEditor::onCameraChanged()

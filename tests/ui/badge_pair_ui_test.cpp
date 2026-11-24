@@ -12,7 +12,7 @@
 #include "core/document.h"
 #include "pair_shots.h"
 #include "render/annotations.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "ui_driver.h"
 #include "viewer/occt_view_widget.h"
 
@@ -200,7 +200,7 @@ QColor labelColor(Look look)
 
 void lookDown(app::MainWindow& window)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     camera.setProjectionType(camera::Projection::Orthographic);
     EXPECT_TRUE(camera.setEyeAndCenter({0.0, 0.0, kReach}, {0.0, 0.0, 0.0}));
@@ -359,7 +359,7 @@ protected:
             return false;
         }
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -381,7 +381,7 @@ protected:
 
     camera::Vec3 worldAt(double x, double y) const
     {
-        const render::RhiView& canvas = *m_new->newView();
+        const render::Viewport& canvas = *m_new->viewport();
         const QPointF zero = screenOf(canvas.camera(), canvas.viewport(), {0.0, 0.0, 0.0});
         const QPointF unit = screenOf(canvas.camera(), canvas.viewport(), {1.0, 0.0, 0.0});
         const double perUnit = unit.x() - zero.x();
@@ -435,7 +435,7 @@ protected:
                                             .border = colorOf(borderOf(labels[i].look))});
         }
         context->UpdateCurrentViewer();
-        m_new->newView()->setAnnotations(m_annotations);
+        m_new->viewport()->setAnnotations(m_annotations);
     }
 
     void show(const Handle(AIS_InteractiveContext)& context, const Handle(AIS_InteractiveObject)& object)
@@ -452,7 +452,7 @@ protected:
         }
         m_shownOld.clear();
         m_old->oldView()->aisContext()->UpdateCurrentViewer();
-        m_new->newView()->setAnnotations({});
+        m_new->viewport()->setAnnotations({});
     }
 
     std::unique_ptr<app::MainWindow> m_old;
@@ -470,7 +470,7 @@ TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     place();
     const Shots shots = grabPair(*m_old, *m_new, [](app::MainWindow& window) { lookDown(window); });
     savePair(shots, m_folder, "badges");
@@ -496,7 +496,7 @@ TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
               << 'x' << fresh.ink.height() << '\t' << hex(old.fill) << '\t' << hex(fresh.fill) << '\t' << hex(old.mark)
               << '\t' << hex(fresh.mark) << '\t' << hex(old.border) << '\t' << hex(fresh.border) << '\n';
         ASSERT_FALSE(shown.box.isNull()) << name << " shows in the old view";
-        ASSERT_FALSE(fresh.box.isNull()) << name << " shows in the new view";
+        ASSERT_FALSE(fresh.box.isNull()) << name << " shows in the viewport";
         EXPECT_NEAR(fresh.box.width(), old.box.width(), kSizeTolerance * ratio) << name << " width";
         EXPECT_NEAR(fresh.box.height(), old.box.height(), kSizeTolerance * ratio) << name << " height";
         EXPECT_NEAR(QRectF(fresh.box).center().x(), QRectF(shown.box).center().x(), kSizeTolerance * ratio)
@@ -526,11 +526,11 @@ TEST_F(BadgePairTest, BadgesAndLabelsFollowTheCameraHereAndOnOpenGl)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     place();
-    render::RhiView& canvas = *m_new->newView();
+    render::Viewport& canvas = *m_new->viewport();
     const camera::Camera start = canvas.camera();
-    const auto check = [&](render::RhiView& view, const std::string& name) {
+    const auto check = [&](render::Viewport& view, const std::string& name) {
         for (int move = 0; move < kCameraMoves; ++move) {
             camera::Camera camera = start;
             const double angle = 0.5 * move;
@@ -560,7 +560,7 @@ TEST_F(BadgePairTest, BadgesAndLabelsFollowTheCameraHereAndOnOpenGl)
         return;
     }
     {
-        render::RhiView view(render::GraphicsApi::OpenGL);
+        render::Viewport view(render::GraphicsApi::OpenGL);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas.size());
         view.show();
