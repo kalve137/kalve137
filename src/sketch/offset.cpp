@@ -20,30 +20,9 @@ namespace {
 constexpr double kTiny = 1e-9;
 constexpr double kTangentCross = 1e-6;
 
-double dot(Vec2 a, Vec2 b)
+Vec2 unitOrZero(Vec2 a)
 {
-    return a.x * b.x + a.y * b.y;
-}
-
-double cross(Vec2 a, Vec2 b)
-{
-    return a.x * b.y - a.y * b.x;
-}
-
-double norm(Vec2 a)
-{
-    return std::hypot(a.x, a.y);
-}
-
-Vec2 unit(Vec2 a)
-{
-    const double n = norm(a);
-    return n > kTiny ? a * (1.0 / n) : Vec2{};
-}
-
-Vec2 leftOf(Vec2 a)
-{
-    return {-a.y, a.x};
+    return length(a) > kTiny ? unit(a) : Vec2{};
 }
 
 class Joints {
@@ -133,7 +112,7 @@ std::optional<Piece> pieceOf(const Sketch& sketch, Id id, bool reversed, double 
     case CurveKind::Line: {
         piece.sourceStart = at(reversed ? 1 : 0);
         piece.sourceEnd = at(reversed ? 0 : 1);
-        const Vec2 shift = leftOf(unit(piece.sourceEnd - piece.sourceStart)) * amount;
+        const Vec2 shift = leftOf(unitOrZero(piece.sourceEnd - piece.sourceStart)) * amount;
         piece.start = piece.sourceStart + shift;
         piece.end = piece.sourceEnd + shift;
         return piece;
@@ -163,7 +142,7 @@ std::optional<Piece> pieceOf(const Sketch& sketch, Id id, bool reversed, double 
 
 std::vector<Vec2> lineCircle(Vec2 p, Vec2 dir, Vec2 center, double radius, double tolerance)
 {
-    const Vec2 u = unit(dir);
+    const Vec2 u = unitOrZero(dir);
     const Vec2 w = p - center;
     const double b = dot(w, u);
     double disc = b * b - (dot(w, w) - radius * radius);
@@ -201,7 +180,7 @@ std::optional<Vec2> meet(const Piece& a, const Piece& b, double scale)
         const Vec2 r = a.end - a.start;
         const Vec2 s = b.end - b.start;
         const double denominator = cross(r, s);
-        if (std::abs(denominator) > kTiny * norm(r) * norm(s)) {
+        if (std::abs(denominator) > kTiny * length(r) * length(s)) {
             candidates.push_back(a.start + r * (cross(b.start - a.start, s) / denominator));
         }
     } else if (a.kind == CurveKind::Line) {

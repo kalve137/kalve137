@@ -91,6 +91,12 @@ core::FeatureId addSketchAbove(core::Document& doc)
     return doc.add(std::move(data));
 }
 
+void openSketch(UiDriver& ui, core::FeatureId sketch)
+{
+    ui.window().beginSketch(sketch);
+    ui.settle();
+}
+
 Design blockThenSketchThenBody()
 {
     Design design{blockDocument(), 0, 0};
@@ -174,7 +180,7 @@ TEST_F(ProjectTest, IgnoresLaterBodiesAndRefusesSlantedFacesWithAReason)
     Design design = blockThenSketchThenBody();
     ui->session().reset(std::move(design.doc), {});
     homeView(*ui);
-    ui->window().beginSketch(design.sketch);
+    openSketch(*ui, design.sketch);
     ui->trigger("Project");
     homeView(*ui);
 
@@ -200,7 +206,7 @@ TEST_F(ProjectTest, BreakLinkKeepsTheCurveAndDeleteDropsTheLink)
     Design design = projectedAndLost();
     ui->session().reset(std::move(design.doc), {});
     homeView(*ui);
-    ui->window().beginSketch(design.sketch);
+    openSketch(*ui, design.sketch);
     EXPECT_EQ(ui->state()["sketch"].get<core::FeatureId>(), design.sketch);
     const core::Model& model = ui->session().model();
     ASSERT_EQ(model.sketches.at(design.sketch).lostProjections.size(), 1U);
@@ -233,7 +239,7 @@ TEST_F(ProjectTest, PickAgainMovesALostLinkToANewEdgeWithOneUndoStep)
     Design design = projectedAndLost();
     ui->session().reset(std::move(design.doc), {});
     homeView(*ui);
-    ui->window().beginSketch(design.sketch);
+    openSketch(*ui, design.sketch);
     const sketch::Id lost = sketchOf(*ui, design.sketch)->projections[1].curve;
     auto* editor = ui->window().findChild<app::SketchEditor*>();
     ASSERT_NE(editor, nullptr);
@@ -310,7 +316,7 @@ TEST_F(ProjectTest, FixRefusesProjectedCurves)
     Design design = projectedAndLost();
     ui->session().reset(std::move(design.doc), {});
     homeView(*ui);
-    ui->window().beginSketch(design.sketch);
+    openSketch(*ui, design.sketch);
     const sketch::Id kept = sketchOf(*ui, design.sketch)->projections[0].curve;
 
     ui->trigger("Fix");
@@ -331,7 +337,7 @@ TEST_F(ProjectTest, OpensLinkedSketchesOnTheModelSolve)
     data.sketch.addConstraint(sketch::ConstraintKind::Coincident, {free, anchor});
     ui->session().reset(std::move(design.doc), {});
     homeView(*ui);
-    ui->window().beginSketch(design.sketch);
+    openSketch(*ui, design.sketch);
 
     const sketch::Sketch& solved = ui->session().model().sketches.at(design.sketch).solved;
     const auto* editor = ui->window().findChild<app::SketchEditor*>();

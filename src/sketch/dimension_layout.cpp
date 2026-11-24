@@ -18,7 +18,6 @@ namespace {
 
 constexpr double kMinLength = 1e-9;
 constexpr double kOnLine = 1e-7;
-constexpr double kParallelCross = 1e-12;
 constexpr double kHalfTurn = std::numbers::pi;
 constexpr double kArcPointsPerHalfTurn = 50.0;
 constexpr int kMinArcPoints = 4;
@@ -29,32 +28,6 @@ constexpr const char* kDegreeSuffix = "\xC2\xB0";
 constexpr std::string_view kDrivenPrefix = "fx: ";
 
 enum class Place { Center, Left, Right, Fit };
-
-double dot(Vec2 a, Vec2 b)
-{
-    return (a.x * b.x) + (a.y * b.y);
-}
-
-double cross(Vec2 a, Vec2 b)
-{
-    return (a.x * b.y) - (a.y * b.x);
-}
-
-double length(Vec2 a)
-{
-    return std::hypot(a.x, a.y);
-}
-
-Vec2 unit(Vec2 a)
-{
-    const double l = length(a);
-    return l > 0.0 ? a * (1.0 / l) : Vec2{1.0, 0.0};
-}
-
-Vec2 leftOf(Vec2 a)
-{
-    return {-a.y, a.x};
-}
 
 bool finite(Vec2 a)
 {
@@ -248,13 +221,11 @@ bool layOutAngle(DimensionLayout& layout, const Sketch& sketch, const Constraint
     if (!first || !second) {
         return false;
     }
-    const Vec2 da = first->second - first->first;
-    const Vec2 db = second->second - second->first;
-    const double denominator = cross(da, db);
-    if (std::abs(denominator) <= kParallelCross) {
+    const std::optional<Vec2> meeting = lineCorner(first->first, first->second, second->first, second->second);
+    if (!meeting) {
         return false;
     }
-    const Vec2 corner = first->first + (da * (cross(second->first - first->first, db) / denominator));
+    const Vec2 corner = *meeting;
     const Vec2 far1 = distance(first->first, corner) > distance(first->second, corner) ? first->first : first->second;
     const Vec2 far3 =
         distance(second->first, corner) > distance(second->second, corner) ? second->first : second->second;

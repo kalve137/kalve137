@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camera/camera.h"
+#include "render/draw_list.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +53,15 @@ struct PickId {
 
 std::uint32_t encodePickId(std::uint32_t chunk, PickKind kind, std::uint32_t entry);
 PickId decodePickId(std::uint32_t id);
+
+inline VertexColor idColor(std::uint32_t entry, PickKind kind)
+{
+    constexpr std::uint32_t kLowByte = 0xFFU;
+    constexpr unsigned kByteBits = 8;
+    constexpr std::uint8_t kOpaque = 255;
+    return {static_cast<std::uint8_t>(entry & kLowByte), static_cast<std::uint8_t>((entry >> kByteBits) & kLowByte),
+            static_cast<std::uint8_t>(kind), kOpaque};
+}
 
 inline constexpr double kPickEdgeWidth = 1.5;
 inline constexpr double kPickPointWidth = 6.0;

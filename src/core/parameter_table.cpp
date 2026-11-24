@@ -598,14 +598,6 @@ std::optional<ExpressionError> checkNewParameterName(const Document& document, s
     return std::nullopt;
 }
 
-std::optional<ExpressionError> checkFeatureName(const Document& document, std::string_view name)
-{
-    if (document.parameter(name) != nullptr) {
-        return ExpressionError{"duplicate", "'" + std::string(name) + "' is a parameter name", "Pick another name"};
-    }
-    return std::nullopt;
-}
-
 std::optional<ExpressionError> addParameter(Document& document, const std::string& name, std::string_view expression)
 {
     if (std::optional<ExpressionError> invalid = checkNewParameterName(document, name)) {

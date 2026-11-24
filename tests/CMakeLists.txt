@@ -113,7 +113,13 @@ add_executable(kalve137_uitests
     ui/line_ui_test.cpp
     ui/marker_pair_ui_test.cpp
     ui/menu_ui_test.cpp
-    ui/new_view_ui_test.cpp
+    ui/new_view_api_ui_test.cpp
+    ui/new_view_camera_ui_test.cpp
+    ui/new_view_draw_ui_test.cpp
+    ui/new_view_pick_ui_test.cpp
+    ui/new_view_scene_ui_test.cpp
+    ui/new_view_ui_support.cpp
+    ui/new_view_ui_support.h
     ui/pair_shots.cpp
     ui/pair_shots.h
     ui/parameters_ui_test.cpp

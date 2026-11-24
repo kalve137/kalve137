@@ -35,6 +35,4 @@ std::optional<ExpressionError> setFieldExpression(Document& document, const Fiel
 
 std::vector<std::string> usersOf(const Document& document, std::string_view name);
 std::optional<ExpressionError> checkNewParameterName(const Document& document, std::string_view name);
-std::optional<ExpressionError> checkFeatureName(const Document& document, std::string_view name);
-
 } // namespace kalve137::core

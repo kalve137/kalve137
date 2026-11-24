@@ -18,6 +18,12 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - Move takes typed X and Y offsets for selected sketch geometry
 - Timeline right click offers Edit Profile Sketch and Find in Browser
 - Hovering a timeline feature highlights bodies it shaped
+- Slot, Center Point Slot and Overall Slot tools in sketches
+- Offset tool copies sketch curves at a distance and keeps the copy linked to its source
+- Project tool brings model edges, vertices and flat faces into a sketch, where they follow the model
+- Parameters dialog under Edit names values such as `w = 40 mm`
+- Value fields and sketch dimensions take parameter names and expressions such as `w * 2`
+- Concentric constraints show a badge in sketches
 
 ### Changed
 
@@ -34,6 +40,7 @@ Notable changes per release. The format follows [Keep a Changelog](https://keepa
 - View cube faces, edges and corners stand apart in both themes, with larger labels and solid gold on hover
 - Toolbars switch to smaller icons without labels on narrow windows, so every tool and Finish Sketch stay in reach
 - Viewport lines and grid labels follow display scaling
+- Designs save in a newer file format that 0.1.0 can't open. Designs from 0.1.0 open as before
 
 ### Fixed
 

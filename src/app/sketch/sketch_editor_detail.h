@@ -58,21 +58,6 @@ inline constexpr int kRescaleDelayMs = 120;
 inline constexpr double kProfileTransparency = viewer::style::kTintFaint;
 inline constexpr double kTwoPi = 2.0 * std::numbers::pi;
 
-inline double dot(Vec2 a, Vec2 b)
-{
-    return a.x * b.x + a.y * b.y;
-}
-inline double length(Vec2 a)
-{
-    return std::hypot(a.x, a.y);
-}
-
-inline Vec2 normalized(Vec2 a)
-{
-    const double l = length(a);
-    return l > 0.0 ? a * (1.0 / l) : Vec2{1.0, 0.0};
-}
-
 inline Vec2 closestOnSegment(Vec2 p, Vec2 a, Vec2 b)
 {
     const Vec2 ab = b - a;

@@ -7,6 +7,10 @@ add_library(kalve137_render_rhi STATIC
     rhi_annotations.cpp
     rhi_backend.cpp
     rhi_backend.h
+    rhi_backend_detail.h
+    rhi_datums.cpp
+    rhi_ids.cpp
+    rhi_pipelines.cpp
     rhi_view.cpp
     rhi_view.h
 )
