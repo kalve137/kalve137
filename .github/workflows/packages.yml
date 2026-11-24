@@ -1,0 +1,256 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Packages
+
+on:
+  workflow_call:
+    inputs:
+      version_base:
+        required: false
+        type: string
+        default: ""
+      version_suffix:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
+  QT_VERSION: 6.12.0
+  AQT_SOURCE: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
+  KALVE137_VERSION_BASE: ${{ inputs.version_base }}
+  KALVE137_VERSION_SUFFIX: ${{ inputs.version_suffix }}
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    timeout-minutes: 300
+    env:
+      VCPKG_ROOT: C:\vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-windows-release
+      SOFTWARE_GL_DIR: C:\software-gl
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtshadertools
+          dir: C:\
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        run: |
+          New-Item -ItemType Directory -Force C:\vcpkg-cache | Out-Null
+          git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT checkout $env:VCPKG_COMMIT
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Build
+        run: |
+          . ./scripts/dev-shell.ps1
+          $extra = @()
+          if ($env:KALVE137_VERSION_BASE) {
+              $extra += "-DKALVE137_VERSION_BASE=$env:KALVE137_VERSION_BASE"
+          }
+          if ($env:KALVE137_VERSION_SUFFIX) {
+              $extra += "-DKALVE137_VERSION_SUFFIX=$env:KALVE137_VERSION_SUFFIX"
+          }
+          cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" @extra
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build --preset windows-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: C:\vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Install software OpenGL
+        run: |
+          New-Item -ItemType Directory -Force $env:SOFTWARE_GL_DIR | Out-Null
+          Copy-Item "$env:QT_ROOT_DIR\bin\opengl32sw.dll" "$env:SOFTWARE_GL_DIR\opengl32.dll"
+          Copy-Item "$env:SOFTWARE_GL_DIR\opengl32.dll" build\windows-release
+
+      - name: Test
+        run: |
+          . ./scripts/dev-shell.ps1
+          ctest --preset windows-release -LE ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package
+        run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-windows-x64
+          path: build/windows-release/package/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      VCPKG_ROOT: /home/runner/vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,/home/runner/vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-linux-dynamic-release
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the system packages
+        run: bash scripts/linux-deps.sh
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtshadertools
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/runner/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p /home/runner/vcpkg-cache
+          git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Build
+        run: |
+          extra=()
+          if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
+              extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
+          fi
+          if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
+              extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
+          fi
+          cmake --preset linux-release "${extra[@]}"
+          cmake --build --preset linux-release
+
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /home/runner/vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Test without a window
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset linux-release -LE ui
+
+      - name: Package
+        run: bash scripts/package-linux.sh --skip-build
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-linux-x64
+          path: build/linux-release/package/kalve137-linux-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-15
+    timeout-minutes: 300
+    env:
+      VCPKG_ROOT: /Users/runner/vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,/Users/runner/vcpkg-cache,readwrite
+      VCPKG_TRIPLET: arm64-osx-dynamic-release
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the build tools
+        run: brew install autoconf autoconf-archive automake libtool ninja pkgconf
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtshadertools
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /Users/runner/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p /Users/runner/vcpkg-cache
+          git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Build
+        run: |
+          extra=()
+          if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
+              extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
+          fi
+          if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
+              extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
+          fi
+          cmake --preset macos-release "${extra[@]}"
+          cmake --build --preset macos-release
+
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-primary-key != '' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /Users/runner/vcpkg-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Test without a window
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset macos-release -LE ui
+
+      - name: Package
+        run: bash scripts/package-macos.sh --skip-build
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-macos-arm64
+          path: build/macos-release/package/kalve137-macos-arm64.zip
+          if-no-files-found: error
