@@ -10,6 +10,7 @@
 #include "app/view/camera_commands.h"
 #include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
+#include "app/view/scene.h"
 #include "camera/camera.h"
 #include "camera/math.h"
 #include "camera/navigation.h"
@@ -28,6 +29,7 @@
 #include "snapshot/mesh.h"
 #include "viewer/occt_view_widget.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QDeadlineTimer>
 #include <QDockWidget>
@@ -90,6 +92,7 @@ constexpr int kSelectReach = 200;
 constexpr int kSketchCells = 10;
 constexpr double kSketchPitch = 20.0;
 constexpr double kSketchCell = 12.0;
+constexpr double kSketchZoom = 1.05;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 
@@ -498,6 +501,207 @@ std::optional<std::pair<double, double>> timeSketchRedraw(MainWindow& window, Sk
     return std::pair{percentile(totals, 0.5), percentile(totals, kPercentile)};
 }
 
+struct SketchSpots {
+    std::vector<QPointF> empty;
+    QPointF curve;
+};
+
+std::optional<SketchSpots> findSketchSpots(const render::RhiView& view, const SketchEditor& editor)
+{
+    for (const double across : {0.5, 0.47, 0.53, 0.44, 0.56}) {
+        SketchSpots spots;
+        std::optional<QPointF> curve;
+        const double y = view.height() * across;
+        for (int x = view.width() / 4; x < view.width() * 3 / 4; ++x) {
+            const QPointF at(x, y);
+            const SketchEditor::Hit::Kind kind = editor.hitAt(at).kind;
+            if (kind == SketchEditor::Hit::Kind::None) {
+                spots.empty.push_back(at);
+            } else if (kind == SketchEditor::Hit::Kind::Curve && !curve) {
+                curve = at;
+            }
+        }
+        if (curve && spots.empty.size() >= static_cast<std::size_t>(kHoverMoves)) {
+            spots.curve = *curve;
+            return spots;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<double, double>> timedSketchMove(render::RhiView& view, QPointF position)
+{
+    QApplication::processEvents();
+    if (!view.benchFrame()) {
+        return std::nullopt;
+    }
+    QElapsedTimer timer;
+    timer.start();
+    sendMouse(view, QEvent::MouseMove, position, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    const double event = elapsedMs(timer);
+    if (!view.benchFrame()) {
+        return std::nullopt;
+    }
+    return std::pair{elapsedMs(timer), event};
+}
+
+std::optional<QJsonObject> timeSketchMoves(MainWindow& window, SketchEditor& editor, QSize requested)
+{
+    render::RhiView* view = window.newView();
+    if (view == nullptr) {
+        return std::nullopt;
+    }
+    const auto spotsFor = [&](SketchEditor::Tool tool) {
+        editor.setTool(tool);
+        hideChrome(window);
+        QApplication::processEvents();
+        sizeCanvas(window, requested);
+        const std::optional<SketchSpots> found = findSketchSpots(*view, editor);
+        if (!found) {
+            K137_WARN(App, "The bench found no empty and curve spots on the dense sketch");
+        }
+        return found;
+    };
+    std::optional<SketchSpots> spots = spotsFor(SketchEditor::Tool::Line);
+    if (!spots) {
+        return std::nullopt;
+    }
+    std::vector<double> moveMs;
+    std::vector<double> eventMs;
+    for (int i = 0; i < kHoverWarmup + kHoverMoves; ++i) {
+        const auto timed = timedSketchMove(*view, spots->empty[static_cast<std::size_t>(i % kHoverMoves)]);
+        if (!timed) {
+            return std::nullopt;
+        }
+        if (i >= kHoverWarmup) {
+            moveMs.push_back(timed->first);
+            eventMs.push_back(timed->second);
+        }
+    }
+    std::vector<double> hoverMs;
+    std::vector<double> hoverEventMs;
+    spots = spotsFor(SketchEditor::Tool::Select);
+    if (!spots) {
+        return std::nullopt;
+    }
+    for (int i = 0; i < kHoverWarmup + kHoverMoves; ++i) {
+        const auto timed = timedSketchMove(*view, i % 2 == 0 ? spots->curve : spots->empty.front());
+        if (!timed) {
+            return std::nullopt;
+        }
+        if (i >= kHoverWarmup) {
+            hoverMs.push_back(timed->first);
+            hoverEventMs.push_back(timed->second);
+        }
+    }
+    std::vector<double> rescaleMs;
+    std::vector<double> rescaleEventMs;
+    CameraCommands& commands = *window.cameraCommands();
+    for (int i = 0; i < kChangeWarmup + kChangeRepeats; ++i) {
+        const double factor = i % 2 == 0 ? kSketchZoom : 1.0 / kSketchZoom;
+        QApplication::processEvents();
+        if (!view->benchFrame()) {
+            return std::nullopt;
+        }
+        QElapsedTimer timer;
+        timer.start();
+        commands.navigate([factor](camera::Camera& camera, const camera::Viewport&) {
+            return camera.setScale(camera.scale() * factor);
+        });
+        QApplication::processEvents();
+        const double event = elapsedMs(timer);
+        if (!view->benchFrame()) {
+            return std::nullopt;
+        }
+        if (i >= kChangeWarmup) {
+            rescaleMs.push_back(elapsedMs(timer));
+            rescaleEventMs.push_back(event);
+        }
+    }
+    return QJsonObject{
+        {"sketch_move_median_ms", percentile(moveMs, 0.5)},
+        {"sketch_move_p95_ms", percentile(moveMs, kPercentile)},
+        {"sketch_move_event_median_ms", percentile(eventMs, 0.5)},
+        {"sketch_move_event_p95_ms", percentile(eventMs, kPercentile)},
+        {"sketch_hover_median_ms", percentile(hoverMs, 0.5)},
+        {"sketch_hover_p95_ms", percentile(hoverMs, kPercentile)},
+        {"sketch_hover_event_median_ms", percentile(hoverEventMs, 0.5)},
+        {"sketch_hover_event_p95_ms", percentile(hoverEventMs, kPercentile)},
+        {"sketch_rescale_median_ms", percentile(rescaleMs, 0.5)},
+        {"sketch_rescale_p95_ms", percentile(rescaleMs, kPercentile)},
+        {"sketch_rescale_event_median_ms", percentile(rescaleEventMs, 0.5)},
+        {"sketch_rescale_event_p95_ms", percentile(rescaleEventMs, kPercentile)},
+        {"sketch_view_height", view->height()},
+    };
+}
+
+std::optional<std::pair<QPointF, QPointF>> findProfileSpots(const render::RhiView& view, NewViewPicker& picker)
+{
+    for (const double across : {0.5, 0.47, 0.53, 0.44, 0.56}) {
+        std::optional<QPointF> profile;
+        std::optional<QPointF> empty;
+        const double y = view.height() * across;
+        for (int x = view.width() / 4; x < view.width() * 3 / 4 && (!profile || !empty); ++x) {
+            const QPointF at(x, y);
+            picker.hoverAt(at);
+            const std::optional<Pick> hovered = picker.hovered();
+            if (!hovered && !empty) {
+                empty = at;
+            } else if (hovered && hovered->kind == Pick::Kind::Profile && !profile) {
+                profile = at;
+            }
+        }
+        if (profile && empty) {
+            return std::pair{*profile, *empty};
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<QJsonObject> timeSketchPicks(MainWindow& window, QSize requested)
+{
+    render::RhiView* view = window.newView();
+    auto* picker = window.findChild<NewViewPicker*>();
+    if (view == nullptr || picker == nullptr) {
+        return std::nullopt;
+    }
+    for (QAction* action : window.findChildren<QAction*>()) {
+        if (action->text() == QStringLiteral("Finish Sketch")) {
+            action->trigger();
+            break;
+        }
+    }
+    window.scene()->setPickMode(PickMode::Profiles);
+    hideChrome(window);
+    QApplication::processEvents();
+    sizeCanvas(window, requested);
+    waitFor([&] { return !window.cameraCommands()->isAnimating(); });
+    QApplication::processEvents();
+    const std::optional<std::pair<QPointF, QPointF>> spots = findProfileSpots(*view, *picker);
+    if (!spots) {
+        K137_WARN(App, "The bench found no profile and empty spots on the finished dense sketch");
+        return std::nullopt;
+    }
+    std::vector<double> pickMs;
+    std::uint64_t passes = 0;
+    for (int i = 0; i < kHoverWarmup + kHoverMoves; ++i) {
+        const std::uint64_t before = view->idPasses();
+        const auto timed = timedSketchMove(*view, i % 2 == 0 ? spots->first : spots->second);
+        if (!timed) {
+            return std::nullopt;
+        }
+        if (i >= kHoverWarmup) {
+            pickMs.push_back(timed->first);
+            passes += view->idPasses() - before;
+        }
+    }
+    return QJsonObject{
+        {"sketch_pick_hover_median_ms", percentile(pickMs, 0.5)},
+        {"sketch_pick_hover_p95_ms", percentile(pickMs, kPercentile)},
+        {"sketch_pick_hover_id_passes", static_cast<qint64>(passes)},
+    };
+}
+
 int writeResult(const QJsonObject& result, const std::filesystem::path& out)
 {
     QFile file(QString::fromStdU16String(out.u16string()));
@@ -875,6 +1079,9 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const Orbit timed = orbit(window);
     const std::optional<std::pair<double, double>> redrawMs =
         sketch != nullptr ? timeSketchRedraw(window, *sketch) : std::nullopt;
+    const std::optional<QJsonObject> movesMs =
+        sketch != nullptr ? timeSketchMoves(window, *sketch, *requested) : std::nullopt;
+    const std::optional<QJsonObject> picksMs = sketch != nullptr ? timeSketchPicks(window, *requested) : std::nullopt;
     const std::vector<double>& frames = timed.frames;
     if (frames.size() != static_cast<std::size_t>(kOrbitFrames) ||
         timed.cold.size() != static_cast<std::size_t>(kOrbitFrames)) {
@@ -888,6 +1095,12 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     if (redrawMs) {
         result.insert("sketch_redraw_median_ms", redrawMs->first);
         result.insert("sketch_redraw_p95_ms", redrawMs->second);
+    }
+    for (const std::optional<QJsonObject>& part : {movesMs, picksMs}) {
+        const QJsonObject values = part.value_or(QJsonObject{});
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            result.insert(it.key(), it.value());
+        }
     }
     const QJsonObject timing{
         {"frames", kOrbitFrames},

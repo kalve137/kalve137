@@ -170,6 +170,8 @@ private:
         Geometry profiles;
         Geometry lines;
         Geometry arrows;
+        std::uint64_t previewRevision = 0;
+        Geometry previewLines;
         Owned<QRhiShaderResourceBindings> fillBindings;
         Owned<QRhiShaderResourceBindings> lineBindings;
     };

@@ -254,9 +254,10 @@ void unproject(sketch::Sketch& s, const core::Projection& link)
 
 void SketchEditor::setModelPicking(bool picking)
 {
-    m_view->setLeftButtonCaptured(!picking);
     if (m_newView != nullptr) {
         m_newView->setLeftButtonCaptured(!picking);
+    } else {
+        m_view->setLeftButtonCaptured(!picking);
     }
     if (picking) {
         modelBefore();

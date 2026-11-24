@@ -7,6 +7,7 @@
 #include "snapshot/color.h"
 #include "snapshot/sketch.h"
 
+#include <algorithm>
 #include <array>
 #include <compare>
 #include <cstddef>
@@ -66,6 +67,16 @@ struct SketchGeometry {
         return curves == other.curves && profiles == other.profiles && idCurves == other.idCurves &&
                idProfiles == other.idProfiles;
     }
+
+    bool picksLike(const SketchGeometry& other) const
+    {
+        const auto picked = [](const MarkerItem& a, const MarkerItem& b) {
+            return a.anchor == b.anchor && a.shape == b.shape && a.scale == b.scale && a.flags == b.flags &&
+                   a.pick == b.pick;
+        };
+        return idCurves == other.idCurves && idProfiles == other.idProfiles && keys == other.keys &&
+               exactIds == other.exactIds && std::ranges::equal(markers, other.markers, picked);
+    }
 };
 
 struct SketchStroke {
@@ -93,6 +104,13 @@ struct ActiveSketch {
     bool operator==(const ActiveSketch&) const = default;
 };
 
+struct SketchPreview {
+    std::vector<SketchStroke> strokes;
+    std::vector<MarkerItem> markers;
+
+    bool operator==(const SketchPreview&) const = default;
+};
+
 struct ActiveGeometry {
     std::vector<OverlayVertex> profiles;
     std::vector<DatumLine> lines;
@@ -102,6 +120,7 @@ struct ActiveGeometry {
 };
 
 ActiveGeometry placeActiveSketch(const ActiveSketch& sketch, const snapshot::Point& origin);
+std::vector<DatumLine> placeStrokes(std::span<const SketchStroke> strokes, const snapshot::Point& origin);
 
 SketchGeometry buildSketches(std::span<const snapshot::Sketch> sketches, const SketchLook& look,
                              const SketchMarks& marks, const snapshot::Point& origin);
