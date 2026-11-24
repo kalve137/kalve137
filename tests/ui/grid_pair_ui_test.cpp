@@ -57,6 +57,7 @@ constexpr double kReach = 400.0;
 constexpr double kSmallBody = 5.0;
 constexpr QSize kRimCrop{64, 48};
 constexpr int kRimZoom = 8;
+constexpr double kRimLeakShare = 0.25;
 
 using Aim = std::function<void(app::MainWindow&)>;
 
@@ -253,12 +254,10 @@ protected:
 
 TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     load(blockDocument());
     std::ofstream table(m_folder / "grid-plane-body.tsv");
     table << "view\tnew changes inside\n";
@@ -293,15 +292,13 @@ TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
 
 TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     load(blockDocument());
     std::ofstream table(m_folder / "rim.tsv");
-    table << "view\trim pixels changed by the grid\n";
+    table << "view\trim pixels changed by the grid\trim pixels\n";
     const camera::Vec3 center{0.0, 0.0, kBlockHeight / 2.0};
     const camera::Vec3 corner{kBlockWidth / 2.0, kBlockDepth / 2.0, 0.0};
     for (const double elevation : {30.0, 12.0, 4.0}) {
@@ -309,18 +306,25 @@ TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
         const Shots shots = shoot(orbit(center, 30.0, elevation, 90.0, camera::Projection::Perspective), stem);
         const QImage plain = withoutGrid(*m_new);
         ASSERT_EQ(plain.size(), shots.fresh.size()) << stem;
+        std::size_t band = 0;
         std::size_t rim = 0;
         for (int y = 0; y < plain.height(); ++y) {
             for (int x = 0; x < plain.width(); ++x) {
                 const QRgb was = plain.pixel(x, y);
-                if (gapOf(was, shots.fresh.pixel(x, y)) > kChange && gapOf(was, shots.background.rgb()) > kChange &&
-                    nearColor(plain, x, y, shots.background.rgb(), kRim)) {
+                if (gapOf(was, shots.background.rgb()) <= kChange ||
+                    !nearColor(plain, x, y, shots.background.rgb(), kRim)) {
+                    continue;
+                }
+                ++band;
+                if (gapOf(was, shots.fresh.pixel(x, y)) > kChange) {
                     ++rim;
                 }
             }
         }
-        table << stem << '\t' << rim << '\n';
-        EXPECT_LT(rim, static_cast<std::size_t>(plain.width())) << stem << ": the rim stays a thin seam";
+        table << stem << '\t' << rim << '\t' << band << '\n';
+        ASSERT_GT(band, 0U) << stem;
+        EXPECT_LE(static_cast<double>(rim), static_cast<double>(band) * kRimLeakShare)
+            << stem << ": the grid changes " << rim << " of " << band << " rim pixels";
         const QPointF at = screenOf(shots.camera, shots.viewport, corner) * shots.viewport.pixelRatio;
         const QRect around(static_cast<int>(at.x()) - (kRimCrop.width() / 2),
                            static_cast<int>(at.y()) - (kRimCrop.height() / 2), kRimCrop.width(), kRimCrop.height());
@@ -334,12 +338,10 @@ TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
 
 TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     core::Document document;
     geometry::StepPart cube;
     cube.name = "Cube";
@@ -369,12 +371,10 @@ TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
 
 TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     load(core::Document{});
     std::ofstream table(m_folder / "grid-lines.tsv");
     table << "view\told lines\tnew lines\tmatched\n";
@@ -406,12 +406,10 @@ TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
 
 TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
-    if (!start()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     load(blockDocument());
     const camera::Vec3 middle{0.0, -kBlockDepth / 2.0, 0.0};
     const Aim aim = orbit({0.0, 0.0, 0.0}, -90.0, 50.0, 70.0, camera::Projection::Perspective);

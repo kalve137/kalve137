@@ -298,6 +298,62 @@ TEST(Offset, RoundSidesHoldWhenTheSourceGrowsOrShrinks)
     EXPECT_NEAR(s.curve(outside->curves[0])->radius, 5.0, kNear);
 }
 
+TEST(Offset, ASourceShrunkBelowTheInwardDistanceFailsAndStillLoads)
+{
+    Sketch base;
+    const Id circle = base.addCircle(base.addPoint({0, 0}, true), 10.0);
+    const Id diameter = base.addConstraint(ConstraintKind::Diameter, {circle}, 20.0);
+    const std::optional<Offset> inside = addOffset(base, {circle}, -3.0);
+    ASSERT_TRUE(inside);
+    expectClean(base, std::nullopt);
+    for (const double shrunk : {6.0, 4.0}) {
+        Sketch s = base;
+        s.constraint(diameter)->value = shrunk;
+        EXPECT_FALSE(solve(s).solved) << shrunk;
+        EXPECT_NEAR(s.curve(inside->curves[0])->radius, 7.0, kNear);
+        EXPECT_FALSE(validate(s)) << shrunk;
+    }
+    for (const double reaching : {10.0, 12.0}) {
+        Sketch s = base;
+        s.constraint(inside->constraint)->value = reaching;
+        EXPECT_FALSE(solve(s).solved) << reaching;
+        EXPECT_FALSE(validate(s)) << reaching;
+    }
+    EXPECT_FALSE(addOffset(base, {circle}, -10.0));
+
+    Sketch flat = base;
+    flat.curve(inside->curves[0])->radius = 0.0;
+    EXPECT_TRUE(validate(flat));
+}
+
+TEST(Offset, InwardLinesPushedPastEachOtherFailAndStillLoad)
+{
+    Sketch base;
+    const Rectangle rectangle = fixedRectangle(base);
+    const std::optional<Offset> inside = addOffset(base, rectangle.sides, -5.0);
+    ASSERT_TRUE(inside);
+    expectBox(boundsOf(base, inside->curves), 5, 5, 35, 15);
+    expectClean(base, std::nullopt);
+
+    Sketch fits = base;
+    fits.constraint(inside->constraint)->value = 9.0;
+    ASSERT_TRUE(solve(fits).solved);
+    expectBox(boundsOf(fits, inside->curves), 9, 9, 31, 11);
+
+    for (const double crossed : {10.0, 12.0}) {
+        Sketch s = base;
+        s.constraint(inside->constraint)->value = crossed;
+        EXPECT_FALSE(solve(s).solved) << crossed;
+        expectBox(boundsOf(s, inside->curves), 5, 5, 35, 15);
+        EXPECT_FALSE(validate(s)) << crossed;
+    }
+    Sketch narrowed = base;
+    narrowed.constraint(rectangle.width)->value = 8.0;
+    EXPECT_FALSE(solve(narrowed).solved);
+    EXPECT_FALSE(validate(narrowed));
+    EXPECT_FALSE(addOffset(base, rectangle.sides, -12.0));
+}
+
 TEST(Offset, DeletingCurvesDropsTheirPairsAndTheLastTakesTheConstraint)
 {
     Sketch s;
@@ -311,9 +367,13 @@ TEST(Offset, DeletingCurvesDropsTheirPairsAndTheLastTakesTheConstraint)
     }
     ASSERT_EQ(copyOf.size(), 4U);
 
+    s.constraint(offset->constraint)->expression = "5";
     s.remove(copyOf.at(rectangle.sides[0]));
     ASSERT_NE(s.constraint(offset->constraint), nullptr);
+    EXPECT_EQ(s.constraint(offset->constraint)->expression, "5");
     EXPECT_EQ(offsetPairs(*s.constraint(offset->constraint)).size(), 3U);
+    EXPECT_EQ(s.constraint(offset->constraint)->joints.size(), 2U);
+    EXPECT_FALSE(validate(s));
     expectClean(s, 0);
     expectBox(
         boundsOf(s, {copyOf.at(rectangle.sides[1]), copyOf.at(rectangle.sides[2]), copyOf.at(rectangle.sides[3])}), -5,
@@ -385,6 +445,74 @@ TEST(Offset, ValidateRejectsDamagedOffsets)
         c.kind = ConstraintKind::Parallel;
         c.refs = {c.refs[0], c.refs[1]};
     }));
+    EXPECT_TRUE(damaged([](Constraint& c) {
+        c.kind = ConstraintKind::Parallel;
+        c.refs = {c.refs[0], c.refs[1]};
+        c.sides.clear();
+    }));
+    EXPECT_TRUE(damaged([](Constraint& c) { c.joints.pop_back(); }));
+    EXPECT_TRUE(damaged([](Constraint& c) { c.joints.push_back(c.joints.front()); }));
+    EXPECT_TRUE(damaged([&](Constraint& c) { c.joints[0].point = s.curve(c.refs[0])->points[0]; }));
+}
+
+TEST(Offset, StoresOneJointPerCornerWithItsTangentFlag)
+{
+    const auto flags = [](const Sketch& s, const Offset& offset) {
+        std::vector<bool> tangent;
+        for (const OffsetJoint& joint : s.constraint(offset.constraint)->joints) {
+            tangent.push_back(joint.tangent);
+        }
+        return tangent;
+    };
+    Sketch box;
+    const std::optional<Offset> grown = addOffset(box, fixedRectangle(box).sides, 5.0);
+    ASSERT_TRUE(grown);
+    EXPECT_EQ(flags(box, *grown), std::vector<bool>(4, false));
+
+    Sketch slotted;
+    const Slot slot = addSlot(slotted, slotted.addPoint({-10, 0}, true), slotted.addPoint({10, 0}, true), 10.0);
+    const std::optional<Offset> around = addOffset(slotted, chainThrough(slotted, slot.sides[0]), 3.0);
+    ASSERT_TRUE(around);
+    EXPECT_EQ(flags(slotted, *around), std::vector<bool>(4, true));
+
+    Sketch open;
+    const Id a = open.addPoint({0, 0}, true);
+    const Id b = open.addPoint({30, 0}, true);
+    const Id c = open.addPoint({30, 20}, true);
+    const std::optional<Offset> bent = addOffset(open, {open.addLine(a, b), open.addLine(b, c)}, 4.0);
+    ASSERT_TRUE(bent);
+    EXPECT_EQ(flags(open, *bent), std::vector<bool>{false});
+    for (const Sketch* s : {&box, &slotted, &open}) {
+        EXPECT_FALSE(validate(*s));
+    }
+}
+
+TEST(Offset, ATangentJointStaysTangentWhenTheSourceBends)
+{
+    Sketch s;
+    const Id middle = s.addPoint({10, 0});
+    const std::vector<Id> lines{s.addLine(s.addPoint({0, 0}, true), middle),
+                                s.addLine(middle, s.addPoint({20, 0}, true))};
+    const std::optional<Offset> offset = addOffset(s, lines, 2.0);
+    ASSERT_TRUE(offset);
+    ASSERT_EQ(s.constraint(offset->constraint)->joints.size(), 1U);
+    EXPECT_TRUE(s.constraint(offset->constraint)->joints[0].tangent);
+
+    ASSERT_TRUE(solve(s, {{middle, {10, 3}}}).solved);
+    std::vector<Vec2> bent;
+    for (const Id id : offset->curves) {
+        for (const Id point : s.curve(id)->points) {
+            bent.push_back(s.point(point)->pos);
+        }
+    }
+    ASSERT_TRUE(solve(s).solved);
+    std::size_t i = 0;
+    for (const Id id : offset->curves) {
+        for (const Id point : s.curve(id)->points) {
+            EXPECT_NEAR(distance(s.point(point)->pos, bent[i++]), 0.0, kNear);
+        }
+    }
+    EXPECT_TRUE(s.constraint(offset->constraint)->joints[0].tangent);
 }
 
 TEST(Offset, ChainsStopAtBranches)

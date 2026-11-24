@@ -28,6 +28,7 @@ inline constexpr Dim kAngleDim{0, 1};
 struct ParameterValue {
     double value = 0.0;
     Dim dim;
+    bool anyDim = false;
 };
 
 using ParameterValues = std::map<std::string, ParameterValue, std::less<>>;
@@ -51,6 +52,7 @@ struct ExpressionScope {
 struct ExpressionResult {
     double value = 0.0;
     Dim dim;
+    bool anyDim = false;
     std::string canonical;
     std::vector<std::string> names;
     std::optional<ExpressionError> error;

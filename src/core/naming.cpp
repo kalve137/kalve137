@@ -41,8 +41,6 @@ constexpr std::size_t kKeptPoints = 256;
 constexpr std::size_t kBoxesPerBody = 2;
 constexpr std::size_t kSpareBoxes = 64;
 
-using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
-
 double distanceTo(const gp_Pnt& point, const TopoDS_Shape& shape)
 {
     const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(point);
@@ -132,19 +130,32 @@ std::string profileSuffix(const SketchState& state, const std::vector<TopoDS_Fac
     return index ? "/p" + std::to_string(*index) : std::string();
 }
 
-std::vector<std::string> namesAroundVertex(const geometry::FaceNames& names,
-                                           const NCollection_List<TopoDS_Shape>& faces)
+bool holdsAnyOf(const geometry::FaceNames& names, const TopoDS_Shape& face, const std::vector<std::string>& wanted)
 {
-    std::vector<std::string> around;
-    for (const TopoDS_Shape& face : faces) {
-        std::string name = names.primary(face);
-        if (name.empty()) {
-            return {};
-        }
-        around.push_back(std::move(name));
+    return std::ranges::any_of(wanted, [&](const std::string& name) { return hasName(names, face, name); });
+}
+
+bool facesMatch(const geometry::FaceNames& names, const NCollection_List<TopoDS_Shape>& faces,
+                const std::vector<std::string>& wanted)
+{
+    if (faces.IsEmpty()) {
+        return false;
     }
-    std::ranges::sort(around);
-    return around;
+    for (const TopoDS_Shape& face : faces) {
+        if (!holdsAnyOf(names, face, wanted)) {
+            return false;
+        }
+    }
+    for (const std::string& name : wanted) {
+        bool held = false;
+        for (const TopoDS_Shape& face : faces) {
+            held = held || hasName(names, face, name);
+        }
+        if (!held) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::optional<gp_Pln> planeOf(const TopoDS_Face& face)
@@ -249,7 +260,7 @@ TopoRef vertexRef(const Body& body, const TopoDS_Vertex& vertex)
     AncestorMap vertexFaces;
     TopExp::MapShapesAndUniqueAncestors(body.shape, TopAbs_VERTEX, TopAbs_FACE, vertexFaces);
     if (const NCollection_List<TopoDS_Shape>* faces = vertexFaces.Seek(vertex)) {
-        ref.names = namesAroundVertex(body.faceNames, *faces);
+        ref.names = body.faceNames.namesAround(*faces);
     }
     return ref;
 }
@@ -350,15 +361,45 @@ std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRe
     return std::nullopt;
 }
 
+ShapeAncestors::ShapeAncestors(const std::vector<Body>& bodies)
+    : m_bodies(bodies), m_edgeFaces(bodies.size()), m_vertexFaces(bodies.size())
+{}
+
+const AncestorMap& ShapeAncestors::edgeFaces(std::size_t body)
+{
+    std::optional<AncestorMap>& map = m_edgeFaces.at(body);
+    if (!map) {
+        map.emplace();
+        TopExp::MapShapesAndUniqueAncestors(m_bodies[body].shape, TopAbs_EDGE, TopAbs_FACE, *map);
+    }
+    return *map;
+}
+
+const AncestorMap& ShapeAncestors::vertexFaces(std::size_t body)
+{
+    std::optional<AncestorMap>& map = m_vertexFaces.at(body);
+    if (!map) {
+        map.emplace();
+        TopExp::MapShapesAndUniqueAncestors(m_bodies[body].shape, TopAbs_VERTEX, TopAbs_FACE, *map);
+    }
+    return *map;
+}
+
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref)
 {
+    ShapeAncestors ancestors(bodies);
+    return resolveEdge(ancestors, ref);
+}
+
+std::optional<EdgeHit> resolveEdge(ShapeAncestors& ancestors, const TopoRef& ref)
+{
+    const std::vector<Body>& bodies = ancestors.bodies();
     if (ref.names.size() == 2) {
         std::optional<EdgeHit> best;
         double bestDistance = std::numeric_limits<double>::max();
         for (std::size_t i = 0; i < bodies.size(); ++i) {
             const geometry::FaceNames& names = bodies[i].faceNames;
-            AncestorMap edgeFaces;
-            TopExp::MapShapesAndUniqueAncestors(bodies[i].shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+            const AncestorMap& edgeFaces = ancestors.edgeFaces(i);
             for (int e = 1; e <= edgeFaces.Extent(); ++e) {
                 const NCollection_List<TopoDS_Shape>& faces = edgeFaces(e);
                 if (faces.IsEmpty()) {
@@ -392,18 +433,24 @@ std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRe
 
 std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref)
 {
+    ShapeAncestors ancestors(bodies);
+    return resolveVertex(ancestors, ref);
+}
+
+std::optional<VertexHit> resolveVertex(ShapeAncestors& ancestors, const TopoRef& ref)
+{
+    const std::vector<Body>& bodies = ancestors.bodies();
     std::optional<VertexHit> named;
     double namedDistance = std::numeric_limits<double>::max();
     std::optional<VertexHit> near;
     double nearDistance = kRefTolerance;
     for (std::size_t i = 0; i < bodies.size(); ++i) {
-        AncestorMap vertexFaces;
-        TopExp::MapShapesAndUniqueAncestors(bodies[i].shape, TopAbs_VERTEX, TopAbs_FACE, vertexFaces);
+        const AncestorMap& vertexFaces = ancestors.vertexFaces(i);
         for (int v = 1; v <= vertexFaces.Extent(); ++v) {
             const TopoDS_Vertex& vertex = TopoDS::Vertex(vertexFaces.FindKey(v));
             const double distance = ref.point.Distance(BRep_Tool::Pnt(vertex));
             if (!ref.names.empty() && distance < namedDistance &&
-                namesAroundVertex(bodies[i].faceNames, vertexFaces(v)) == ref.names) {
+                facesMatch(bodies[i].faceNames, vertexFaces(v), ref.names)) {
                 named = VertexHit{i, vertex};
                 namedDistance = distance;
             }

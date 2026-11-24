@@ -9,6 +9,8 @@
 
 #include <Bnd_Box.hxx>
 #include <NCollection_DataMap.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_List.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -52,6 +54,22 @@ struct VertexHit {
     TopoDS_Vertex vertex;
 };
 
+using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
+
+class ShapeAncestors {
+public:
+    explicit ShapeAncestors(const std::vector<Body>& bodies);
+
+    const std::vector<Body>& bodies() const { return m_bodies; }
+    const AncestorMap& edgeFaces(std::size_t body);
+    const AncestorMap& vertexFaces(std::size_t body);
+
+private:
+    const std::vector<Body>& m_bodies;
+    std::vector<std::optional<AncestorMap>> m_edgeFaces;
+    std::vector<std::optional<AncestorMap>> m_vertexFaces;
+};
+
 class FaceLookup {
 public:
     std::optional<FaceHit> atPoint(const std::vector<Body>& bodies, const gp_Pnt& point);
@@ -74,7 +92,9 @@ private:
 std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face);
 std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup = nullptr);
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref);
+std::optional<EdgeHit> resolveEdge(ShapeAncestors& ancestors, const TopoRef& ref);
 std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref);
+std::optional<VertexHit> resolveVertex(ShapeAncestors& ancestors, const TopoRef& ref);
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref);
 
 geometry::FaceNames nameExtrusion(const TopoDS_Shape& tool, FeatureId id, const SketchState& state,

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,10 @@ struct Shots {
     QColor background;
 };
 
+inline constexpr const char* kNewViewDidNotStart = "The new view did not start on a device that can run it";
+
 std::filesystem::path pairFolder(const std::string& suite);
+std::optional<std::string> newViewMissing();
 std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view);
 QAction* actionNamed(app::MainWindow& window, const QString& text);
 void showOnlyBodies(app::MainWindow& window, const QString& style);

@@ -9,7 +9,10 @@
 
 #include <gp_Pnt.hxx>
 
+#include <QPointF>
 #include <QString>
+
+#include <optional>
 
 namespace kalve137::uitest {
 
@@ -28,6 +31,7 @@ int faces(const UiDriver& ui, std::size_t body = 0);
 void glide(UiDriver& ui, const gp_Pnt& from, const gp_Pnt& to);
 void startSketch(UiDriver& ui, const QString& tool);
 const sketch::Sketch* lastSketch(const UiDriver& ui);
+std::optional<QPointF> dimensionLabel(UiDriver& ui, sketch::Id id);
 void editDimension(UiDriver& ui, sketch::Id id, const QString& value);
 
 } // namespace kalve137::uitest

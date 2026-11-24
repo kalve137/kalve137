@@ -79,7 +79,7 @@ public:
             const VertexColor fill = colorOf(m_planeColor, square.key, kDatumPlaneAlpha);
             for (const std::size_t i : {0U, 1U, 2U, 0U, 2U, 3U}) {
                 fills.push_back({.position = place(square.corners.at(i)), .color = fill});
-                if (square.entry < kDatumEntries) {
+                if (pickable(square.entry)) {
                     idFills.push_back(
                         {.position = place(square.corners.at(i)), .color = idColor(square.entry, PickKind::Face)});
                 }
@@ -91,7 +91,7 @@ public:
                 const camera::Vec3& start = square.corners.at(i);
                 const camera::Vec3& end = square.corners.at((i + 1) % square.corners.size());
                 addLine(lines, start, end, outline, kDatumOutlineWidth, kSolidPattern);
-                if (square.entry < kDatumEntries) {
+                if (pickable(square.entry)) {
                     addLine(idLines, start, end, idColor(square.entry, PickKind::Point),
                             std::max(kDatumOutlineWidth, kPickEdgeWidth), kSolidPattern);
                 }
@@ -112,7 +112,7 @@ public:
             addLine(lines, start, end, colorOf(axis.color, {.kind = kind, .id = axis.id}, 1.0F), kDatumAxisWidth,
                     pattern);
             const std::uint32_t entry = first + static_cast<std::uint32_t>(index);
-            if (entry < kDatumEntries) {
+            if (pickable(entry)) {
                 addLine(idLines, start, end, idColor(entry, PickKind::Edge), std::max(kDatumAxisWidth, kPickEdgeWidth),
                         kSolidPattern);
             }
@@ -137,18 +137,27 @@ public:
             const Encoded shown =
                 highlighted(encodedOf(m_planeColor), m_marks.hovered == key, m_marks.selected.contains(key));
             const auto entry = static_cast<std::uint32_t>(index);
-            const bool pickable = entry < kDatumEntries;
+            const bool picks = pickable(entry);
             m_geometry.markers.push_back(
                 {.anchor = point.anchor,
                  .shape = MarkerShape::RingPlus,
                  .scale = MarkerScale::Medium,
                  .color = {.red = shown[0], .green = shown[1], .blue = shown[2], .alpha = 1.0F},
-                 .flags = static_cast<std::uint8_t>(kMarkerTopmost | (pickable ? kMarkerPickable : 0)),
-                 .pick = pickable ? encodePickId(kMarkerChunk, PickKind::Point, entry) : 0});
+                 .flags = static_cast<std::uint8_t>(kMarkerTopmost | (picks ? kMarkerPickable : 0)),
+                 .pick = picks ? encodePickId(kMarkerChunk, PickKind::Point, entry) : 0});
         }
     }
 
 private:
+    bool pickable(std::uint32_t entry)
+    {
+        if (entry < kDatumEntries) {
+            return true;
+        }
+        m_geometry.capped = true;
+        return false;
+    }
+
     Position place(const camera::Vec3& point) const { return relativePosition({point.x, point.y, point.z}, m_origin); }
 
     VertexColor colorOf(const snapshot::Color& base, const DatumKey& key, float alpha) const

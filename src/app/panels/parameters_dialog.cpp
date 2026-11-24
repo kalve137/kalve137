@@ -6,6 +6,7 @@
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
 #include "core/parameter_table.h"
+#include "core/parameters.h"
 
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -16,6 +17,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 
 namespace kalve137::app {
@@ -44,6 +46,17 @@ QTableWidgetItem* readOnly(const QString& value)
     auto* item = new QTableWidgetItem(value);
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
     return item;
+}
+
+bool sameExpression(const core::Document& document, const std::string& stored, const std::string& typed)
+{
+    if (stored == typed) {
+        return true;
+    }
+    const std::optional<core::ParameterValues> values = core::parameterValues(document);
+    const core::ExpressionScope scope{values ? &*values : nullptr, {}};
+    const std::string canonical = core::evaluateParameter(typed, scope).canonical;
+    return !canonical.empty() && canonical == core::evaluateParameter(stored, scope).canonical;
 }
 
 } // namespace
@@ -159,7 +172,10 @@ void ParametersDialog::onItemChanged(QTableWidgetItem* item)
         }
     } else if (item->column() == kExpressionColumn) {
         const core::Parameter* stored = m_session.document().parameter(name);
-        if (stored != nullptr && stored->expression == typed) {
+        if (stored != nullptr && sameExpression(m_session.document(), stored->expression, typed)) {
+            if (stored->expression != typed) {
+                QMetaObject::invokeMethod(this, &ParametersDialog::refresh, Qt::QueuedConnection);
+            }
             return;
         }
         error = m_session.tryEdit(tr("Edit Parameter %1").arg(text(name)), [&](core::Document& document) {

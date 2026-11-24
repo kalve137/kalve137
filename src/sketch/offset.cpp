@@ -393,6 +393,7 @@ std::optional<Offset> addOffset(Sketch& sketch, const std::vector<Id>& curves, d
     }
     const bool circle = pieces[0].kind == CurveKind::Circle;
     std::vector<Vec2> joints;
+    std::vector<bool> tangent;
     if (!circle) {
         const std::size_t junctions = chain->closed ? count : count - 1;
         if (!chain->closed) {
@@ -406,6 +407,7 @@ std::optional<Offset> addOffset(Sketch& sketch, const std::vector<Id>& curves, d
                 return std::nullopt;
             }
             joints.push_back(*joint);
+            tangent.push_back(distance(a.end, b.start) <= kTiny * scale);
         }
         if (chain->closed) {
             std::ranges::rotate(joints, joints.end() - 1);
@@ -460,8 +462,13 @@ std::optional<Offset> addOffset(Sketch& sketch, const std::vector<Id>& curves, d
             const int pairSide = piece.kind == CurveKind::Line ? along : piece.kind == CurveKind::Arc ? -along : side;
             pairs.push_back({piece.source, offset.curves[i], pairSide});
         }
+        std::vector<OffsetJoint> linkedJoints;
+        linkedJoints.reserve(tangent.size());
+        for (std::size_t i = 0; i < tangent.size(); ++i) {
+            linkedJoints.push_back({.point = jointId(i + 1), .tangent = tangent[i]});
+        }
         offset.constraint = built.nextId();
-        built.insertConstraint(offset.constraint, offsetConstraint(pairs, std::abs(amount)));
+        built.insertConstraint(offset.constraint, offsetConstraint(pairs, std::abs(amount), std::move(linkedJoints)));
     }
     sketch = std::move(built);
     return offset;

@@ -10,6 +10,7 @@
 #include <format>
 #include <limits>
 #include <numbers>
+#include <string_view>
 
 namespace kalve137::sketch {
 
@@ -25,6 +26,7 @@ constexpr int kLabelDecimals = 3;
 constexpr const char* kRadiusPrefix = "R";
 constexpr const char* kDiameterPrefix = "\xC3\x98";
 constexpr const char* kDegreeSuffix = "\xC2\xB0";
+constexpr std::string_view kDrivenPrefix = "fx: ";
 
 enum class Place { Center, Left, Right, Fit };
 
@@ -391,6 +393,9 @@ std::optional<DimensionLayout> layoutDimension(const Sketch& sketch, const Const
     const std::optional<Vec2> label = labelPosition(sketch, constraint);
     DimensionLayout layout{
         .lines = {}, .arc = {}, .arrows = {}, .text = {}, .label = dimensionLabel(constraint.kind, constraint.value)};
+    if (!constraint.expression.empty()) {
+        layout.label.insert(0, kDrivenPrefix);
+    }
     bool laid = false;
     switch (constraint.kind) {
     case ConstraintKind::Distance:

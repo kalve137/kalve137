@@ -60,6 +60,15 @@ void reshape(Body& body, const TopoDS_Shape& shape, const BRepTools_History& his
     body.shape = shape;
 }
 
+std::string sentences(const std::vector<std::string>& parts)
+{
+    std::string text;
+    for (const std::string& part : parts) {
+        text += text.empty() ? part : ". " + part;
+    }
+    return text;
+}
+
 bool touches(const TopoDS_Shape& a, const TopoDS_Shape& b)
 {
     BRepExtrema_DistShapeShape distance(a, b);
@@ -99,16 +108,23 @@ private:
         }
         state.solved = data.sketch;
         state.lostProjections = followProjections(state.solved, data.projections, m_model.bodies, state.plane);
-        const std::size_t broken = state.lostProjections.size();
-        state.solve = sketch::solve(state.solved);
+        state.solve = sketch::solveMoved(state.solved, data.sketch);
         state.profiles = sketch::findProfiles(state.solved, state.plane);
-        m_model.sketches.insert_or_assign(feature.id, std::move(state));
+        std::vector<std::string> problems;
         if (faceLost) {
-            warn(feature.id, "The face this sketch is on is gone, so the sketch stays where it was");
-        } else if (broken > 0) {
-            warn(feature.id, brokenProjectionsMessage(broken));
-        } else if (!m_model.sketches.at(feature.id).solve.conflicting.empty()) {
-            warn(feature.id, "The sketch has conflicting constraints");
+            problems.emplace_back("The face this sketch is on is gone, so the sketch stays where it was");
+        }
+        if (!state.lostProjections.empty()) {
+            problems.push_back(brokenProjectionsMessage(state.lostProjections.size()));
+        }
+        if (!state.solve.conflicting.empty()) {
+            problems.emplace_back("The sketch has conflicting constraints");
+        } else if (!state.solve.solved) {
+            problems.emplace_back("The sketch can't be solved");
+        }
+        m_model.sketches.insert_or_assign(feature.id, std::move(state));
+        if (!problems.empty()) {
+            warn(feature.id, sentences(problems));
         }
     }
 

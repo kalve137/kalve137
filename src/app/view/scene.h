@@ -60,6 +60,8 @@ public:
     Scene& operator=(Scene&&) = delete;
 
     void show(const core::Document& document, const core::Model& model, const DesignSession& session);
+    const core::Document& document() const { return m_document; }
+    const core::Model& model() const { return m_model; }
     void setPicks(PickSource& picks) { m_source = &picks; }
     bool setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible);
     std::size_t displayedBodies() const { return m_bodies.size(); }

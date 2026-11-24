@@ -25,6 +25,7 @@ add_executable(kalve137_tests
     core/parameter_grammar_test.cpp
     core/parameters_test.cpp
     core/projection_test.cpp
+    core/same_document.h
     core/sample_test.cpp
     core/shape_store_test.cpp
     core/snapshot_cache_test.cpp

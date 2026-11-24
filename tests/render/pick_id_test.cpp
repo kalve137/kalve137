@@ -367,6 +367,24 @@ TEST(PickId, AProfileWinsWithinReachUnlessItPicksOnlyUnderTheCursor)
     EXPECT_EQ(pick(2, exact), profile);
 }
 
+TEST(PickId, APointComesOnlyFromAFiniteDepthAndABodyPointOnlyFromInFrontOfTheBackground)
+{
+    const camera::Viewport viewport{.width = 9, .height = 9, .pixelRatio = 1.0};
+    const camera::Camera camera = lookingDownAt({0.0, 0.0, 0.0}, 40.0);
+    const std::optional<camera::Vec3> center = pointAtDepth(camera, viewport, 4, 4, 0.5F, DepthReach::InsideFar);
+    ASSERT_TRUE(center.has_value());
+    EXPECT_NEAR(center->x, 0.0, 1e-9);
+    EXPECT_NEAR(center->y, 0.0, 1e-9);
+    EXPECT_FALSE(pointAtDepth(camera, viewport, 4, 4, 1.0F, DepthReach::InsideFar).has_value())
+        << "depth 1 is the cleared background";
+    EXPECT_TRUE(pointAtDepth(camera, viewport, 4, 4, 1.5F, DepthReach::PastFar).has_value())
+        << "a datum past the far plane keeps its depth";
+    for (const DepthReach reach : {DepthReach::InsideFar, DepthReach::PastFar}) {
+        EXPECT_FALSE(pointAtDepth(camera, viewport, 4, 4, std::nanf(""), reach).has_value());
+        EXPECT_FALSE(pointAtDepth(camera, {}, 4, 4, 0.5F, reach).has_value());
+    }
+}
+
 TEST(CpuIds, PickAnEdgeFromThreePixelsAway)
 {
     const auto mesh = test::edgedBox({-10.0, -10.0, -10.0}, {10.0, 10.0, 10.0});

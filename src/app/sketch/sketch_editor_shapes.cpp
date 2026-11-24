@@ -278,13 +278,13 @@ void SketchEditor::clickSlot(Snap snap)
     }
     const std::optional<double> length = heldPositive(0);
     const double centerLength = m_tool == Tool::OverallSlot && length ? *length - width : length.value_or(0.0);
-    const auto build = [&](bool dimensions) {
+    const auto build = [&](bool dimensions, bool autoAxis) {
         sketch::Sketch candidate = current();
         const Id start = m_tool == Tool::Slot ? placePoint(candidate, *m_first) : candidate.addPoint(centers->first);
         const Id end =
             m_tool == Tool::OverallSlot ? candidate.addPoint(centers->second) : placePoint(candidate, *m_second);
         const sketch::Slot slot = sketch::addSlot(candidate, start, end, width);
-        if (const std::optional<ConstraintKind> axis = autoAxisOf(centers->second - centers->first)) {
+        if (const std::optional<ConstraintKind> axis = autoAxisOf(centers->second - centers->first); axis && autoAxis) {
             candidate.addConstraint(*axis, {slot.centerLine});
         }
         if (m_tool == Tool::CenterSlot) {
@@ -299,7 +299,13 @@ void SketchEditor::clickSlot(Snap snap)
         }
         return candidate;
     };
-    if (commit(tr("Slot"), withDimensionsIfSolvable(build, m_solve.redundant.size()))) {
+    const std::size_t redundant = m_solve.redundant.size();
+    sketch::Sketch candidate =
+        withDimensionsIfSolvable([&](bool dimensions) { return build(dimensions, true); }, redundant);
+    if (!solvesWithin(candidate, redundant)) {
+        candidate = withDimensionsIfSolvable([&](bool dimensions) { return build(dimensions, false); }, redundant);
+    }
+    if (commit(tr("Slot"), std::move(candidate))) {
         resetProgress();
     }
 }

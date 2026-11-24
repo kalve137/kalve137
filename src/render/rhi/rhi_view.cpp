@@ -291,6 +291,7 @@ void RhiView::setDatums(Datums datums)
     refreshDatums();
     m_idsFresh = false;
     update();
+    emit sceneChanged();
 }
 
 void RhiView::setDatumMarks(DatumMarks marks)
@@ -445,6 +446,9 @@ void RhiView::refreshAnnotations()
 void RhiView::refreshSketches()
 {
     SketchGeometry geometry = buildSketches(m_sketches, m_sketchLook, m_sketchMarks, m_scene.origin);
+    if (geometry.capped && !m_sketchGeometry.capped) {
+        K137_WARN(Viewer, "The new view picks only the first {} sketch items", kDatumEntries);
+    }
     const bool same = geometry.drawsLike(m_sketchGeometry);
     m_sketchGeometry = std::move(geometry);
     if (!same) {
@@ -458,6 +462,9 @@ void RhiView::refreshSketches()
 void RhiView::refreshDatums()
 {
     DatumGeometry geometry = buildDatums(m_datums, m_camera, viewport(), m_scene.origin, m_datumMarks);
+    if (geometry.capped && !m_datumGeometry.capped) {
+        K137_WARN(Viewer, "The new view picks only the first {} planes, axes and points", kDatumEntries);
+    }
     const bool same = geometry.drawsLike(m_datumGeometry);
     m_datumGeometry = std::move(geometry);
     if (!same) {
@@ -734,13 +741,9 @@ std::optional<std::vector<PickedItem>> RhiView::itemsIn(const QRect& deviceRect,
     return items;
 }
 
-camera::Vec3 RhiView::pointOf(int x, int y, float depth) const
+std::optional<camera::Vec3> RhiView::pointOf(int x, int y, float depth, DepthReach reach) const
 {
-    const camera::Viewport port = viewport();
-    camera::Camera shown = m_camera;
-    shown.setAspect(port.aspect());
-    return shown.unproject({((x + 0.5) / port.width * 2.0) - 1.0, 1.0 - ((y + 0.5) / port.height * 2.0),
-                            (static_cast<double>(depth) * 2.0) - 1.0});
+    return pointAtDepth(m_camera, viewport(), x, y, depth, reach);
 }
 
 std::optional<camera::Vec3> RhiView::surfaceAt(int x, int y)
@@ -749,7 +752,7 @@ std::optional<camera::Vec3> RhiView::surfaceAt(int x, int y)
     if (!image || image->ids.empty() || image->ids[0] == 0) {
         return std::nullopt;
     }
-    return pointOf(x, y, image->depths[0]);
+    return pointOf(x, y, image->depths[0], DepthReach::PastFar);
 }
 
 std::optional<double> RhiView::benchFrame()
@@ -779,6 +782,7 @@ std::optional<double> RhiView::benchFrame()
 
 void RhiView::initialize(QRhiCommandBuffer*)
 {
+    m_idsFailed = false;
     if (m_backend.isEmpty()) {
         m_backend = QString::fromLatin1(rhi()->backendName());
         m_device = QString::fromUtf8(rhi()->driverInfo().deviceName);
@@ -816,6 +820,7 @@ void RhiView::releaseResources()
     m_bodies.reset();
     m_idsFresh = false;
     m_idsWarm = false;
+    m_idsFailed = false;
 }
 
 void RhiView::setCamera(const camera::Camera& camera)

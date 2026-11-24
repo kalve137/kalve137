@@ -596,6 +596,8 @@ TEST(Serialization, OffsetRoundTripsWithItsSides)
     EXPECT_EQ(saved["kind"], "offset");
     EXPECT_EQ(saved["refs"].size(), 8U);
     EXPECT_EQ(saved["sides"].size(), 4U);
+    ASSERT_EQ(saved["joints"].size(), 4U);
+    EXPECT_EQ(saved["joints"][0]["tangent"], false);
     EXPECT_EQ(saved["value"], 3.0);
     const Document loaded = fromJson(text, shapes);
     EXPECT_EQ(toJson(loaded, shapes), text);
@@ -604,6 +606,7 @@ TEST(Serialization, OffsetRoundTripsWithItsSides)
     ASSERT_NE(constraint, nullptr);
     EXPECT_EQ(constraint->refs, s.constraint(offset->constraint)->refs);
     EXPECT_EQ(constraint->sides, s.constraint(offset->constraint)->sides);
+    EXPECT_EQ(constraint->joints, s.constraint(offset->constraint)->joints);
     EXPECT_NEAR(totalVolume(recompute(loaded)), kBlockWithHoleVolume, 1e-3);
 }
 
@@ -664,6 +667,26 @@ TEST(Serialization, RejectsDamagedOffsets)
         o["kind"] = "parallel";
         o["refs"] = {curve(s, 0), curve(s, 2)};
         o["sides"] = {1};
+    });
+    const auto joint = [](const nlohmann::json& point) { return nlohmann::json{{"point", point}, {"tangent", false}}; };
+    rejects("missing joint", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2), curve(s, 3)};
+        o["sides"] = {1, 1};
+    });
+    rejects("joint that no two curves share", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["joints"] = {joint(s["curves"][2]["points"][0])};
+    });
+    rejects("joint without a flag", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["joints"] = {{{"point", s["curves"][2]["points"][0]}}};
+    });
+    rejects("joints on another kind", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["kind"] = "parallel";
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["joints"] = {joint(s["curves"][2]["points"][0])};
     });
 }
 
@@ -761,6 +784,8 @@ TEST(Serialization, RejectsDamagedProjections)
     rejects("same curve twice", [](nlohmann::json& p, nlohmann::json&) { p.push_back(p[0]); });
     rejects("no ref", [](nlohmann::json& p, nlohmann::json&) { p[0].erase("ref"); });
     rejects("ref without a point", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"]["point"] = nullptr; });
+    rejects("bare point ref", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"] = p[0]["ref"]["point"]; });
+    rejects("ref without names", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"].erase("names"); });
 
     nlohmann::json unknown = good;
     unknown["features"].back()["data"]["projections"][0]["kind"] = "face";

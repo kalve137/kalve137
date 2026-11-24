@@ -4,6 +4,7 @@
 #include "render/pick_id.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <tuple>
 
@@ -135,6 +136,22 @@ std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius,
         }
     }
     return best;
+}
+
+std::optional<camera::Vec3> pointAtDepth(camera::Camera camera, const camera::Viewport& viewport, int x, int y,
+                                         float depth, DepthReach reach)
+{
+    if (!viewport.isValid() || !std::isfinite(depth) || (reach == DepthReach::InsideFar && !(depth < 1.0F))) {
+        return std::nullopt;
+    }
+    camera.setAspect(viewport.aspect());
+    const camera::Vec3 point =
+        camera.unproject({((x + 0.5) / viewport.width * 2.0) - 1.0, 1.0 - ((y + 0.5) / viewport.height * 2.0),
+                          (static_cast<double>(depth) * 2.0) - 1.0});
+    if (!camera::isFinite(point)) {
+        return std::nullopt;
+    }
+    return point;
 }
 
 } // namespace kalve137::render

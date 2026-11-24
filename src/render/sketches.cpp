@@ -55,6 +55,7 @@ private:
     std::optional<std::uint32_t> enter(const SketchKey& key)
     {
         if (m_geometry.keys.size() >= kDatumEntries) {
+            m_geometry.capped = true;
             return std::nullopt;
         }
         m_geometry.keys.push_back(key);

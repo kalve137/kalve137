@@ -3,6 +3,7 @@
 
 #include "app/session/design_session.h"
 
+#include "core/parameter_table.h"
 #include "geometry/shapes.h"
 
 #include <gtest/gtest.h>
@@ -13,9 +14,13 @@
 #include <gp_Vec.hxx>
 
 #include <cstddef>
+#include <optional>
+#include <variant>
 
 namespace kalve137::app {
 namespace {
+
+constexpr double kTolerance = 1e-9;
 
 class DesignSessionTest : public testing::Test {
 protected:
@@ -93,6 +98,41 @@ TEST_F(DesignSessionTest, TimelineChangesDropTheSnapshots)
                    [this](core::Document& document) { document.find(m_pin)->suppressed = true; });
     EXPECT_EQ(m_jumps, 3);
     EXPECT_EQ(m_session.snapshots().size(), 0U);
+}
+
+TEST(DesignSessionParameters, OneEditIsOneUndoStep)
+{
+    DesignSession session;
+    core::FeatureId extrude = 0;
+    ASSERT_FALSE(session.tryEdit(QStringLiteral("Add w"), [&extrude](core::Document& document) {
+        extrude = document.add(core::ExtrudeFeature{});
+        if (std::optional<core::ExpressionError> error = core::addParameter(document, "w", "40 mm")) {
+            return error;
+        }
+        return core::setFieldExpression(document, {extrude, "distance"}, "w * 2");
+    }));
+    const auto distance = [&] {
+        return std::get<core::ExtrudeFeature>(session.document().find(extrude)->data).distance;
+    };
+    EXPECT_NEAR(distance(), 80.0, kTolerance);
+
+    ASSERT_FALSE(session.tryEdit(QStringLiteral("Edit w"), [](core::Document& document) {
+        return core::setParameterExpression(document, "w", "25 mm");
+    }));
+    EXPECT_NEAR(distance(), 50.0, kTolerance);
+    EXPECT_TRUE(session.tryEdit(QStringLiteral("Edit w"), [](core::Document& document) {
+        return core::setParameterExpression(document, "w", "0 mm");
+    }));
+    EXPECT_EQ(session.undoLabel(), QStringLiteral("Edit w"));
+
+    session.undo();
+    EXPECT_EQ(session.document().parameters().front().expression, "40 mm");
+    EXPECT_NEAR(distance(), 80.0, kTolerance);
+    EXPECT_EQ(session.undoLabel(), QStringLiteral("Add w"));
+    session.redo();
+    EXPECT_EQ(session.document().parameters().front().expression, "25 mm");
+    EXPECT_NEAR(distance(), 50.0, kTolerance);
+    EXPECT_FALSE(session.canRedo());
 }
 
 } // namespace

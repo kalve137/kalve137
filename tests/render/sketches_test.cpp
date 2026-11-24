@@ -144,6 +144,26 @@ TEST(Sketches, PointsAreSmallTopmostRingsThatPickInTheSketchChunk)
     EXPECT_NE(hovered.markers[0].color, kFree) << "a hovered point lights up";
 }
 
+TEST(Sketches, ItemsPastTheEntryCapDrawWithoutPickingAndMarkTheGeometryCapped)
+{
+    snapshot::Sketch many;
+    many.feature = 4;
+    for (std::uint32_t i = 0; i <= kDatumEntries; ++i) {
+        many.points.push_back({.id = static_cast<int>(i + 1), .point = {static_cast<double>(i), 0, 0}, .flags = 0});
+    }
+    const std::vector sketches{many};
+    const SketchGeometry geometry = buildSketches(sketches, look(false, true, false), {}, {});
+    EXPECT_TRUE(geometry.capped);
+    EXPECT_EQ(geometry.keys.size(), kDatumEntries);
+    ASSERT_EQ(geometry.markers.size(), kDatumEntries + 1);
+    EXPECT_EQ(geometry.markers.back().flags, kMarkerTopmost);
+    EXPECT_EQ(geometry.markers.back().pick, 0U);
+
+    many.points.pop_back();
+    const std::vector fitting{many};
+    EXPECT_FALSE(buildSketches(fitting, look(false, true, false), {}, {}).capped);
+}
+
 TEST(Sketches, ProfilesFillInThePlaneColorAndHighlightedOnesInTheAccent)
 {
     const std::vector sketches{sketch(4)};

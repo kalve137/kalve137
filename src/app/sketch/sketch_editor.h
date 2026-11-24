@@ -48,6 +48,7 @@ namespace kalve137::app {
 class BandOverlay;
 class DesignSession;
 class RecentValuesMenu;
+class Scene;
 class SketchInputs;
 struct Pick;
 
@@ -95,7 +96,7 @@ public:
         bool operator==(const Hit&) const = default;
     };
 
-    SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, render::RhiView* newView,
+    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::RhiView* newView,
                  QObject* parent = nullptr);
     ~SketchEditor() override;
 
@@ -290,6 +291,7 @@ private:
               bool selectable);
 
     DesignSession& m_session;
+    const Scene& m_scene;
     viewer::OcctViewWidget* m_view;
     render::RhiView* m_newView;
     bool m_cameraInput = false;

@@ -369,7 +369,7 @@ std::optional<Id> SketchEditor::constraintOnScreen(QPointF pos) const
     std::optional<Id> onPanel;
     double panelBest = std::numeric_limits<double>::infinity();
     const auto considerPanel = [&](Id id, const QRectF& rect) {
-        if (!rect.contains(pos)) {
+        if (id == 0 || !rect.contains(pos)) {
             return;
         }
         if (const double d = sketch::distance(Vec2{rect.center().x(), rect.center().y()}, cursor); d < panelBest) {

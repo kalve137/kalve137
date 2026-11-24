@@ -6,6 +6,7 @@
 #include "core/serialization.h"
 #include "core/shape_store.h"
 #include "geometry/shapes.h"
+#include "same_document.h"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -124,32 +125,6 @@ std::string readText(const std::filesystem::path& path)
     return text.str();
 }
 
-void expectSameDocument(const nlohmann::json& shipped, const nlohmann::json& built, const std::string& path)
-{
-    constexpr double kRelativeTolerance = 1e-12;
-    if (shipped.is_number() && built.is_number()) {
-        const double a = shipped.get<double>();
-        const double b = built.get<double>();
-        EXPECT_LE(std::abs(a - b), kRelativeTolerance * std::max(1.0, std::abs(b))) << path;
-        return;
-    }
-    ASSERT_EQ(shipped.type(), built.type()) << path;
-    if (shipped.is_object()) {
-        ASSERT_EQ(shipped.size(), built.size()) << path;
-        for (const auto& [key, value] : built.items()) {
-            ASSERT_TRUE(shipped.contains(key)) << path << "/" << key;
-            expectSameDocument(shipped.at(key), value, path + "/" + key);
-        }
-    } else if (shipped.is_array()) {
-        ASSERT_EQ(shipped.size(), built.size()) << path;
-        for (std::size_t i = 0; i < built.size(); ++i) {
-            expectSameDocument(shipped.at(i), built.at(i), path + "/" + std::to_string(i));
-        }
-    } else {
-        EXPECT_EQ(shipped, built) << path;
-    }
-}
-
 } // namespace
 
 TEST(Sample, DodecahedronBuildsFromSixSlabs)
@@ -176,7 +151,7 @@ TEST(Sample, ShippedDodecahedronMatchesItsRecipe)
         std::ofstream(kSamplePath, std::ios::binary) << expected;
     }
     ASSERT_TRUE(std::filesystem::exists(kSamplePath)) << "Run with KALVE137_UPDATE_SAMPLES=1 to write it";
-    expectSameDocument(nlohmann::json::parse(readText(kSamplePath)), nlohmann::json::parse(expected), "");
+    test::expectSameDocument(nlohmann::json::parse(readText(kSamplePath)), nlohmann::json::parse(expected), "");
     if (HasFailure()) {
         ADD_FAILURE() << "Run with KALVE137_UPDATE_SAMPLES=1 to refresh it";
     }

@@ -48,9 +48,10 @@ namespace kalve137::app {
 
 using namespace sketch_editor_detail;
 
-SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, render::RhiView* newView,
-                           QObject* parent)
-    : QObject(parent), m_session(session), m_view(view), m_newView(newView), m_cameraInput(newView != nullptr)
+SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view,
+                           render::RhiView* newView, QObject* parent)
+    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_newView(newView),
+      m_cameraInput(newView != nullptr)
 {
     m_valueEditor = new QLineEdit(canvas());
     m_valueEditor->setObjectName("dimensionEditor");
@@ -507,30 +508,23 @@ void SketchEditor::seed()
 {
     const core::SketchFeature* data = feature();
     m_current = data->sketch;
+    if (data->projections.empty()) {
+        return;
+    }
     const auto state = m_session.model().sketches.find(m_sketchId);
     if (state == m_session.model().sketches.end()) {
         return;
     }
     const sketch::Sketch& solved = state->second.solved;
-    const auto copyPoint = [&](Id id) {
-        const sketch::Point* from = solved.point(id);
-        sketch::Point* to = m_current.point(id);
-        if (from != nullptr && to != nullptr) {
-            to->pos = from->pos;
+    for (const auto& [id, from] : solved.points()) {
+        if (sketch::Point* to = m_current.point(id)) {
+            to->pos = from.pos;
         }
-    };
-    for (const core::Projection& link : data->projections) {
-        if (link.curve == 0) {
-            copyPoint(link.point);
-            continue;
+    }
+    for (const auto& [id, from] : solved.curves()) {
+        if (sketch::Curve* to = m_current.curve(id)) {
+            to->radius = from.radius;
         }
-        sketch::Curve* curve = m_current.curve(link.curve);
-        const sketch::Curve* from = solved.curve(link.curve);
-        if (curve == nullptr || from == nullptr) {
-            continue;
-        }
-        curve->radius = from->radius;
-        std::ranges::for_each(curve->points, copyPoint);
     }
 }
 
@@ -968,7 +962,15 @@ void SketchEditor::editDimension(Id constraint, QPointF pos)
                 emit message(tr("Dimensions must be greater than zero"));
                 return;
             }
-            commit(tr("Edit Dimension"), build(typed, typedExpression));
+            sketch::Sketch candidate = build(typed, typedExpression);
+            if (kind == ConstraintKind::Offset) {
+                sketch::Sketch probe = candidate;
+                if (!sketch::solve(probe).solved) {
+                    emit message(tr("A %1 mm offset doesn't fit these curves").arg(formatValue(typed)));
+                    return;
+                }
+            }
+            commit(tr("Edit Dimension"), std::move(candidate));
         },
         [build](double typed) { return build(typed, {}); }, expression);
 }

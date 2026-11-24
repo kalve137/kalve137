@@ -42,25 +42,14 @@ std::pair<int, int> wordAtCursor(const QLineEdit& edit)
 
 TypedValue readTyped(const QString& text, core::Quantity quantity, const ParameterSource& source)
 {
-    TypedValue typed;
     const std::string utf8 = text.trimmed().toStdString();
+    std::optional<core::ParameterValues> values;
     if (source && core::namesParameter(utf8)) {
-        const std::optional<core::ParameterValues> values = source();
-        const core::ExpressionScope scope{values ? &*values : nullptr, {}};
-        core::ExpressionResult result = core::evaluateField(utf8, quantity, scope);
-        typed.value = result.value;
-        typed.canonical = std::move(result.canonical);
-        typed.error = std::move(result.error);
-        return typed;
+        values = source();
     }
-    if (const std::optional<double> parsed = parseValue(text, quantity)) {
-        typed.value = *parsed;
-    } else {
-        typed.error =
-            core::ExpressionError{"value", QObject::tr("Can't read this as a value").toStdString(),
-                                  QObject::tr("Type a number or an expression, such as 30/2 or 1in").toStdString()};
-    }
-    return typed;
+    const core::ExpressionScope scope{values ? &*values : nullptr, {}};
+    core::ExpressionResult result = core::evaluateField(utf8, quantity, scope);
+    return {.value = result.value, .canonical = std::move(result.canonical), .error = std::move(result.error)};
 }
 
 QString describeError(const core::ExpressionError& error)

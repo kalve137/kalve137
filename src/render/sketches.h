@@ -59,6 +59,7 @@ struct SketchGeometry {
     std::vector<MarkerItem> markers;
     std::vector<SketchKey> keys;
     std::vector<std::uint32_t> exactIds;
+    bool capped = false;
 
     bool drawsLike(const SketchGeometry& other) const
     {

@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -178,6 +179,7 @@ TEST_F(ProjectTest, IgnoresLaterBodiesAndRefusesSlantedFacesWithAReason)
     homeView(*ui);
 
     ui->click(gp_Pnt(40, 0, 10));
+    EXPECT_TRUE(ui->statusText().contains(QStringLiteral("project them"))) << ui->statusText().toStdString();
     EXPECT_EQ(projections(*ui), 0U);
 
     ui->click(gp_Pnt(0, -kBlockDepth / 2, kBlockHeight / 2));
@@ -224,6 +226,121 @@ TEST_F(ProjectTest, BreakLinkKeepsTheCurveAndDeleteDropsTheLink)
     data = sketchOf(*ui, design.sketch);
     EXPECT_TRUE(data->projections.empty());
     EXPECT_EQ(data->sketch.curve(kept), nullptr);
+}
+
+TEST_F(ProjectTest, PickAgainMovesALostLinkToANewEdgeWithOneUndoStep)
+{
+    Design design = projectedAndLost();
+    ui->session().reset(std::move(design.doc), {});
+    homeView(*ui);
+    ui->window().beginSketch(design.sketch);
+    const sketch::Id lost = sketchOf(*ui, design.sketch)->projections[1].curve;
+    auto* editor = ui->window().findChild<app::SketchEditor*>();
+    ASSERT_NE(editor, nullptr);
+
+    ui->click(gp_Pnt(0, kLostY, kAbove));
+    ASSERT_EQ(editor->hitAt(ui->at(gp_Pnt(0, kLostY, kAbove))).id, lost);
+    ui->trigger("Pick Again");
+    EXPECT_EQ(editor->tool(), app::SketchEditor::Tool::Project);
+    EXPECT_TRUE(editor->hint().contains(QStringLiteral("should follow"))) << editor->hint().toStdString();
+
+    homeView(*ui);
+    ui->click(kTopFrontEdge);
+    ui->save("picked again");
+    ASSERT_EQ(editor->tool(), app::SketchEditor::Tool::Select) << ui->statusText().toStdString();
+    EXPECT_EQ(ui->action("Undo")->text(), QStringLiteral("Undo Pick Again"));
+    const core::SketchFeature* data = sketchOf(*ui, design.sketch);
+    ASSERT_EQ(data->projections.size(), 2U);
+    EXPECT_EQ(data->projections[1].curve, lost);
+    for (const sketch::Id id : data->sketch.curve(lost)->points) {
+        EXPECT_NEAR(data->sketch.point(id)->pos.y, -kBlockDepth / 2, kTolerance);
+    }
+    EXPECT_TRUE(ui->session().model().sketches.at(design.sketch).lostProjections.empty());
+    EXPECT_EQ(ui->session().model().status.at(design.sketch).health, core::FeatureHealth::Ok);
+
+    ui->trigger("Undo Pick Again");
+    EXPECT_EQ(ui->session().model().sketches.at(design.sketch).lostProjections.size(), 1U);
+}
+
+TEST_F(ProjectTest, ProjectsAVertexAsAFixedPoint)
+{
+    block(*ui);
+    startSketch(*ui, "Project");
+    homeView(*ui);
+    const gp_Pnt corner(kBlockWidth / 2, -kBlockDepth / 2, kBlockHeight);
+    ui->click(corner);
+    ui->save("projected vertex");
+    ASSERT_EQ(projections(*ui), 1U) << ui->statusText().toStdString();
+    const core::SketchFeature* data = sketchOf(*ui, editedSketch(*ui));
+    const core::Projection& link = data->projections[0];
+    EXPECT_EQ(link.kind, core::ProjectionKind::Vertex);
+    EXPECT_EQ(link.curve, 0U);
+    const sketch::Point* point = data->sketch.point(link.point);
+    ASSERT_NE(point, nullptr);
+    EXPECT_TRUE(point->projected);
+    EXPECT_TRUE(point->fixed);
+    EXPECT_NEAR(point->pos.x, kBlockWidth / 2, kTolerance);
+    EXPECT_NEAR(point->pos.y, -kBlockDepth / 2, kTolerance);
+}
+
+TEST_F(ProjectTest, KeepsProjectingAfterAnUndoFromOutsideTheTool)
+{
+    block(*ui);
+    startSketch(*ui, "Project");
+    homeView(*ui);
+    const auto* editor = ui->window().findChild<app::SketchEditor*>();
+    ASSERT_NE(editor, nullptr);
+    const std::size_t curves = editor->shownSketch().curves().size();
+    ui->click(kTopFrontEdge);
+    ASSERT_EQ(projections(*ui), 1U) << ui->statusText().toStdString();
+
+    ui->session().undo();
+    ui->settle();
+    EXPECT_EQ(projections(*ui), 0U);
+    EXPECT_EQ(editor->tool(), app::SketchEditor::Tool::Project);
+    EXPECT_EQ(editor->shownSketch().curves().size(), curves);
+
+    ui->click(kTopFrontEdge);
+    EXPECT_EQ(projections(*ui), 1U) << ui->statusText().toStdString();
+    EXPECT_EQ(ui->action("Undo")->text(), QStringLiteral("Undo Project"));
+}
+
+TEST_F(ProjectTest, FixRefusesProjectedCurves)
+{
+    Design design = projectedAndLost();
+    ui->session().reset(std::move(design.doc), {});
+    homeView(*ui);
+    ui->window().beginSketch(design.sketch);
+    const sketch::Id kept = sketchOf(*ui, design.sketch)->projections[0].curve;
+
+    ui->trigger("Fix");
+    ui->click(gp_Pnt(0, -kBlockDepth / 2, kAbove));
+    EXPECT_EQ(ui->statusText(), QStringLiteral("Projected curves follow the model. Break the link first"));
+    const sketch::Curve* curve = sketchOf(*ui, design.sketch)->sketch.curve(kept);
+    ASSERT_NE(curve, nullptr);
+    EXPECT_TRUE(curve->fixed);
+    EXPECT_TRUE(curve->projected);
+}
+
+TEST_F(ProjectTest, OpensLinkedSketchesOnTheModelSolve)
+{
+    Design design = projectedAndLost();
+    auto& data = std::get<core::SketchFeature>(design.doc.find(design.sketch)->data);
+    const sketch::Id anchor = data.sketch.curve(data.projections[0].curve)->points[0];
+    const sketch::Id free = data.sketch.addPoint({5.0, 5.0});
+    data.sketch.addConstraint(sketch::ConstraintKind::Coincident, {free, anchor});
+    ui->session().reset(std::move(design.doc), {});
+    homeView(*ui);
+    ui->window().beginSketch(design.sketch);
+
+    const sketch::Sketch& solved = ui->session().model().sketches.at(design.sketch).solved;
+    const auto* editor = ui->window().findChild<app::SketchEditor*>();
+    ASSERT_NE(editor, nullptr);
+    const sketch::Point* shown = editor->shownSketch().point(free);
+    ASSERT_NE(shown, nullptr);
+    EXPECT_NEAR(shown->pos.x, solved.point(free)->pos.x, kTolerance);
+    EXPECT_NEAR(shown->pos.y, solved.point(free)->pos.y, kTolerance);
+    EXPECT_NEAR(shown->pos.y, -kBlockDepth / 2, kTolerance);
 }
 
 void lookDown(app::MainWindow& window)
@@ -303,9 +420,10 @@ protected:
 
 TEST_F(ProjectPairTest, ProjectedCurvesDrawInTheirColorAndLostOnesInTheConflictColor)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     const Shots shots = grabPair(*m_old, *m_new, lookDown);
     savePair(shots, m_folder, "projected and lost");
     const double ratio = shots.viewport.pixelRatio;

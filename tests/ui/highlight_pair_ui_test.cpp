@@ -422,8 +422,8 @@ protected:
 
 TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
     const std::filesystem::path folder = pairFolder("HighlightPairTest");
     std::filesystem::create_directories(folder);
@@ -433,9 +433,7 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
     m_rules << "rule\texpected\tnew\tgap\n";
 
     m_new = showPairWindow(app::ViewKind::New);
-    if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
-        GTEST_SKIP() << "The new view did not start";
-    }
+    ASSERT_TRUE(m_new->newView() != nullptr && m_new->newView()->isReady()) << kNewViewDidNotStart;
     m_old = showPairWindow(app::ViewKind::Old);
     ASSERT_TRUE(m_old->oldView()->isReady());
     for (app::MainWindow* window : {m_old.get(), m_new.get()}) {

@@ -11,6 +11,7 @@
 #include <locale>
 #include <memory>
 #include <numbers>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -19,11 +20,23 @@ namespace kalve137::core {
 
 namespace {
 
-constexpr std::array<std::string_view, 10> kUnits{"mm", "cm", "m", "in", "deg", "rad", "mm2", "cm2", "mm3", "cm3"};
+constexpr std::array<std::string_view, 24> kKeywords{
+    "part", "param", "sketch",   "on",      "rect", "circle", "center", "size", "point", "line",  "arc",     "near",
+    "from", "to",    "diameter", "extrude", "cut",  "fillet", "check",  "up",   "down",  "depth", "through", "radius"};
+constexpr std::array<std::string_view, 15> kFeatureKinds{"sketch", "extrude", "revolve", "fillet", "chamfer",
+                                                         "shell",  "pattern", "import",  "plane",  "offset_face",
+                                                         "hole",   "move",    "axis",    "point",  "appearance"};
 constexpr std::array<std::string_view, 5> kPlainOnlyFunctions{"sqrt", "sin", "cos", "tan", "pi"};
 constexpr std::array<std::string_view, 2> kPlainOnlyUnits{"um", "ft"};
 constexpr std::string_view kPlainOnlyMessage = "sqrt, sin, cos, tan, pi and ^ work only in a value without names";
 constexpr std::string_view kPlainOnlyHint = "Work that part out as a number or put it in its own parameter";
+constexpr std::string_view kPieces = "pieces";
+constexpr std::string_view kPiecesMessage = " only counts the pieces a pick chooses among";
+constexpr std::string_view kPiecesHint = "Use a plain number here, like 4";
+constexpr std::string_view kUnreadableMessage = "Can't read this as a value";
+constexpr std::string_view kUnreadableHint = "Type a number or an expression, such as 30/2 or 1in";
+
+constexpr double kDegreesPerRadian = 180.0 / std::numbers::pi;
 
 struct UnitInfo {
     std::string_view name;
@@ -32,17 +45,13 @@ struct UnitInfo {
 };
 
 constexpr UnitInfo kUnitTable[] = {
-    {"mm", 1.0, {1, 0}},
-    {"cm", 10.0, {1, 0}},
-    {"m", 1000.0, {1, 0}},
-    {"in", 25.4, {1, 0}},
-    {"deg", std::numbers::pi / 180.0, {0, 1}},
-    {"rad", 1.0, {0, 1}},
-    {"mm2", 1.0, {2, 0}},
-    {"cm2", 100.0, {2, 0}},
-    {"mm3", 1.0, {3, 0}},
-    {"cm3", 1000.0, {3, 0}},
+    {"mm", 1.0, {1, 0}},     {"cm", 10.0, {1, 0}},    {"m", 1000.0, {1, 0}},
+    {"in", 25.4, {1, 0}},    {"deg", 1.0, {0, 1}},    {"rad", kDegreesPerRadian, {0, 1}},
+    {"mm2", 1.0, {2, 0}},    {"cm2", 100.0, {2, 0}},  {"mm3", 1.0, {3, 0}},
+    {"cm3", 1000.0, {3, 0}}, {"pieces", 1.0, {0, 0}},
 };
+
+constexpr int kMaxDecimals = 40;
 
 const UnitInfo& unitInfo(std::string_view unit)
 {
@@ -57,18 +66,40 @@ const UnitInfo& unitInfo(std::string_view unit)
 
 bool isUnit(std::string_view word)
 {
-    return std::find(kUnits.begin(), kUnits.end(), word) != kUnits.end();
+    return std::any_of(std::begin(kUnitTable), std::end(kUnitTable),
+                       [word](const UnitInfo& info) { return info.name == word; });
+}
+
+char lower(char c)
+{
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+bool sameWord(std::string_view a, std::string_view b)
+{
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) { return lower(x) == lower(y); });
+}
+
+template <std::size_t N>
+bool listsWord(const std::array<std::string_view, N>& words, std::string_view word)
+{
+    return std::any_of(words.begin(), words.end(), [word](std::string_view entry) { return sameWord(entry, word); });
 }
 
 bool isPlainOnlyFunction(std::string_view word)
 {
-    return std::find(kPlainOnlyFunctions.begin(), kPlainOnlyFunctions.end(), word) != kPlainOnlyFunctions.end();
+    return listsWord(kPlainOnlyFunctions, word);
 }
 
 bool isPlainOnlyWord(std::string_view word)
 {
-    return isPlainOnlyFunction(word) ||
-           std::find(kPlainOnlyUnits.begin(), kPlainOnlyUnits.end(), word) != kPlainOnlyUnits.end();
+    return isPlainOnlyFunction(word) || listsWord(kPlainOnlyUnits, word);
+}
+
+bool lists(std::span<const std::string_view> words, std::string_view word)
+{
+    return std::find(words.begin(), words.end(), word) != words.end();
 }
 
 std::string withArticle(const std::string& noun)
@@ -108,19 +139,19 @@ bool isPlaneName(std::string_view word)
     return word == "XY" || word == "XZ" || word == "YZ";
 }
 
+bool isDigit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
 bool identStart(char c)
 {
-    return std::isalpha(static_cast<unsigned char>(c)) != 0 || c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 bool identChar(char c)
 {
-    return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
-}
-
-bool isDigit(char c)
-{
-    return std::isdigit(static_cast<unsigned char>(c)) != 0;
+    return identStart(c) || isDigit(c);
 }
 
 std::optional<double> parseNumber(const std::string& text)
@@ -132,6 +163,23 @@ std::optional<double> parseNumber(const std::string& text)
         return std::nullopt;
     }
     return value;
+}
+
+std::optional<std::string> fixedText(double value)
+{
+    if (value == 0.0) {
+        return "0";
+    }
+    for (int precision = 0; precision <= kMaxDecimals; ++precision) {
+        std::ostringstream stream;
+        stream.imbue(std::locale::classic());
+        stream << std::fixed << std::setprecision(precision) << value;
+        const std::optional<double> back = parseNumber(stream.str());
+        if (back && *back == value) {
+            return stream.str();
+        }
+    }
+    return std::nullopt;
 }
 
 std::string unitFor(Dim dim)
@@ -223,8 +271,7 @@ std::vector<Token> lex(std::string_view source, std::vector<ExpressionError>& er
         if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
             ++i;
         } else if (c == '#' || (c == '/' && i + 1 < source.size() && source[i + 1] == '/')) {
-            errors.push_back({"comment", "Comments are not part of a design",
-                              "Say it as a name or a check, which the machine can hold you to"});
+            errors.push_back({"comment", "Comments are not part of a value", {}});
             i = source.size();
         } else if (identStart(c)) {
             std::size_t end = i;
@@ -296,7 +343,7 @@ private:
     {
         switch (token.kind) {
         case Token::Kind::End:
-            return "the end of the file";
+            return "the end";
         case Token::Kind::Ident:
         case Token::Kind::Number:
         case Token::Kind::Punct:
@@ -370,6 +417,10 @@ private:
             if (!value) {
                 throw SyntaxError("number", "'" + token.text + "' is not a number");
             }
+            if (!fixedText(*value)) {
+                throw SyntaxError("number", "This number is too close to zero",
+                                  "Use at most " + std::to_string(kMaxDecimals) + " decimal places");
+            }
             result->kind = Expr::Kind::Number;
             result->number = *value;
             if (peek().kind == Token::Kind::Ident && isUnit(peek().text)) {
@@ -385,6 +436,9 @@ private:
         }
         if (token.kind != Token::Kind::Ident) {
             fail("a value");
+        }
+        if (token.text == kPieces) {
+            throw SyntaxError("pick", "'" + token.text + "'" + std::string(kPiecesMessage), std::string(kPiecesHint));
         }
         if (isUnit(token.text)) {
             throw SyntaxError("reserved", "'" + token.text + "' is a unit and needs a number before it");
@@ -485,9 +539,31 @@ bool plainNumber(const Expr& expr)
     return expr.kind == Expr::Kind::Number && expr.unit.empty();
 }
 
-Expr& literalOf(Expr& expr)
+bool bareSum(const Expr& expr)
 {
-    return expr.kind == Expr::Kind::Unary ? *expr.args[0] : expr;
+    switch (expr.kind) {
+    case Expr::Kind::Number:
+        return expr.unit.empty();
+    case Expr::Kind::Unary:
+        return bareSum(*expr.args[0]);
+    case Expr::Kind::Binary:
+        return (expr.op == '+' || expr.op == '-') && bareSum(*expr.args[0]) && bareSum(*expr.args[1]);
+    case Expr::Kind::Name:
+    case Expr::Kind::Path:
+    case Expr::Kind::Call:
+        return false;
+    }
+    return false;
+}
+
+void giveUnit(Expr& expr, const std::string& unit)
+{
+    if (expr.kind == Expr::Kind::Number) {
+        expr.unit = unit;
+    }
+    for (const ExprPtr& child : expr.args) {
+        giveUnit(*child, unit);
+    }
 }
 
 struct Type {
@@ -505,6 +581,10 @@ public:
         switch (expr.kind) {
         case Expr::Kind::Number: {
             Type type{false};
+            if (expr.unit == kPieces) {
+                error("pick", "'" + format(expr) + "'" + std::string(kPiecesMessage), std::string(kPiecesHint));
+                return {};
+            }
             if (expr.unit.empty()) {
                 type.anyDim = expr.number == 0.0;
             } else {
@@ -561,7 +641,7 @@ private:
         if (m_scope.values != nullptr) {
             const auto found = m_scope.values->find(expr.text);
             if (found != m_scope.values->end()) {
-                return {false, found->second.dim};
+                return {false, found->second.dim, found->second.anyDim};
             }
         }
         error("unknown-name", "Unknown name '" + expr.text + "'", suggestion(expr.text));
@@ -602,11 +682,11 @@ private:
             if (!left.anyDim && !right.anyDim && !(left.dim == right.dim)) {
                 Expr& lhs = *expr.args[0];
                 Expr& rhs = *expr.args[1];
-                if (left.dim == kPlainDim && plainNumber(lhs) && takesFieldUnit(right.dim)) {
-                    literalOf(lhs).unit = unitFor(right.dim);
+                if (left.dim == kPlainDim && bareSum(lhs) && takesFieldUnit(right.dim)) {
+                    giveUnit(lhs, unitFor(right.dim));
                     left.dim = right.dim;
-                } else if (right.dim == kPlainDim && plainNumber(rhs) && takesFieldUnit(left.dim)) {
-                    literalOf(rhs).unit = unitFor(left.dim);
+                } else if (right.dim == kPlainDim && bareSum(rhs) && takesFieldUnit(left.dim)) {
+                    giveUnit(rhs, unitFor(left.dim));
                     right.dim = left.dim;
                 } else {
                     error("units",
@@ -696,6 +776,14 @@ ParameterValue evaluate(const Expr& expr, const ParameterValues& params)
     throw EvalError("Cannot evaluate this expression");
 }
 
+bool usesPieces(std::string_view text)
+{
+    std::vector<ExpressionError> errors;
+    const std::vector<Token> tokens = lex(text, errors);
+    return std::ranges::any_of(
+        tokens, [](const Token& token) { return token.kind == Token::Kind::Ident && token.text == kPieces; });
+}
+
 struct Checked {
     ExprPtr expr;
     Type type;
@@ -738,6 +826,7 @@ Checked parseAndCheck(std::string_view text, const ExpressionScope& scope)
         }
         checked.result.value = value.value;
         checked.result.dim = checked.type.anyDim ? kPlainDim : value.dim;
+        checked.result.anyDim = checked.type.anyDim;
     } catch (const EvalError& error) {
         checked.result.error = ExpressionError{"build", error.what(), {}};
     }
@@ -774,6 +863,14 @@ std::optional<ExpressionError> checkParameterName(std::string_view name)
     }
     if (isPlainOnlyWord(name)) {
         return ExpressionError{"reserved", "'" + text + "' is a function or unit of plain values", "Pick another name"};
+    }
+    if (lists(kKeywords, name)) {
+        return ExpressionError{"reserved", "'" + text + "' is a keyword and cannot name a parameter",
+                               "Pick another name"};
+    }
+    if (lists(kFeatureKinds, name)) {
+        return ExpressionError{"reserved", "'" + text + "' is a kind of feature and cannot name a parameter",
+                               "Pick another name"};
     }
     return std::nullopt;
 }
@@ -821,11 +918,11 @@ ExpressionResult evaluateParameter(std::string_view text, const ExpressionScope&
 ExpressionResult evaluateField(std::string_view text, Quantity quantity, const ExpressionScope& scope)
 {
     const Dim want = dimOf(quantity);
-    if (!namesParameter(text)) {
+    if (!namesParameter(text) && !usesPieces(text)) {
         ExpressionResult result;
         const std::optional<double> value = evaluate(text, quantity);
         if (!value) {
-            result.error = ExpressionError{"value", "Can't read this as a value", {}};
+            result.error = ExpressionError{"value", std::string(kUnreadableMessage), std::string(kUnreadableHint)};
             return result;
         }
         result.value = *value;
@@ -841,7 +938,7 @@ ExpressionResult evaluateField(std::string_view text, Quantity quantity, const E
         std::string hint;
         if (result.dim == kPlainDim && want != kPlainDim) {
             if (checked.expr->kind == Expr::Kind::Name) {
-                hint = "Param " + checked.expr->text + " has no unit. Add one where it is defined, like 10 " +
+                hint = "Parameter " + checked.expr->text + " has no unit. Add one where it is defined, like 10 " +
                        unitFor(want);
             } else {
                 hint = "Write " + result.canonical + " " + unitFor(want);
@@ -850,9 +947,6 @@ ExpressionResult evaluateField(std::string_view text, Quantity quantity, const E
         result.error = ExpressionError{
             "units", "Needs " + withArticle(describeDim(want)) + ", not " + withArticle(describeDim(result.dim)), hint};
         return result;
-    }
-    if (quantity == Quantity::Angle) {
-        result.value *= 180.0 / std::numbers::pi;
     }
     result.dim = want;
     return result;
@@ -887,30 +981,18 @@ std::string renameInExpression(std::string_view canonical, std::string_view from
 
 std::string formatNumber(double value)
 {
-    if (value == 0.0) {
-        return "0";
-    }
-    for (int precision = 0; precision <= 40; ++precision) {
-        std::ostringstream stream;
-        stream.imbue(std::locale::classic());
-        stream << std::fixed << std::setprecision(precision) << value;
-        const std::optional<double> back = parseNumber(stream.str());
-        if (back && *back == value) {
-            return stream.str();
-        }
+    if (std::optional<std::string> text = fixedText(value)) {
+        return *text;
     }
     std::ostringstream stream;
     stream.imbue(std::locale::classic());
-    stream << std::setprecision(17) << value;
-    return stream.str();
+    stream << std::fixed << std::setprecision(kMaxDecimals) << value;
+    const std::optional<double> back = parseNumber(stream.str());
+    return back && *back != 0.0 ? stream.str() : "0";
 }
 
 std::string formatParameterValue(const ParameterValue& value)
 {
-    if (value.dim == kAngleDim) {
-        const double degrees = std::round(value.value * 180.0 / std::numbers::pi * 1000.0) / 1000.0;
-        return formatNumber(degrees == 0.0 ? 0.0 : degrees) + " deg";
-    }
     const double rounded = std::round(value.value * 1000.0) / 1000.0;
     const std::string text = formatNumber(rounded == 0.0 ? 0.0 : rounded);
     const std::string unit = unitFor(value.dim);

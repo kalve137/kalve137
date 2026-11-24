@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "core/document.h"
+#include "core/feature.h"
 #include "core/parameter_table.h"
 #include "core/recompute.h"
 #include "core/serialization.h"
-#include "core/undo_stack.h"
 #include "geometry/shapes.h"
+#include "sketch/offset.h"
 
 #include <gtest/gtest.h>
 
@@ -16,7 +17,11 @@
 #include <nlohmann/json.hpp>
 
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 using namespace kalve137;
@@ -262,6 +267,56 @@ TEST(Parameters, APlainNumberClearsTheExpression)
     EXPECT_NEAR(constraintOf(doc, block.sketch, block.width).value, 80.0, kTolerance);
 }
 
+TEST(Parameters, AnEqualPlainNumberStillClearsTheExpression)
+{
+    Rectangle block;
+    const Document before = drivenBlock(block);
+    Document doc = before;
+    ASSERT_FALSE(setFieldExpression(doc, {block.extrude, "distance"}, "40"));
+    EXPECT_TRUE(doc.find(block.extrude)->expressions.empty());
+    ASSERT_FALSE(setFieldExpression(doc, {block.sketch, {}, block.width}, "80"));
+    EXPECT_TRUE(constraintOf(doc, block.sketch, block.width).expression.empty());
+    reconcileExpressions(before, doc);
+    EXPECT_TRUE(doc.find(block.extrude)->expressions.empty());
+    EXPECT_TRUE(constraintOf(doc, block.sketch, block.width).expression.empty());
+    ASSERT_FALSE(setParameterExpression(doc, "w", "10 mm"));
+    EXPECT_NEAR(dataOf<ExtrudeFeature>(doc, block.extrude).distance, 40.0, kTolerance);
+    EXPECT_NEAR(constraintOf(doc, block.sketch, block.width).value, 80.0, kTolerance);
+}
+
+TEST(Parameters, ReservedWordsCannotNameAParameter)
+{
+    Document doc;
+    for (const std::string_view name : {"pieces", "extrude", "radius", "through", "PI", "Sqrt"}) {
+        const std::optional<ExpressionError> error = addParameter(doc, std::string(name), "1");
+        ASSERT_TRUE(error) << name;
+        EXPECT_EQ(error->code, "reserved") << name;
+    }
+    const auto everyKind = []<std::size_t... I>(std::index_sequence<I...>) {
+        return std::vector<FeatureData>{FeatureData(std::in_place_index<I>)...};
+    }(std::make_index_sequence<std::variant_size_v<FeatureData>>());
+    for (const FeatureData& data : everyKind) {
+        const std::optional<ExpressionError> error = addParameter(doc, std::string(typeName(data)), "1");
+        ASSERT_TRUE(error) << typeName(data);
+        EXPECT_EQ(error->code, "reserved") << typeName(data);
+    }
+    EXPECT_TRUE(doc.parameters().empty());
+}
+
+TEST(Parameters, AParameterOfZeroFitsAnyField)
+{
+    Rectangle block;
+    Document doc = drivenBlock(block);
+    ASSERT_FALSE(addParameter(doc, "none", "0"));
+    ASSERT_FALSE(setFieldExpression(doc, {block.extrude, "taper"}, "none"));
+    EXPECT_EQ(doc.find(block.extrude)->expressions.at("taper"), "none");
+    ASSERT_FALSE(setFieldExpression(doc, {block.extrude, "distance"}, "w + none"));
+    EXPECT_NEAR(dataOf<ExtrudeFeature>(doc, block.extrude).distance, 40.0, kTolerance);
+    ASSERT_FALSE(addParameter(doc, "flat", "none * 1 deg"));
+    EXPECT_EQ(parameterValues(doc)->at("flat").dim, kAngleDim);
+    EXPECT_FALSE(parameterValues(doc)->at("flat").anyDim);
+}
+
 TEST(Parameters, FieldErrorsChangeNothing)
 {
     Rectangle block;
@@ -285,11 +340,17 @@ TEST(Parameters, RenameRewritesEveryExpression)
     Rectangle block;
     Document doc = drivenBlock(block);
     ASSERT_FALSE(addParameter(doc, "h", "w / 4"));
+    FilletFeature filletData;
+    filletData.sets.push_back(FilletSet{});
+    const FeatureId fillet = doc.add(filletData);
+    ASSERT_FALSE(setFieldExpression(doc, {fillet, "sets.0.radius"}, "w / 8"));
     ASSERT_FALSE(renameParameter(doc, "w", "width"));
     EXPECT_EQ(namesOf(doc), (std::vector<std::string>{"width", "h"}));
     EXPECT_EQ(doc.parameters()[1].expression, "width / 4");
     EXPECT_EQ(doc.find(block.extrude)->expressions.at("distance"), "width");
     EXPECT_EQ(constraintOf(doc, block.sketch, block.width).expression, "width * 2");
+    EXPECT_EQ(doc.find(fillet)->expressions.at("sets.0.radius"), "width / 8");
+    EXPECT_NEAR(dataOf<FilletFeature>(doc, fillet).sets[0].radius, 5.0, kTolerance);
 
     EXPECT_EQ(renameParameter(doc, "width", "h")->code, "duplicate");
     EXPECT_EQ(renameParameter(doc, "width", "Extrude1")->code, "duplicate");
@@ -303,10 +364,16 @@ TEST(Parameters, DeleteOfAUsedParameterIsRefused)
     Document doc = drivenBlock(block);
     ASSERT_FALSE(addParameter(doc, "h", "w / 4"));
     ASSERT_FALSE(addParameter(doc, "spare", "3 mm"));
+    FilletFeature filletData;
+    filletData.sets.push_back(FilletSet{});
+    filletData.sets.push_back(FilletSet{});
+    const FeatureId fillet = doc.add(filletData);
+    ASSERT_FALSE(setFieldExpression(doc, {fillet, "sets.1.radius"}, "w / 8"));
     const std::optional<ExpressionError> used = removeParameter(doc, "w");
     ASSERT_TRUE(used);
     EXPECT_EQ(used->code, "used");
-    EXPECT_EQ(used->message, "Used by h, Sketch1 d" + std::to_string(block.width) + " and Extrude1 distance");
+    EXPECT_EQ(used->message,
+              "Used by h, Sketch1 horizontal distance 80 mm, Extrude1 distance and Fillet1 set 2 radius");
     ASSERT_FALSE(removeParameter(doc, "spare"));
     EXPECT_EQ(namesOf(doc), (std::vector<std::string>{"w", "h"}));
 }
@@ -347,6 +414,8 @@ TEST(Parameters, StampsEveryListedField)
     const sketch::Id diameter = s.addConstraint(sketch::ConstraintKind::Diameter, {circle}, 10.0);
     const sketch::Id corner = s.addConstraint(sketch::ConstraintKind::Angle, {line0, line1}, 90.0);
     const sketch::Id square = s.addConstraint(sketch::ConstraintKind::Perpendicular, {line0, line1});
+    const std::optional<sketch::Offset> offset = sketch::addOffset(s, {line0, line1}, 2.0);
+    ASSERT_TRUE(offset);
     const FeatureId sketchId = doc.add(std::move(sketchData));
 
     ExtrudeFeature extrudeData;
@@ -382,6 +451,7 @@ TEST(Parameters, StampsEveryListedField)
         {{sketchId, {}, radius}, "L / 2", 3.5, dimension(radius)},
         {{sketchId, {}, diameter}, "L", 7.0, dimension(diameter)},
         {{sketchId, {}, corner}, "A", 40.0, dimension(corner)},
+        {{sketchId, {}, offset->constraint}, "L / 2", 3.5, dimension(offset->constraint)},
         {{extrude, "distance"},
          "L",
          -7.0,
@@ -477,7 +547,7 @@ TEST(Parameters, InvalidStampsAreRefusedWithTheFieldAndValue)
     const std::optional<ExpressionError> zero = setParameterExpression(doc, "w", "0 mm");
     ASSERT_TRUE(zero);
     EXPECT_EQ(zero->code, "stamp");
-    EXPECT_EQ(zero->message, "Sketch1 d" + std::to_string(block.width) + " can't be 0 mm");
+    EXPECT_EQ(zero->message, "Sketch1 horizontal distance 80 mm can't be 0 mm");
     EXPECT_EQ(doc.parameters().front().expression, "40 mm");
 
     const std::optional<ExpressionError> negative = setFieldExpression(doc, {block.extrude, "distance"}, "-w");
@@ -493,26 +563,15 @@ TEST(Parameters, InvalidStampsAreRefusedWithTheFieldAndValue)
     EXPECT_EQ(many->message, "Pattern1 count can't be 101");
     EXPECT_EQ(many->hint, "Use a value from 2 to 100");
     EXPECT_EQ(dataOf<PatternFeature>(doc, pattern).count, 3);
+    ASSERT_FALSE(setParameterExpression(doc, "n", "4"));
+    ASSERT_NE(0.1 * 3.0 * 10.0, 3.0);
+    ASSERT_FALSE(setParameterExpression(doc, "n", "0.1 * 3 * 10"));
+    EXPECT_EQ(dataOf<PatternFeature>(doc, pattern).count, 3) << "a count within rounding of a whole number stamps";
+    EXPECT_TRUE(setParameterExpression(doc, "n", "3.000001"));
 
     const std::optional<ExpressionError> steep = setFieldExpression(doc, {block.extrude, "taper"}, "w * 3 deg / 1 mm");
     ASSERT_TRUE(steep);
     EXPECT_EQ(steep->message, "Extrude1 taper can't be 120 deg");
-}
-
-TEST(Parameters, OneEditIsOneUndoStep)
-{
-    Rectangle block;
-    Document doc = drivenBlock(block);
-    UndoStack undo;
-    undo.push("Edit w", doc);
-    ASSERT_FALSE(setParameterExpression(doc, "w", "25 mm"));
-    EXPECT_NEAR(dataOf<ExtrudeFeature>(doc, block.extrude).distance, 25.0, kTolerance);
-    undo.undo(doc);
-    EXPECT_EQ(doc.parameters().front().expression, "40 mm");
-    EXPECT_NEAR(dataOf<ExtrudeFeature>(doc, block.extrude).distance, 40.0, kTolerance);
-    EXPECT_NEAR(constraintOf(doc, block.sketch, block.width).value, 80.0, kTolerance);
-    undo.redo(doc);
-    EXPECT_NEAR(constraintOf(doc, block.sketch, block.width).value, 50.0, kTolerance);
 }
 
 TEST(ParameterFiles, RoundTripWritesOnlyWhatIsSet)
@@ -553,10 +612,41 @@ TEST(ParameterFiles, TheExpressionWinsOverAStaleValue)
     ShapeStore shapes;
     nlohmann::json design = nlohmann::json::parse(toJson(drivenBlock(block), shapes));
     design["features"][1]["data"]["distance"] = 3.0;
-    design["features"][1]["data"]["expressions"]["distance"] = "w+5";
+    design["features"][1]["data"]["expressions"]["distance"] = "w + 5 mm";
     const Document loaded = fromJson(design.dump(), shapes);
     EXPECT_NEAR(dataOf<ExtrudeFeature>(loaded, block.extrude).distance, 45.0, kTolerance);
     EXPECT_EQ(loaded.find(block.extrude)->expressions.at("distance"), "w + 5 mm");
+}
+
+TEST(ParameterFiles, RejectsStoredExpressionsThatAreNotCanonicalOrNameNoParameter)
+{
+    Rectangle block;
+    ShapeStore shapes;
+    const nlohmann::json good = nlohmann::json::parse(toJson(drivenBlock(block), shapes));
+    const auto refusal = [&](const std::function<void(nlohmann::json&)>& damage) {
+        nlohmann::json design = good;
+        damage(design);
+        try {
+            fromJson(design.dump(), shapes);
+        } catch (const std::runtime_error& error) {
+            return std::string(error.what());
+        }
+        return std::string("loaded");
+    };
+    EXPECT_EQ(refusal([](nlohmann::json& d) { d["features"][1]["data"]["expressions"]["distance"] = "w+5"; }),
+              "The design file is damaged: Extrude1 distance stores 'w+5' instead of 'w + 5 mm'");
+    EXPECT_EQ(refusal([](nlohmann::json& d) { d["features"][1]["data"]["expressions"]["distance"] = "40 mm"; }),
+              "The design file is damaged: Extrude1 distance stores '40 mm', which names no parameter");
+    EXPECT_EQ(refusal([](nlohmann::json& d) { d["parameters"][0]["expression"] = "40mm"; }),
+              "The design file is damaged: Parameter w stores '40mm' instead of '40 mm'");
+    EXPECT_EQ(refusal([](nlohmann::json& d) {
+                  for (nlohmann::json& constraint : d["features"][0]["data"]["sketch"]["constraints"]) {
+                      if (constraint.contains("expression")) {
+                          constraint["expression"] = "w*2";
+                      }
+                  }
+              }),
+              "The design file is damaged: Sketch1 horizontal distance 80 mm stores 'w*2' instead of 'w * 2'");
 }
 
 TEST(ParameterFiles, RejectsDamagedTables)

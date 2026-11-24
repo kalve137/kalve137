@@ -95,7 +95,7 @@ void MainWindow::startCreateSketch()
         }
     }
     m_pickingPlane = true;
-    m_scene->setPickMode(PickMode::Planes);
+    updatePickMode();
     m_view->setGridExtent(previewGridExtent(m_session->model()));
     m_view->setGridLabels(m_preferences.sketchGridLabels);
     updateStatus();
@@ -107,11 +107,25 @@ void MainWindow::stopPickingPlane()
         return;
     }
     m_pickingPlane = false;
-    m_scene->setPickMode(PickMode::None);
+    updatePickMode();
     m_view->setGridExtent(std::nullopt);
     m_view->setGridLabels(false);
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));
     updateStatus();
+}
+
+void MainWindow::updatePickMode()
+{
+    if (m_measurePanel->isActive() || m_featurePanel->isActive()) {
+        return;
+    }
+    if (m_pickingPlane) {
+        m_scene->setPickMode(PickMode::Planes);
+    } else if (m_sketchEditor->isActive() && m_sketchEditor->picksModel()) {
+        m_scene->setPickMode(PickMode::Project);
+    } else {
+        m_scene->setPickMode(PickMode::None);
+    }
 }
 
 void MainWindow::leaveModes()
@@ -146,9 +160,9 @@ void MainWindow::beginSketch(core::FeatureId id)
     const bool alreadySketching = m_sketchEditor->isActive();
     m_featurePanel->cancel();
     stopPickingPlane();
-    m_scene->setPickMode(PickMode::None);
     const gp_Ax3 plane = m_session->sketchPlane(id);
     m_sketchEditor->begin(id);
+    updatePickMode();
     refreshScene();
     m_view->setGridPlane(plane);
     m_view->setGridLabels(m_preferences.sketchGridLabels);
@@ -177,6 +191,7 @@ void MainWindow::finishSketch()
         m_cameraCommands->restoreSavedView();
     }
     m_sketchEditor->end();
+    updatePickMode();
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));
     m_view->setGridLabels(false);
     refreshScene();
@@ -237,7 +252,7 @@ void MainWindow::onViewHover()
 
 void MainWindow::onViewSelection()
 {
-    if (m_projectPicking) {
+    if (m_scene->pickMode() == PickMode::Project) {
         for (const Pick& pick : m_picks->takePicks()) {
             m_sketchEditor->projectPick(pick);
         }

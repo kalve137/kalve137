@@ -31,6 +31,7 @@ public:
     void nameRest(const TopoDS_Shape& shape, const std::string& prefix);
 
     std::vector<std::string> edgeNames(const TopoDS_Shape& shape, const TopoDS_Edge& edge) const;
+    std::vector<std::string> namesAround(const NCollection_List<TopoDS_Shape>& faces) const;
 
 private:
     struct ByAddress {
@@ -42,7 +43,6 @@ private:
     using Map = std::map<Handle(TopoDS_TShape), std::vector<std::string>, ByAddress>;
 
     static void append(Map& map, const TopoDS_Shape& face, const std::string& name);
-    std::vector<std::string> namesAround(const NCollection_List<TopoDS_Shape>& faces) const;
 
     Map m_names;
 };

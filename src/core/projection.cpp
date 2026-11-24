@@ -4,11 +4,13 @@
 #include "core/projection.h"
 
 #include "core/naming.h"
+#include "log/log.h"
 #include "sketch/profiles.h"
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRep_Tool.hxx>
 #include <Precision.hxx>
+#include <Standard_Failure.hxx>
 #include <gp_Circ.hxx>
 
 #include <algorithm>
@@ -36,10 +38,43 @@ bool linksProjected(const sketch::Sketch& sketch, const Projection& link)
 {
     if (link.curve != 0) {
         const sketch::Curve* curve = sketch.curve(link.curve);
-        return curve != nullptr && curve->projected;
+        return curve != nullptr && curve->projected && std::ranges::all_of(curve->points, [&](sketch::Id id) {
+                   const sketch::Point* point = sketch.point(id);
+                   return point != nullptr && point->projected;
+               });
     }
     const sketch::Point* point = sketch.point(link.point);
     return point != nullptr && point->projected;
+}
+
+std::vector<sketch::Id> itemsOf(const sketch::Sketch& sketch, const Projection& link)
+{
+    std::vector<sketch::Id> items{link.curve != 0 ? link.curve : link.point};
+    if (const sketch::Curve* curve = sketch.curve(link.curve)) {
+        items.insert(items.end(), curve->points.begin(), curve->points.end());
+    }
+    return items;
+}
+
+std::set<sketch::Id> coveredBy(const sketch::Sketch& sketch, const std::vector<Projection>& links)
+{
+    std::set<sketch::Id> covered;
+    for (const Projection& link : links) {
+        const std::vector<sketch::Id> items = itemsOf(sketch, link);
+        covered.insert(items.begin(), items.end());
+    }
+    return covered;
+}
+
+void release(sketch::Sketch& sketch, sketch::Id id)
+{
+    if (sketch::Curve* curve = sketch.curve(id)) {
+        curve->projected = false;
+        curve->fixed = false;
+    } else if (sketch::Point* point = sketch.point(id)) {
+        point->projected = false;
+        point->fixed = false;
+    }
 }
 
 sketch::Id addProjectedPoint(sketch::Sketch& sketch, sketch::Vec2 at)
@@ -157,12 +192,43 @@ std::optional<std::string> validateProjections(const SketchFeature& feature)
             return "two projections link the same item";
         }
     }
+    const std::set<sketch::Id> covered = coveredBy(feature.sketch, feature.projections);
+    for (const auto& [id, point] : feature.sketch.points()) {
+        if (point.projected && !covered.contains(id)) {
+            return "a projected point has no projection";
+        }
+    }
+    for (const auto& [id, curve] : feature.sketch.curves()) {
+        if (curve.projected && !covered.contains(id)) {
+            return "a projected curve has no projection";
+        }
+    }
     return std::nullopt;
 }
 
 void dropBrokenProjections(SketchFeature& feature)
 {
-    std::erase_if(feature.projections, [&](const Projection& link) { return !linksProjected(feature.sketch, link); });
+    sketch::Sketch& s = feature.sketch;
+    std::erase_if(feature.projections, [&](const Projection& link) { return !linksProjected(s, link); });
+    const std::set<sketch::Id> covered = coveredBy(s, feature.projections);
+    std::vector<sketch::Id> released;
+    std::vector<sketch::Id> unused;
+    for (const auto& [id, curve] : s.curves()) {
+        if (curve.projected && !covered.contains(id)) {
+            released.push_back(id);
+        }
+    }
+    for (const auto& [id, point] : s.points()) {
+        if (point.projected && !covered.contains(id)) {
+            (s.curvesUsing(id).empty() ? unused : released).push_back(id);
+        }
+    }
+    for (const sketch::Id id : released) {
+        release(s, id);
+    }
+    for (const sketch::Id id : unused) {
+        s.remove(id);
+    }
 }
 
 bool placeProjection(sketch::Sketch& sketch, const Projection& link, const ProjectedEdge& edge)
@@ -211,20 +277,32 @@ bool placeProjection(sketch::Sketch& sketch, const Projection& link, const Proje
     return true;
 }
 
+namespace {
+
+std::optional<ProjectedEdge> follow(ShapeAncestors& ancestors, const Projection& link, const gp_Ax3& plane)
+{
+    if (link.kind == ProjectionKind::Vertex) {
+        const std::optional<VertexHit> hit = resolveVertex(ancestors, link.ref);
+        const std::optional<sketch::Vec2> at = hit ? projectVertex(hit->vertex, plane) : std::nullopt;
+        return at ? std::optional(ProjectedEdge{ProjectedShape::Point, {*at}, 0.0}) : std::nullopt;
+    }
+    const std::optional<EdgeHit> hit = resolveEdge(ancestors, link.ref);
+    return hit ? projectEdge(hit->edge, plane) : std::nullopt;
+}
+
+} // namespace
+
 std::vector<sketch::Id> followProjections(sketch::Sketch& sketch, const std::vector<Projection>& links,
                                           const std::vector<Body>& bodies, const gp_Ax3& plane)
 {
     std::vector<sketch::Id> broken;
+    ShapeAncestors ancestors(bodies);
     for (const Projection& link : links) {
         std::optional<ProjectedEdge> projected;
-        if (link.kind == ProjectionKind::Vertex) {
-            if (const std::optional<VertexHit> hit = resolveVertex(bodies, link.ref)) {
-                if (const std::optional<sketch::Vec2> at = projectVertex(hit->vertex, plane)) {
-                    projected = ProjectedEdge{ProjectedShape::Point, {*at}, 0.0};
-                }
-            }
-        } else if (const std::optional<EdgeHit> hit = resolveEdge(bodies, link.ref)) {
-            projected = projectEdge(hit->edge, plane);
+        try {
+            projected = follow(ancestors, link, plane);
+        } catch (const Standard_Failure& failure) {
+            K137_DEBUG(Core, "Projection lost its model edge: {}", failure.what() != nullptr ? failure.what() : "");
         }
         if (!projected || !placeProjection(sketch, link, *projected)) {
             broken.push_back(link.curve != 0 ? link.curve : link.point);

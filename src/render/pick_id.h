@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "camera/camera.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -62,6 +64,7 @@ struct IdStyle {
     bool points = false;
     bool planes = false;
     bool axes = false;
+    bool datumsThroughBodies = false;
     bool markers = false;
     bool sketchLines = false;
     bool sketchPoints = false;
@@ -96,5 +99,10 @@ struct IdHit {
 
 std::optional<IdHit> resolvePick(const IdImage& image, int x, int y, int radius, const PickKinds& kinds,
                                  int datumRadius = 0, int axisRadius = 0, std::span<const std::uint32_t> exactIds = {});
+
+enum class DepthReach : std::uint8_t { InsideFar, PastFar };
+
+std::optional<camera::Vec3> pointAtDepth(camera::Camera camera, const camera::Viewport& viewport, int x, int y,
+                                         float depth, DepthReach reach);
 
 } // namespace kalve137::render

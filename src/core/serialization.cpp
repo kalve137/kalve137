@@ -89,6 +89,11 @@ json sketchToJson(const sketch::Sketch& s)
         }
         if (c.kind == sketch::ConstraintKind::Offset) {
             constraint["sides"] = c.sides;
+            json joints = json::array();
+            for (const sketch::OffsetJoint& joint : c.joints) {
+                joints.push_back({{"point", joint.point}, {"tangent", joint.tangent}});
+            }
+            constraint["joints"] = std::move(joints);
         }
         if (!c.expression.empty()) {
             constraint["expression"] = c.expression;
@@ -131,6 +136,11 @@ sketch::Sketch sketchFrom(const json& j)
             constraint.labelOffset = sketch::Vec2{xy[0], xy[1]};
         }
         constraint.sides = c.value("sides", std::vector<int>());
+        if (const auto joints = c.find("joints"); joints != c.end()) {
+            for (const json& joint : *joints) {
+                constraint.joints.push_back({joint.at("point").get<int>(), joint.at("tangent").get<bool>()});
+            }
+        }
         constraint.expression = c.value("expression", std::string());
         s.insertConstraint(c.at("id").get<int>(), std::move(constraint));
     }
@@ -213,13 +223,20 @@ json projectionsToJson(const std::vector<Projection>& projections)
     return result;
 }
 
+TopoRef projectionRefFrom(const json& j)
+{
+    if (!j.is_object()) {
+        throw std::runtime_error("The design file is damaged: a projection ref is not an object");
+    }
+    return {pointFrom(j.at("point")), j.at("names").get<std::vector<std::string>>()};
+}
+
 std::vector<Projection> projectionsFrom(const json& j)
 {
     std::vector<Projection> result;
     for (const json& entry : j) {
         result.push_back({enumFrom(entry.at("kind"), projectionKindFromString, "projection kind"),
-                          entry.value("curve", 0), entry.value("point", 0),
-                          refsFrom(json::array({entry.at("ref")})).front()});
+                          entry.value("curve", 0), entry.value("point", 0), projectionRefFrom(entry.at("ref"))});
     }
     return result;
 }
@@ -711,7 +728,7 @@ Document fromJson(const std::string& text, ShapeStore& shapes)
             }
             document.setParameters(std::move(parameters));
         }
-        if (const std::optional<ExpressionError> error = applyParameters(document)) {
+        if (const std::optional<ExpressionError> error = applyStoredParameters(document)) {
             throw std::runtime_error("The design file is damaged: " + error->message);
         }
         return document;

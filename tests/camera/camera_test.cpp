@@ -320,3 +320,29 @@ TEST(CameraSync, LeavesTheTargetWhenTheCameraIsBroken)
     viewer::applyCamera(broken, *target);
     expectSame(Camera(), *target, kTolerance);
 }
+
+TEST(Camera, OnPlaneMeetsFacingPlanesAndRefusesEdgeOnOnes)
+{
+    const camera::Ray ray{{1.0, 2.0, 10.0}, {0.0, 0.0, -1.0}};
+    const std::optional<Vec3> facing = camera::onPlane(ray, {5.0, 5.0, 3.0}, {0.0, 0.0, 1.0});
+    ASSERT_TRUE(facing.has_value());
+    EXPECT_NEAR(camera::distance(*facing, {1.0, 2.0, 3.0}), 0.0, kTolerance);
+
+    const camera::Ray slanted{{0.0, 0.0, 10.0}, camera::normalized({1.0, 0.0, -1.0})};
+    const std::optional<Vec3> tilted = camera::onPlane(slanted, {}, {0.0, 0.0, -1.0});
+    ASSERT_TRUE(tilted.has_value());
+    EXPECT_NEAR(camera::distance(*tilted, {10.0, 0.0, 0.0}), 0.0, kTolerance);
+
+    EXPECT_FALSE(camera::onPlane(ray, {}, {1.0, 0.0, 0.0}).has_value());
+    EXPECT_FALSE(camera::onPlane(ray, {}, camera::normalized({0.0, 1.0, 1e-12})).has_value());
+    EXPECT_FALSE(camera::onPlane({{}, {0.0, 0.0, 0.0}}, {}, {0.0, 0.0, 1.0}).has_value());
+}
+
+TEST(Camera, OnPlaneFindsAPlaneBehindTheEyeOnTheSameLine)
+{
+    const camera::Ray ray{{1.0, 2.0, 10.0}, {0.0, 0.0, -1.0}};
+    const std::optional<Vec3> pastTheEye = camera::onPlane(ray, {0.0, 0.0, 20.0}, {0.0, 0.0, 1.0});
+    ASSERT_TRUE(pastTheEye.has_value());
+    EXPECT_NEAR(camera::distance(*pastTheEye, {1.0, 2.0, 20.0}), 0.0, kTolerance);
+    EXPECT_LT(camera::dot(*pastTheEye - ray.origin, ray.direction), 0.0);
+}

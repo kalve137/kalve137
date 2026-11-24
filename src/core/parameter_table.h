@@ -22,6 +22,7 @@ struct FieldRef {
 bool takesExpression(sketch::ConstraintKind kind);
 
 std::optional<ExpressionError> applyParameters(Document& document);
+std::optional<ExpressionError> applyStoredParameters(Document& document);
 void reconcileExpressions(const Document& before, Document& after);
 std::optional<ParameterValues> parameterValues(const Document& document);
 

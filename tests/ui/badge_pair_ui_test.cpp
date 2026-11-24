@@ -467,9 +467,10 @@ protected:
 
 TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     place();
     const Shots shots = grabPair(*m_old, *m_new, [](app::MainWindow& window) { lookDown(window); });
     savePair(shots, m_folder, "badges");
@@ -522,9 +523,10 @@ TEST_F(BadgePairTest, EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor)
 
 TEST_F(BadgePairTest, BadgesAndLabelsFollowTheCameraHereAndOnOpenGl)
 {
-    if (!start()) {
-        GTEST_SKIP() << "Runs with KALVE137_VIEW=new and a started new view";
+    if (const std::optional<std::string> missing = newViewMissing()) {
+        GTEST_SKIP() << *missing;
     }
+    ASSERT_TRUE(start()) << kNewViewDidNotStart;
     place();
     render::RhiView& canvas = *m_new->newView();
     const camera::Camera start = canvas.camera();

@@ -130,18 +130,28 @@ const sketch::Sketch* lastSketch(const UiDriver& ui)
     return feature != nullptr ? &feature->sketch : nullptr;
 }
 
-void editDimension(UiDriver& ui, sketch::Id id, const QString& value)
+std::optional<QPointF> dimensionLabel(UiDriver& ui, sketch::Id id)
 {
     const sketch::Sketch* s = lastSketch(ui);
-    ASSERT_NE(s, nullptr);
-    ASSERT_NE(s->constraint(id), nullptr);
+    if (s == nullptr || s->constraint(id) == nullptr) {
+        return std::nullopt;
+    }
     const QPointF origin = ui.at(gp_Pnt(0, 0, 0));
     const QPointF probe = ui.at(gp_Pnt(kProbeLength, 0, 0));
     const double wpp = kProbeLength / std::hypot(probe.x() - origin.x(), probe.y() - origin.y());
     const std::optional<sketch::DimensionLayout> layout =
         sketch::layoutDimension(*s, *s->constraint(id), wpp, sketch::dimensionMiddle(*s));
-    ASSERT_TRUE(layout);
-    const QPointF label = ui.at(gp_Pnt(layout->text.x, layout->text.y, 0));
+    if (!layout) {
+        return std::nullopt;
+    }
+    return ui.at(gp_Pnt(layout->text.x, layout->text.y, 0));
+}
+
+void editDimension(UiDriver& ui, sketch::Id id, const QString& value)
+{
+    const std::optional<QPointF> found = dimensionLabel(ui, id);
+    ASSERT_TRUE(found.has_value());
+    const QPointF label = *found;
     ui.trigger("Select");
     const auto* editor = ui.window().findChild<app::SketchEditor*>();
     ASSERT_NE(editor, nullptr);

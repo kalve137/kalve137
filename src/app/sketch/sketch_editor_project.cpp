@@ -5,6 +5,7 @@
 
 #include "app/session/design_session.h"
 #include "app/view/pick.h"
+#include "app/view/scene.h"
 #include "core/naming.h"
 #include "core/projection.h"
 #include "geometry/modeling.h"
@@ -63,8 +64,7 @@ QString textOf(Refusal refusal)
     case Refusal::Later:
         return SketchEditor::tr("Only geometry built before this sketch projects into it");
     case Refusal::Shape:
-        return QString::fromUtf8(core::kProjectionRefused.data(),
-                                 static_cast<qsizetype>(core::kProjectionRefused.size()));
+        return SketchEditor::tr("Only straight edges and circles parallel to the sketch project for now");
     case Refusal::Slanted:
         return SketchEditor::tr("Only flat faces parallel to the sketch project");
     case Refusal::Duplicate:
@@ -265,6 +265,11 @@ void SketchEditor::setModelPicking(bool picking)
 
 const core::Model& SketchEditor::modelBefore()
 {
+    const core::Document& shown = m_scene.document();
+    const int index = shown.indexOf(m_sketchId);
+    if (m_scene.editingSketch() == m_sketchId && index >= 0 && static_cast<std::size_t>(index) + 1 >= shown.marker()) {
+        return m_scene.model();
+    }
     if (!m_before) {
         QElapsedTimer timer;
         timer.start();
@@ -332,7 +337,7 @@ std::optional<QString> SketchEditor::repick(const Pick& pick)
     }
     Picked& item = items.front();
     if (!core::placeProjection(data.sketch, *link, item.projected)) {
-        return tr("Click an edge that makes the same kind of curve");
+        return tr("Pick a line for a line, a circle for a circle or an arc for an arc");
     }
     link->kind = item.kind;
     link->ref = std::move(item.ref);

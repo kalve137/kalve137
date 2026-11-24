@@ -91,6 +91,7 @@ private:
 
     void startCreateSketch();
     void stopPickingPlane();
+    void updatePickMode();
     void leaveModes();
     void createSketchOn(const gp_Ax3& plane, const std::string& planeName, core::FeatureId planeFeature = 0,
                         std::optional<core::TopoRef> face = std::nullopt);
@@ -201,7 +202,6 @@ private:
     QAction* m_construction = nullptr;
     QAction* m_breakLink = nullptr;
     QAction* m_pickAgain = nullptr;
-    bool m_projectPicking = false;
     QAction* m_delete = nullptr;
     QAction* m_showOrigin = nullptr;
     QAction* m_repeat = nullptr;

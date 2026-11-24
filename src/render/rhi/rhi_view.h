@@ -117,7 +117,7 @@ public:
     double lastUpdateMs() const { return m_updateMs; }
     std::optional<IdImage> readIds(const QRect& deviceRect, const IdStyle& style = {});
     std::optional<IdPick> pickAt(QPointF position, const PickKinds& kinds, const IdStyle& style = {});
-    camera::Vec3 pointOf(int x, int y, float depth) const;
+    std::optional<camera::Vec3> pointOf(int x, int y, float depth, DepthReach reach) const;
     std::optional<camera::Vec3> surfaceAt(int x, int y);
     std::optional<std::vector<PickedItem>> itemsIn(const QRect& deviceRect, bool whole, const PickKinds& kinds,
                                                    const IdStyle& style = {});

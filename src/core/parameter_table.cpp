@@ -172,11 +172,6 @@ std::string fieldLabel(const Feature& feature, std::string_view key)
     return feature.name + " " + text;
 }
 
-std::string constraintLabel(const Feature& feature, sketch::Id id)
-{
-    return feature.name + " d" + std::to_string(id);
-}
-
 std::string joined(const std::vector<std::string>& words)
 {
     std::string text;
@@ -207,10 +202,18 @@ std::string valueText(double exact, Quantity quantity)
     return formatNumber(number);
 }
 
+std::string constraintLabel(const Feature& feature, const sketch::Constraint& constraint)
+{
+    std::string kind(sketch::toString(constraint.kind));
+    std::ranges::replace(kind, '_', ' ');
+    const Quantity quantity = constraint.kind == sketch::ConstraintKind::Angle ? Quantity::Angle : Quantity::Length;
+    return feature.name + " " + kind + " " + valueText(constraint.value, quantity);
+}
+
 std::optional<ExpressionError> refusal(const Slot& slot, double number, const std::string& label)
 {
     const std::string range = valueText(slot.minimum, slot.quantity) + " to " + valueText(slot.maximum, slot.quantity);
-    if (slot.quantity == Quantity::Count && number != std::round(number)) {
+    if (slot.quantity == Quantity::Count && !(std::abs(number - std::round(number)) <= kSameNumber)) {
         return ExpressionError{"stamp", label + " takes a whole number, not " + formatNumber(number),
                                "Use a whole number from " + range};
     }
@@ -289,7 +292,7 @@ Table evaluateTable(const Document& document)
             table.error = labelled(label, *result.error);
             return table;
         }
-        table.values[parameter.name] = {result.value, result.dim};
+        table.values[parameter.name] = {result.value, result.dim, result.anyDim};
         table.canonical.push_back(result.canonical);
     }
     return table;
@@ -379,6 +382,7 @@ bool takesExpression(sketch::ConstraintKind kind)
     case sketch::ConstraintKind::Radius:
     case sketch::ConstraintKind::Diameter:
     case sketch::ConstraintKind::Angle:
+    case sketch::ConstraintKind::Offset:
         return true;
     case sketch::ConstraintKind::Coincident:
     case sketch::ConstraintKind::Horizontal:
@@ -390,17 +394,34 @@ bool takesExpression(sketch::ConstraintKind kind)
     case sketch::ConstraintKind::PointOnCurve:
     case sketch::ConstraintKind::Midpoint:
     case sketch::ConstraintKind::Symmetric:
-    case sketch::ConstraintKind::Offset:
         return false;
     }
     return false;
 }
 
-std::optional<ExpressionError> applyParameters(Document& document)
+namespace {
+
+ExpressionError damaged(const std::string& label, const std::string& text, const std::string& canonical)
+{
+    if (canonical.empty()) {
+        return {"stored", label + " stores '" + text + "', which names no parameter", {}};
+    }
+    return {"stored", label + " stores '" + text + "' instead of '" + canonical + "'", {}};
+}
+
+std::optional<ExpressionError> stampAll(Document& document, bool exact)
 {
     Table table = evaluateTable(document);
     if (table.error) {
         return table.error;
+    }
+    if (exact) {
+        const std::vector<Parameter>& stored = document.parameters();
+        for (std::size_t i = 0; i < stored.size(); ++i) {
+            if (stored[i].expression != table.canonical[i]) {
+                return damaged("Parameter " + stored[i].name, stored[i].expression, table.canonical[i]);
+            }
+        }
     }
     struct Stamp {
         Slot slot;
@@ -414,6 +435,9 @@ std::optional<ExpressionError> applyParameters(Document& document)
         const ExpressionResult result = evaluateField(text, slot.quantity, scope);
         if (!result.ok()) {
             return std::optional(labelled(label, *result.error));
+        }
+        if (exact && (result.names.empty() || result.canonical != text)) {
+            return std::optional(damaged(label, text, result.names.empty() ? std::string() : result.canonical));
         }
         if (std::optional<ExpressionError> refused = refusal(slot, result.value, label)) {
             return refused;
@@ -448,7 +472,7 @@ std::optional<ExpressionError> applyParameters(Document& document)
         }
         for (const sketch::Id constraintId : constraints) {
             sketch::Constraint& constraint = *data->sketch.constraint(constraintId);
-            const std::string label = constraintLabel(feature, constraintId);
+            const std::string label = constraintLabel(feature, constraint);
             const std::optional<Slot> slot = slotOf(constraint);
             if (!slot) {
                 return ExpressionError{"field", label + " takes no expression", {}};
@@ -471,6 +495,18 @@ std::optional<ExpressionError> applyParameters(Document& document)
     }
     document.setParameters(std::move(parameters));
     return std::nullopt;
+}
+
+} // namespace
+
+std::optional<ExpressionError> applyParameters(Document& document)
+{
+    return stampAll(document, false);
+}
+
+std::optional<ExpressionError> applyStoredParameters(Document& document)
+{
+    return stampAll(document, true);
 }
 
 void reconcileExpressions(const Document& before, Document& after)
@@ -676,7 +712,7 @@ std::optional<ExpressionError> setFieldExpression(Document& document, const Fiel
             return ExpressionError{"field", "This dimension takes no expression", {}};
         }
         stored = &constraint->expression;
-        label = constraintLabel(*feature, field.constraint);
+        label = constraintLabel(*feature, *constraint);
     } else {
         slot = slotOf(feature->data, field.key);
         if (!slot) {
@@ -726,9 +762,10 @@ std::vector<std::string> usersOf(const Document& document, std::string_view name
             }
         }
         if (const auto* data = std::get_if<SketchFeature>(&feature.data)) {
-            for (const auto& [id, constraint] : data->sketch.constraints()) {
+            for (const auto& entry : data->sketch.constraints()) {
+                const sketch::Constraint& constraint = entry.second;
                 if (!constraint.expression.empty() && names(constraint.expression, name)) {
-                    users.push_back(constraintLabel(feature, id));
+                    users.push_back(constraintLabel(feature, constraint));
                 }
             }
         }

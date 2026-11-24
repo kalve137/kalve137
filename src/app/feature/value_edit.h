@@ -54,13 +54,16 @@ protected:
 private:
     bool commit();
     void showValue();
+    void showText();
     void showMark();
     void setInvalid(bool invalid);
+    bool whole(double value) const;
     void step(int steps);
     void dropExpression();
 
     core::Quantity m_quantity;
     double m_value = 0.0;
+    double m_committed = 0.0;
     double m_minimum = -1e9;
     double m_maximum = 1e9;
     double m_step = 1.0;

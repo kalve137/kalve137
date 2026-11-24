@@ -83,12 +83,20 @@ std::optional<CurveKind> curveKindFromString(std::string_view name);
 
 bool isDimension(ConstraintKind kind);
 
+struct OffsetJoint {
+    Id point = 0;
+    bool tangent = false;
+
+    bool operator==(const OffsetJoint&) const = default;
+};
+
 struct Constraint {
     ConstraintKind kind = ConstraintKind::Coincident;
     std::vector<Id> refs;
     double value = 0.0;
     std::optional<Vec2> labelOffset;
     std::vector<int> sides;
+    std::vector<OffsetJoint> joints;
     std::string expression;
 };
 
@@ -98,8 +106,12 @@ struct OffsetPair {
     int side = 1;
 };
 
+class Sketch;
+
 std::vector<OffsetPair> offsetPairs(const Constraint& constraint);
-Constraint offsetConstraint(const std::vector<OffsetPair>& pairs, double distance);
+Constraint offsetConstraint(const std::vector<OffsetPair>& pairs, double distance,
+                            std::vector<OffsetJoint> joints = {});
+std::vector<Id> offsetJointPoints(const Sketch& sketch, const std::vector<OffsetPair>& pairs);
 
 class Sketch {
 public:

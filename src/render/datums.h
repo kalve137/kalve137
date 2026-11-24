@@ -88,6 +88,7 @@ struct DatumGeometry {
     std::vector<DatumLine> idOriginLines;
     std::vector<MarkerItem> markers;
     std::optional<camera::Box> bounds;
+    bool capped = false;
 
     bool drawsLike(const DatumGeometry& other) const
     {
