@@ -160,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ui-shots
-          path: build/windows-release/ui-shots
+          path: build/windows-release/tests/ui-shots
           if-no-files-found: ignore
 
       - name: Package
