@@ -203,6 +203,7 @@ void SketchEditor::openInputs()
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -260,6 +261,7 @@ void SketchEditor::onInputsAccepted()
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -458,6 +460,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -872,6 +875,7 @@ void SketchEditor::clickConstraint(const Hit& hit)
     case Tool::Fillet:
     case Tool::Mirror:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Symmetric:
     case Tool::Fix:

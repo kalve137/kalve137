@@ -82,6 +82,7 @@ add_library(kalve137_app STATIC
     sketch/sketch_editor_draw.cpp
     sketch/sketch_editor_hit.cpp
     sketch/sketch_editor_move.cpp
+    sketch/sketch_editor_project.cpp
     sketch/sketch_editor_shapes.cpp
     sketch/sketch_editor_tools.cpp
     sketch/sketch_editor_view.cpp
@@ -263,6 +264,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/show_grid.svg
         ${asset_dir}/icons/sketch_fillet.svg
         ${asset_dir}/icons/sketch_offset.svg
+        ${asset_dir}/icons/sketch_project.svg
         ${asset_dir}/icons/slot.svg
         ${asset_dir}/icons/snap_grid.svg
         ${asset_dir}/icons/symmetric.svg

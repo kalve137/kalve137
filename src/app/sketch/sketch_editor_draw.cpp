@@ -630,6 +630,7 @@ void SketchEditor::redrawPreview()
         break;
     case Tool::Select:
     case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:

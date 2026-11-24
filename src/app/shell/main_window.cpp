@@ -213,6 +213,10 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
         if (auto it = m_toolActions.find(m_sketchEditor->tool()); it != m_toolActions.end()) {
             it->second->setChecked(true);
         }
+        if (m_sketchEditor->picksModel() != m_projectPicking) {
+            m_projectPicking = m_sketchEditor->picksModel();
+            m_scene->setPickMode(m_projectPicking ? PickMode::Project : PickMode::None);
+        }
         updateActions();
         updateStatus();
     });
@@ -360,6 +364,13 @@ void MainWindow::createActions()
     m_delete->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
     connect(m_delete, &QAction::triggered, m_sketchEditor, &SketchEditor::deleteSelection);
 
+    m_breakLink = new QAction(tr("Break Link"), this);
+    m_breakLink->setToolTip(tr("Keep the selected projected curves but stop them following the model"));
+    connect(m_breakLink, &QAction::triggered, m_sketchEditor, &SketchEditor::breakLinks);
+    m_pickAgain = new QAction(tr("Pick Again"), this);
+    m_pickAgain->setToolTip(tr("Link the selected projected curve to another model edge"));
+    connect(m_pickAgain, &QAction::triggered, m_sketchEditor, &SketchEditor::pickAgain);
+
     m_showOrigin = new QAction(tr("Show Origin"), this);
     m_showOrigin->setCheckable(true);
     connect(m_showOrigin, &QAction::toggled, m_session, &DesignSession::setOriginVisible);
@@ -409,6 +420,7 @@ void MainWindow::createActions()
         {SketchEditor::Tool::Fillet, "sketch_fillet", tr("Fillet"), {}},
         {SketchEditor::Tool::Mirror, "mirror", tr("Mirror"), QKeySequence(Qt::Key_M)},
         {SketchEditor::Tool::Offset, "sketch_offset", tr("Offset"), QKeySequence(Qt::Key_O)},
+        {SketchEditor::Tool::Project, "sketch_project", tr("Project"), QKeySequence(Qt::Key_P)},
         {SketchEditor::Tool::Dimension, "dimension", tr("Dimension"), QKeySequence(Qt::Key_D)},
         {SketchEditor::Tool::Coincident, "coincident", tr("Coincident"), {}},
         {SketchEditor::Tool::Horizontal, "horizontal", tr("Horizontal"), {}},
@@ -488,6 +500,8 @@ void MainWindow::createMenus()
     editMenu->addAction(m_commandSearch->openAction());
     editMenu->addSeparator();
     editMenu->addAction(m_delete);
+    editMenu->addAction(m_breakLink);
+    editMenu->addAction(m_pickAgain);
     editMenu->addSeparator();
     editMenu->addAction(tr("&Preferences..."), QKeySequence(Qt::CTRL | Qt::Key_Comma), this,
                         &MainWindow::showPreferences);
@@ -609,6 +623,7 @@ void MainWindow::createToolBars()
     add(SketchEditor::Tool::Fillet);
     add(SketchEditor::Tool::Mirror);
     add(SketchEditor::Tool::Offset);
+    add(SketchEditor::Tool::Project);
     m_sketchBar->addSeparator();
     add(SketchEditor::Tool::Dimension);
     m_sketchBar->addSeparator();
@@ -778,6 +793,8 @@ void MainWindow::updateActions()
     m_sketchTools->setEnabled(sketching);
     m_construction->setEnabled(sketching);
     m_delete->setEnabled(sketching);
+    m_breakLink->setEnabled(sketching);
+    m_pickAgain->setEnabled(sketching);
     m_finishSketch->setEnabled(sketching);
     m_sketchBar->setVisible(sketching);
     m_paletteFrame->setVisible(sketching);

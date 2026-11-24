@@ -40,6 +40,7 @@ struct SketchState {
     std::vector<TopoDS_Face> profiles;
     sketch::SolveResult solve;
     sketch::Sketch solved;
+    std::vector<sketch::Id> lostProjections;
 };
 
 enum class FeatureHealth { Ok, Warning, Failed, Suppressed, RolledBack };

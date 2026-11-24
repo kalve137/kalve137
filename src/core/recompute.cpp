@@ -4,6 +4,7 @@
 #include "core/recompute.h"
 
 #include "core/naming.h"
+#include "core/projection.h"
 
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
@@ -97,11 +98,15 @@ private:
             }
         }
         state.solved = data.sketch;
+        state.lostProjections = followProjections(state.solved, data.projections, m_model.bodies, state.plane);
+        const std::size_t broken = state.lostProjections.size();
         state.solve = sketch::solve(state.solved);
         state.profiles = sketch::findProfiles(state.solved, state.plane);
         m_model.sketches.insert_or_assign(feature.id, std::move(state));
         if (faceLost) {
             warn(feature.id, "The face this sketch is on is gone, so the sketch stays where it was");
+        } else if (broken > 0) {
+            warn(feature.id, brokenProjectionsMessage(broken));
         } else if (!m_model.sketches.at(feature.id).solve.conflicting.empty()) {
             warn(feature.id, "The sketch has conflicting constraints");
         }

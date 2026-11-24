@@ -38,6 +38,7 @@ inline constexpr Id kOriginId = 1;
 struct Point {
     Vec2 pos;
     bool fixed = false;
+    bool projected = false;
 };
 
 enum class CurveKind {
@@ -52,6 +53,7 @@ struct Curve {
     double radius = 0.0;
     bool construction = false;
     bool fixed = false;
+    bool projected = false;
 };
 
 enum class ConstraintKind {

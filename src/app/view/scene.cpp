@@ -125,6 +125,8 @@ const char* toString(PickMode mode)
         return "faces";
     case PickMode::Measure:
         return "measure";
+    case PickMode::Project:
+        return "project";
     case PickMode::PressPull:
         return "press pull";
     case PickMode::HolePlacement:
@@ -162,6 +164,7 @@ std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
     case PickMode::PressPull:
         return {TopAbs_FACE, TopAbs_EDGE};
     case PickMode::Measure:
+    case PickMode::Project:
     case PickMode::AxisSources:
     case PickMode::PointSources:
         return {TopAbs_VERTEX, TopAbs_EDGE, TopAbs_FACE};

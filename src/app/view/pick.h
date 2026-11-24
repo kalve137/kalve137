@@ -52,6 +52,7 @@ enum class PickMode {
     Edges,
     Faces,
     Measure,
+    Project,
     PressPull,
     HolePlacement,
     Lines,

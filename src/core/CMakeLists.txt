@@ -16,6 +16,8 @@ add_library(kalve137_core STATIC
     naming.h
     project.cpp
     project.h
+    projection.cpp
+    projection.h
     recompute.cpp
     recompute.h
     serialization.cpp

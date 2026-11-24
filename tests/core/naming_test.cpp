@@ -13,6 +13,7 @@
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
+#include <BRep_Tool.hxx>
 #include <GProp_GProps.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
@@ -154,6 +155,29 @@ TopoRef faceAt(const Model& model, const gp_Pnt& point)
     TopoRef ref = faceRef(body, *face, point);
     EXPECT_FALSE(ref.names.empty());
     return ref;
+}
+
+TopoRef vertexAt(const Model& model, const gp_Pnt& point)
+{
+    const Body& body = model.bodies.at(0);
+    for (TopExp_Explorer it(body.shape, TopAbs_VERTEX); it.More(); it.Next()) {
+        const TopoDS_Vertex& vertex = TopoDS::Vertex(it.Current());
+        if (BRep_Tool::Pnt(vertex).Distance(point) < 1e-6) {
+            TopoRef ref = vertexRef(body, vertex);
+            EXPECT_EQ(ref.names.size(), 3u);
+            return ref;
+        }
+    }
+    ADD_FAILURE() << "No vertex at " << point.X() << " " << point.Y() << " " << point.Z();
+    return point;
+}
+
+void expectVertexAt(const Model& model, const TopoRef& ref, const gp_Pnt& expected)
+{
+    const std::optional<VertexHit> hit = resolveVertex(model.bodies, ref);
+    ASSERT_TRUE(hit.has_value());
+    const gp_Pnt at = BRep_Tool::Pnt(hit->vertex);
+    EXPECT_LT(at.Distance(expected), 1e-6) << at.X() << " " << at.Y() << " " << at.Z();
 }
 
 void expectFollows(Block& b, FeatureId id, const std::function<double(Size)>& expected)
@@ -398,6 +422,71 @@ TEST(Naming, MergedFaceCarriesBothNames)
     const std::optional<FaceHit> hit = resolveFace(model.bodies, padTop);
     ASSERT_TRUE(hit.has_value());
     EXPECT_NEAR(area(hit->face), 80.0 * kDepth, kTolerance);
+}
+
+TEST(Naming, VertexFollowsTheBoxCorner)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef corner = vertexAt(base, gp_Pnt(60, 30, 10));
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    EXPECT_NE(corner.names, origin.names);
+    expectVertexAt(base, corner, gp_Pnt(60, 30, 10));
+    expectVertexAt(base, origin, gp_Pnt(0, 0, 0));
+
+    resize(b, Size{80.0, 15.0});
+    const Model moved = recompute(b.doc);
+    expectVertexAt(moved, corner, gp_Pnt(80, 30, 15));
+    expectVertexAt(moved, origin, gp_Pnt(0, 0, 0));
+
+    expectVertexAt(moved, TopoRef{gp_Pnt(80, 30, 15.0005), {}}, gp_Pnt(80, 30, 15));
+    EXPECT_FALSE(resolveVertex(moved.bodies, TopoRef{gp_Pnt(60, 30, 10), {}}).has_value());
+    EXPECT_FALSE(resolveVertex(moved.bodies, TopoRef{gp_Pnt(60, 30, 10), {"F99/start"}}).has_value());
+}
+
+TEST(Naming, VertexFollowsAfterAFilletOnAnotherEdge)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef corner = vertexAt(base, gp_Pnt(60, 30, 10));
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    b.doc.add(FilletFeature{{FilletSet{{edgeAt(base, gp_Pnt(30, 0, 10))}, 2.0}}});
+
+    const Model filleted = recompute(b.doc);
+    expectVertexAt(filleted, corner, gp_Pnt(60, 30, 10));
+    expectVertexAt(filleted, origin, gp_Pnt(0, 0, 0));
+
+    resize(b, Size{80.0, 15.0});
+    const Model moved = recompute(b.doc);
+    expectVertexAt(moved, corner, gp_Pnt(80, 30, 15));
+    expectVertexAt(moved, origin, gp_Pnt(0, 0, 0));
+}
+
+TEST(Naming, VertexFollowsAfterACutSplitsAFace)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    const TopoRef far = vertexAt(base, gp_Pnt(60, 0, 0));
+    const FeatureId groove = addRectangle(b.doc, 28, -5, 32, 35);
+    const FeatureId cut = addExtrude(b.doc, groove, {30, 15}, 3.0, Operation::Cut);
+
+    const Model grooved = recompute(b.doc);
+    ASSERT_EQ(grooved.status.at(cut).health, FeatureHealth::Ok) << grooved.status.at(cut).message;
+    expectVertexAt(grooved, origin, gp_Pnt(0, 0, 0));
+    expectVertexAt(grooved, far, gp_Pnt(60, 0, 0));
+    const TopoRef left = vertexAt(grooved, gp_Pnt(28, 0, 0));
+    const TopoRef right = vertexAt(grooved, gp_Pnt(32, 0, 0));
+    EXPECT_NE(left.names, right.names);
+    expectVertexAt(grooved, left, gp_Pnt(28, 0, 0));
+    expectVertexAt(grooved, right, gp_Pnt(32, 0, 0));
+
+    resize(b, Size{80.0, 10.0});
+    const Model wider = recompute(b.doc);
+    expectVertexAt(wider, origin, gp_Pnt(0, 0, 0));
+    expectVertexAt(wider, far, gp_Pnt(80, 0, 0));
+    expectVertexAt(wider, left, gp_Pnt(28, 0, 0));
+    expectVertexAt(wider, right, gp_Pnt(32, 0, 0));
 }
 
 TEST(Naming, RefsRoundTripAndOlderFilesLoad)
