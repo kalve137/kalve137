@@ -31,6 +31,7 @@
 #include "app/view/view_controls.h"
 #include "app/view/view_cube_arrows.h"
 #include "app/view/view_overlay.h"
+#include "app/view/view_projection.h"
 #include "app/view/viewport_picker.h"
 #include "core/naming.h"
 #include "core/recompute.h"
@@ -151,7 +152,8 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
             m_viewport->setSketchLook(sketchLook(*m_scene));
         });
     }
-    m_sketchEditor = new SketchEditor(*m_session, *m_scene, m_view, m_viewport, this);
+    m_viewProjection = new ViewProjection(*m_view, m_viewport, this);
+    m_sketchEditor = new SketchEditor(*m_session, *m_scene, *m_viewProjection, this);
     m_cameraCommands = new CameraCommands(*m_view, m_viewport, [this] { return sceneIsEmpty(); }, this);
 
     createActions();

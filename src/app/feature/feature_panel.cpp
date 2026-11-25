@@ -8,6 +8,7 @@
 #include "app/feature/value_edit.h"
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
 #include "core/parameter_table.h"
 
 #include "geometry/modeling.h"
@@ -15,7 +16,6 @@
 #include "geometry/topology.h"
 #include "log/log.h"
 #include "sketch/profiles.h"
-#include "viewer/occt_view_widget.h"
 
 #include <QLabel>
 #include <QPushButton>
@@ -142,9 +142,9 @@ double elapsedMs(std::chrono::steady_clock::time_point since)
 
 } // namespace
 
-FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, viewer::OcctViewWidget* view,
+FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, const ViewProjection& projection,
                            QWidget* parent)
-    : QWidget(parent), m_session(session), m_scene(scene), m_source(picks), m_view(view)
+    : QWidget(parent), m_session(session), m_scene(scene), m_source(picks), m_projection(projection)
 {
     m_layout = new QVBoxLayout(this);
     m_layout->setContentsMargins(theme::kPanelMargins);
@@ -156,16 +156,16 @@ FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& pic
     m_previewTimer->setInterval(kDragPreviewMs);
     connect(m_previewTimer, &QTimer::timeout, this, &FeaturePanel::updatePreview);
 
-    m_handle = new DistanceHandle(view, this);
+    m_handle = new DistanceHandle(projection, this);
     connect(m_handle, &DistanceHandle::dragged, this, &FeaturePanel::onHandleValue);
     connect(m_handle, &DistanceHandle::edited, this, &FeaturePanel::onHandleValue);
     connect(m_handle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
-    m_secondHandle = new DistanceHandle(view, this);
+    m_secondHandle = new DistanceHandle(projection, this);
     m_secondHandle->setActive(false);
     connect(m_secondHandle, &DistanceHandle::dragged, this, &FeaturePanel::onSecondHandleValue);
     connect(m_secondHandle, &DistanceHandle::edited, this, &FeaturePanel::onSecondHandleValue);
     connect(m_secondHandle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
-    m_thirdHandle = new DistanceHandle(view, this);
+    m_thirdHandle = new DistanceHandle(projection, this);
     m_thirdHandle->setActive(false);
     connect(m_thirdHandle, &DistanceHandle::dragged, this, &FeaturePanel::onThirdHandleValue);
     connect(m_thirdHandle, &DistanceHandle::edited, this, &FeaturePanel::onThirdHandleValue);
@@ -404,7 +404,7 @@ void FeaturePanel::updateHandles(const Resolved& resolved)
                     if (across.Magnitude() < kMinDistance) {
                         return;
                     }
-                    const double radius = kArcHandlePixels * m_view->worldPerPixel();
+                    const double radius = kArcHandlePixels * m_projection.worldPerPixel();
                     m_handle->showArc(f.hinge, f.center.Translated(across.Normalized() * radius), f.angleDegrees);
                     shown = true;
                     break;

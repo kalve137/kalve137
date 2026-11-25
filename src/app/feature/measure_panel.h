@@ -19,11 +19,13 @@ class OcctViewWidget;
 
 namespace kalve137::app {
 
+class ViewProjection;
+
 class MeasurePanel : public QWidget {
     Q_OBJECT
 
 public:
-    MeasurePanel(Scene& scene, PickSource& picks, viewer::OcctViewWidget* view, QWidget* parent = nullptr);
+    MeasurePanel(Scene& scene, PickSource& picks, const ViewProjection& projection, QWidget* parent = nullptr);
 
     void start();
     void stop();

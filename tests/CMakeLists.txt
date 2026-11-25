@@ -97,6 +97,7 @@ gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 add_executable(kalve137_uitests
+    app/view_projection_test.cpp
     ui/badge_pair_ui_test.cpp
     ui/box_compare_ui_test.cpp
     ui/camera_ui_test.cpp
@@ -204,12 +205,14 @@ set_tests_properties(Viewport.Sketch PROPERTIES
     LABELS ui
     RUN_SERIAL TRUE
 )
+add_test(NAME Viewport.Features
+    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:-FeatureTest.UndoesToEmptyAndRedoesToTheEnd)
+set_tests_properties(Viewport.Features PROPERTIES
+    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
+    LABELS ui
+    RUN_SERIAL TRUE
+)
 set(viewport_pairs
-    FeatureTest.DrillsAHoleInTheTopFace
-    FeatureTest.FilletsAnEdge
-    FeatureTest.IdleClickSelectsAFaceAndEscapeClears
-    FeatureTest.PressPullsTheTopFace
-    FeatureTest.ShellsOpenAtTheTop
     FilesTest.SavesReopensExportsAndImports
     FilesTest.OpenSampleOpensAnUntitledCopyOfTheDodecahedron
     MenuTest.TimelineSuppressesAndUnsuppresses

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/feature/field_names.h"
+#include "app/view/view_projection.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/expression.h"
@@ -97,8 +98,7 @@ public:
         bool operator==(const Hit&) const = default;
     };
 
-    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::Viewport* viewport,
-                 QObject* parent = nullptr);
+    SketchEditor(DesignSession& session, const Scene& scene, ViewProjection& projection, QObject* parent = nullptr);
     ~SketchEditor() override;
 
     void begin(core::FeatureId sketch);
@@ -133,8 +133,8 @@ public:
     void setDisplay(const Display& display);
     void setGridSnap(bool snap) { m_gridSnap = snap; }
     void setMoveIncrement(double increment) { m_moveIncrement = increment; }
-    void setCameraInput(bool camera) { m_cameraInput = camera; }
-    bool hasCameraInput() const { return m_cameraInput; }
+    void setCameraInput(bool camera) { m_projection.setCameraInput(camera); }
+    bool hasCameraInput() const { return m_projection.hasCameraInput(); }
     Hit hitAt(QPointF pos) const;
     void redraw();
 
@@ -154,11 +154,6 @@ private:
         std::optional<sketch::Vec2> alignedX;
         std::optional<sketch::Vec2> alignedY;
         std::optional<sketch::Vec2> extendedFrom;
-    };
-
-    struct Projection {
-        camera::Camera camera;
-        camera::Viewport viewport;
     };
 
     struct ViewItems {
@@ -212,7 +207,6 @@ private:
     std::set<sketch::Id> lostProjections() const;
     gp_Ax3 plane() const;
     QWidget* canvas() const;
-    std::optional<Projection> projection() const;
     double worldPerPixel() const;
     QPointF toScreen(const gp_Pnt& point) const;
     double gridStep() const;
@@ -314,9 +308,9 @@ private:
 
     DesignSession& m_session;
     const Scene& m_scene;
+    ViewProjection& m_projection;
     viewer::OcctViewWidget* m_view;
     render::Viewport* m_viewport;
-    bool m_cameraInput = false;
     BandOverlay* m_band = nullptr;
     core::FeatureId m_sketchId = 0;
     Tool m_tool = Tool::Select;

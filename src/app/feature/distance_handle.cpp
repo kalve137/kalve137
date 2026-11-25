@@ -6,9 +6,9 @@
 #include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
 
 #include "viewer/grid.h"
-#include "viewer/occt_view_widget.h"
 #include "viewer/style.h"
 
 #include <QMouseEvent>
@@ -121,11 +121,12 @@ private:
 
 } // namespace
 
-DistanceHandle::DistanceHandle(viewer::OcctViewWidget* view, QObject* parent) : QObject(parent), m_view(view)
+DistanceHandle::DistanceHandle(const ViewProjection& projection, QObject* parent)
+    : QObject(parent), m_projection(projection), m_canvas(projection.canvas())
 {
-    m_overlay = new Overlay(view, [this](QPainter& painter) { paint(painter); });
+    m_overlay = new Overlay(m_canvas, [this](QPainter& painter) { paint(painter); });
     m_overlay->hide();
-    m_box = new ValueEdit(core::Quantity::Length, 0.0, view);
+    m_box = new ValueEdit(core::Quantity::Length, 0.0, m_canvas);
     m_box->setObjectName("canvasInput");
     m_box->setFixedWidth(kBoxWidth);
     m_box->hide();
@@ -136,8 +137,8 @@ DistanceHandle::DistanceHandle(viewer::OcctViewWidget* view, QObject* parent) : 
         m_recentValues->commit(m_box->value());
         emit accepted();
     });
-    connect(view, &viewer::OcctViewWidget::rendered, this, &DistanceHandle::refresh, Qt::QueuedConnection);
-    view->installEventFilter(this);
+    connect(&projection, &ViewProjection::changed, this, &DistanceHandle::refresh, Qt::QueuedConnection);
+    m_canvas->installEventFilter(this);
 }
 
 DistanceHandle::~DistanceHandle()
@@ -176,7 +177,7 @@ void DistanceHandle::showCommon(double value)
         m_box->setValue(value);
     }
     if (!m_overlay->isVisible()) {
-        m_overlay->setGeometry(m_view->rect());
+        m_overlay->setGeometry(m_canvas->rect());
         m_overlay->show();
     }
     if (m_active && !m_box->isVisible()) {
@@ -199,7 +200,7 @@ void DistanceHandle::hide()
     const bool hadFocus = m_box->hasFocus();
     m_box->hide();
     if (hadFocus) {
-        m_view->setFocus();
+        m_canvas->setFocus();
     }
 }
 
@@ -228,7 +229,7 @@ void DistanceHandle::setActive(bool active)
         const bool hadFocus = m_box->hasFocus();
         m_box->hide();
         if (hadFocus) {
-            m_view->setFocus();
+            m_canvas->setFocus();
         }
     }
     refresh();
@@ -258,10 +259,10 @@ gp_Pnt DistanceHandle::arcPoint(double degrees) const
 QPointF DistanceHandle::screenAxis() const
 {
     if (m_arcAxis) {
-        return m_view->toScreen(arcPoint(m_value + 1.0)) - m_view->toScreen(arcPoint(m_value));
+        return m_projection.toScreen(arcPoint(m_value + 1.0)) - m_projection.toScreen(arcPoint(m_value));
     }
-    const QPointF from = m_view->toScreen(m_origin);
-    const QPointF to = m_view->toScreen(m_origin.Translated(gp_Vec(m_direction) * m_scale));
+    const QPointF from = m_projection.toScreen(m_origin);
+    const QPointF to = m_projection.toScreen(m_origin.Translated(gp_Vec(m_direction) * m_scale));
     return to - from;
 }
 
@@ -281,7 +282,7 @@ bool DistanceHandle::hits(QPointF pos) const
     if (!unit) {
         return false;
     }
-    const QPointF start = m_view->toScreen(tip());
+    const QPointF start = m_projection.toScreen(tip());
     const QPointF end = start + *unit * (kShaftPixels + kHeadPixels);
     return distanceToSegment(pos, start, end) <= kHitPixels;
 }
@@ -290,7 +291,7 @@ double DistanceHandle::valueAt(QPointF pos) const
 {
     if (m_arcAxis) {
         const auto distanceAt = [&](double degrees) {
-            const QPointF d = m_view->toScreen(arcPoint(degrees)) - pos;
+            const QPointF d = m_projection.toScreen(arcPoint(degrees)) - pos;
             return dot(d, d);
         };
         double best = m_value;
@@ -319,7 +320,7 @@ double DistanceHandle::valueAt(QPointF pos) const
     if (l2 <= 0.0) {
         return m_value;
     }
-    return dot(pos - m_view->toScreen(m_origin), axis) / l2;
+    return dot(pos - m_projection.toScreen(m_origin), axis) / l2;
 }
 
 void DistanceHandle::paint(QPainter& painter) const
@@ -328,7 +329,7 @@ void DistanceHandle::paint(QPainter& painter) const
     if (!m_shown || !unit) {
         return;
     }
-    const QPointF base = m_view->toScreen(tip());
+    const QPointF base = m_projection.toScreen(tip());
     if (m_dragOffset) {
         QColor guide = theme::palette().viewport.handleOutline;
         guide.setAlpha(kGuideAlpha);
@@ -338,11 +339,11 @@ void DistanceHandle::paint(QPainter& painter) const
             const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(m_value) / kArcCoarseStep)));
             QPolygonF arc;
             for (int i = 0; i <= steps; ++i) {
-                arc << m_view->toScreen(arcPoint(m_value * i / steps));
+                arc << m_projection.toScreen(arcPoint(m_value * i / steps));
             }
             painter.drawPolyline(arc);
         } else {
-            painter.drawLine(m_view->toScreen(m_origin), base);
+            painter.drawLine(m_projection.toScreen(m_origin), base);
         }
     }
 
@@ -369,8 +370,8 @@ void DistanceHandle::refresh()
     if (!m_shown) {
         return;
     }
-    if (m_overlay->size() != m_view->size()) {
-        m_overlay->setGeometry(m_view->rect());
+    if (m_overlay->size() != m_canvas->size()) {
+        m_overlay->setGeometry(m_canvas->rect());
     }
     m_overlay->update();
     placeBox();
@@ -388,10 +389,10 @@ void DistanceHandle::placeBox()
         return std::abs(along.x()) * size.width() * 0.5 + std::abs(along.y()) * size.height() * 0.5;
     };
     const double along = std::max((kShaftPixels + kHeadPixels) * 0.5, extent(unit));
-    const QPointF center = m_view->toScreen(tip()) + unit * along + side * (kBoxGapPixels + extent(side));
+    const QPointF center = m_projection.toScreen(tip()) + unit * along + side * (kBoxGapPixels + extent(side));
     const QPoint at = (center - QPointF(size.width() / 2.0, size.height() / 2.0)).toPoint();
-    const QPoint clamped(std::clamp(at.x(), 0, std::max(0, m_view->width() - size.width())),
-                         std::clamp(at.y(), 0, std::max(0, m_view->height() - size.height())));
+    const QPoint clamped(std::clamp(at.x(), 0, std::max(0, m_canvas->width() - size.width())),
+                         std::clamp(at.y(), 0, std::max(0, m_canvas->height() - size.height())));
     if (m_box->pos() != clamped) {
         m_box->move(clamped);
     }
@@ -404,16 +405,16 @@ void DistanceHandle::setHover(bool hover)
     }
     m_hover = hover;
     if (hover) {
-        m_view->setCursor(Qt::SizeAllCursor);
+        m_canvas->setCursor(Qt::SizeAllCursor);
     } else {
-        m_view->unsetCursor();
+        m_canvas->unsetCursor();
     }
     refresh();
 }
 
 bool DistanceHandle::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched != m_view || !m_shown) {
+    if (watched != m_canvas || !m_shown) {
         return QObject::eventFilter(watched, event);
     }
     switch (event->type()) {
