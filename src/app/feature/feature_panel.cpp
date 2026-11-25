@@ -780,7 +780,7 @@ void FeaturePanel::updatePreview()
     const std::size_t index = m_editing != 0 ? static_cast<std::size_t>(document.indexOf(m_editing)) : m_base.marker();
     const core::Feature& feature = document.features()[index];
     const core::Model model = core::extend(m_baseModel, feature);
-    [[maybe_unused]] const double recomputeMs = elapsedMs(start);
+    const double recomputeMs = elapsedMs(start);
 
     Resolved resolved = resolve();
     emit selectionSummary(summaryOf(resolved));
@@ -808,8 +808,9 @@ void FeaturePanel::updatePreview()
     m_error->setText(error);
     m_selection->setText(selectionText());
     m_ok->setEnabled(resolved.complete && status.health != core::FeatureHealth::Failed);
-    K137_TRACE(App, "Previewed {} in {:.1f} ms, {:.1f} ms of it recompute", feature.name, elapsedMs(start),
-               recomputeMs);
+    const double previewMs = elapsedMs(start);
+    K137_TRACE(App, "Previewed {} in {:.1f} ms, {:.1f} ms of it recompute", feature.name, previewMs, recomputeMs);
+    emit previewed(previewMs, recomputeMs);
 }
 
 void FeaturePanel::setPickingTarget(bool picking)

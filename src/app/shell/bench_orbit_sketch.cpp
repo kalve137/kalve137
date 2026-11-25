@@ -47,7 +47,6 @@ void sendMouse(QWidget& widget, QEvent::Type type, QPointF pos, Qt::MouseButton 
 
 namespace {
 
-constexpr int kReadyTimeoutMs = 30000;
 constexpr double kPercentile = 0.95;
 constexpr int kChangeWarmup = 2;
 constexpr int kChangeRepeats = 20;
@@ -58,53 +57,6 @@ constexpr int kSketchCells = 10;
 constexpr double kSketchPitch = 20.0;
 constexpr double kSketchCell = 12.0;
 constexpr double kSketchZoom = 1.05;
-
-bool waitFor(const std::function<bool()>& done)
-{
-    const QDeadlineTimer deadline(kReadyTimeoutMs);
-    while (!done() && !deadline.hasExpired()) {
-        QApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
-    return done();
-}
-
-double elapsedMs(const QElapsedTimer& timer)
-{
-    return static_cast<double>(timer.nsecsElapsed()) / 1e6;
-}
-
-double percentile(std::vector<double> values, double share)
-{
-    std::ranges::sort(values);
-    const auto index = static_cast<std::size_t>(std::ceil(share * static_cast<double>(values.size()))) - 1;
-    return values[std::min(index, values.size() - 1)];
-}
-
-void hideChrome(MainWindow& window)
-{
-    for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
-        dock->hide();
-    }
-    for (QToolBar* bar : window.findChildren<QToolBar*>()) {
-        bar->hide();
-    }
-    window.statusBar()->hide();
-    window.menuBar()->hide();
-}
-
-void sizeCanvas(MainWindow& window, QSize requested)
-{
-    QWidget* canvas = window.centralWidget();
-    const double ratio = window.devicePixelRatioF();
-    if (window.isFullScreen()) {
-        waitFor([&] { return canvas->size() * ratio == requested; });
-    } else {
-        const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
-                            static_cast<int>(std::lround(requested.height() / ratio)));
-        window.resize(logical + window.size() - canvas->size());
-    }
-    QApplication::processEvents();
-}
 
 } // namespace
 

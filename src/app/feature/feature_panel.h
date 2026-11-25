@@ -69,6 +69,7 @@ public:
 
 signals:
     void activeChanged(bool active);
+    void previewed(double ms, double recomputeMs);
     void message(const QString& text);
     void selectionSummary(const QString& text);
 
