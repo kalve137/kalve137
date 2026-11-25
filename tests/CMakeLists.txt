@@ -9,6 +9,7 @@ add_executable(kalve137_tests
     app/badge_placement_test.cpp
     app/batch_import_test.cpp
     app/design_session_test.cpp
+    app/panel_picks_test.cpp
     app/startup_options_test.cpp
     app/theme_test.cpp
     app/version_test.cpp
@@ -125,6 +126,7 @@ add_executable(kalve137_uitests
     ui/viewport_ui_support.h
     ui/pair_shots.cpp
     ui/pair_shots.h
+    ui/panel_pick_ui_test.cpp
     ui/parameters_ui_test.cpp
     ui/plane_pair_ui_test.cpp
     ui/preferences_ui_test.cpp
@@ -207,7 +209,7 @@ set_tests_properties(Viewport.Sketch PROPERTIES
     RUN_SERIAL TRUE
 )
 add_test(NAME Viewport.Features
-    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*)
+    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*:PanelPickPairTest.*)
 set_tests_properties(Viewport.Features PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui

@@ -129,7 +129,8 @@ private:
     QString extrudeTargetName(const core::ExtrudeFeature& extrude) const;
     void resolveHole(const core::HoleFeature& hole, Resolved& resolved) const;
     void resolvePlane(const core::PlaneFeature& plane, Resolved& resolved) const;
-    std::vector<TopoDS_Shape> highlightedBodies(const core::Model& model, core::FeatureId featureId) const;
+    std::vector<const core::Body*> highlightedBodies(const core::Model& model, core::FeatureId featureId) const;
+    void showPicks(const Resolved& resolved, const std::vector<const core::Body*>& bodies);
     std::set<core::BodyKey> previewBodies(const core::Model& model) const;
     core::FilletSet& activeSet(core::FilletFeature& fillet);
     const core::FilletSet& activeSet(const core::FilletFeature& fillet) const;
