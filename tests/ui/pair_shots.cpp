@@ -14,6 +14,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QMouseEvent>
+#include <QSize>
 #include <QTest>
 #include <QWidget>
 
@@ -33,8 +34,19 @@ namespace kalve137::uitest {
 namespace {
 
 constexpr QSize kWindowSize{800, 600};
+constexpr QSize kCanvasSize{515, 441};
+constexpr int kPinTries = 4;
 constexpr int kReadyMs = 10000;
 constexpr int kSettleMs = 300;
+
+void pinCanvas(app::MainWindow& window, const QWidget& canvas)
+{
+    for (int i = 0; i < kPinTries && canvas.size() != kCanvasSize; ++i) {
+        window.resize(window.size() + kCanvasSize - canvas.size());
+        QApplication::processEvents();
+    }
+    EXPECT_EQ(canvas.size(), kCanvasSize) << "The pair window's canvas keeps one size on every platform";
+}
 
 void hideViewCube(viewer::OcctViewWidget& view)
 {
@@ -89,6 +101,10 @@ std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view)
         },
         kReadyMs);
     EXPECT_TRUE(settled) << "The window's view did not start";
+    if (QWidget* canvas = view == app::ViewKind::New ? static_cast<QWidget*>(window->viewport())
+                                                     : static_cast<QWidget*>(window->oldView())) {
+        pinCanvas(*window, *canvas);
+    }
     return window;
 }
 
