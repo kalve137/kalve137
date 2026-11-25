@@ -7,8 +7,10 @@
 #include "app/feature/value_edit.h"
 #include "app/session/preferences.h"
 #include "app/shell/startup_options.h"
+#include "app/sketch/sketch_view_items.h"
 #include "app/theme/theme.h"
 #include "camera/camera.h"
+#include "core/expression.h"
 #include "render/handles.h"
 #include "render/rhi/viewport.h"
 #include "render/style.h"
@@ -314,6 +316,67 @@ TEST_F(HandlePairTest, HoversTheArrowInBothThemes)
         EXPECT_TRUE(ui->viewport()->handles().front().hovered) << name;
         ui->save(name + " arrow hovered");
     }
+}
+
+render::HandleColors handleColors(const app::theme::Palette& palette)
+{
+    return {.fill = app::colorOf(palette.viewport.handle),
+            .outline = app::colorOf(palette.viewport.handleOutline),
+            .halo = app::colorOf(palette.viewport.halo)};
+}
+
+TEST_F(HandlePairTest, RestylesTheArrowAtOnceWhenTheThemeSwitches)
+{
+    if (ui->viewport() == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    app::theme::setScheme(app::theme::Scheme::Dark);
+    startExtrude(*ui);
+    ASSERT_EQ(ui->viewport()->handles().size(), 1U);
+    EXPECT_EQ(ui->viewport()->handles().front().colors, handleColors(app::theme::kDarkPalette));
+    app::theme::setScheme(app::theme::Scheme::Light);
+    EXPECT_EQ(ui->viewport()->handles().front().colors, handleColors(app::theme::kLightPalette));
+    app::theme::setScheme(app::theme::Scheme::Dark);
+    EXPECT_EQ(ui->viewport()->handles().front().colors, handleColors(app::theme::kDarkPalette));
+}
+
+app::ValueEdit* canvasBox(UiDriver& driver)
+{
+    for (auto* box : driver.canvas()->window()->findChildren<app::ValueEdit*>("canvasInput")) {
+        if (box->isVisible()) {
+            return box;
+        }
+    }
+    return nullptr;
+}
+
+TEST_F(HandlePairTest, FocusedBoxFollowsTheArrowWhileItIsDragged)
+{
+    if (ui->viewport() == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    startExtrude(*ui);
+    ASSERT_EQ(ui->viewport()->handles().size(), 1U);
+    app::ValueEdit* box = canvasBox(*ui);
+    ASSERT_NE(box, nullptr);
+    ui->click(box);
+    ASSERT_EQ(ui->focused(), box);
+    const double before = box->value();
+    const Arrow arrow = arrowOf(*ui, ui->viewport()->handles().front());
+    const QPointF grab = middleOf(arrow);
+    ui->press(grab);
+    for (int i = 1; i <= kDragSteps; ++i) {
+        ui->move(grab + arrow.along * (kDragPixels * i / kDragSteps), Qt::LeftButton);
+    }
+    EXPECT_EQ(ui->focused(), box);
+    const double dragged = distanceOf(*ui);
+    EXPECT_GT(dragged, before);
+    EXPECT_NEAR(box->value(), dragged, kNear);
+    const std::optional<double> shown = app::parseValue(box->text(), core::Quantity::Length);
+    ASSERT_TRUE(shown.has_value()) << box->text().toStdString();
+    EXPECT_NEAR(*shown, dragged, kNear);
+    EXPECT_EQ(box->selectedText(), box->text());
+    ui->release(grab + arrow.along * kDragPixels);
 }
 
 } // namespace
