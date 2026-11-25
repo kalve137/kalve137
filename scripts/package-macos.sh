@@ -178,8 +178,7 @@ notices_dir="$resources/notices"
 
 notice_for_name() {
     case "$1" in
-        Qt* | libQt*) echo Qt ;;
-        qwindows* | qsvg* | qgif* | qico* | qjpeg* | qmodernwindows* | qsvgicon*) echo Qt ;;
+        Qt* | libQt* | libq*) echo Qt ;;
         libTK* | TK*) echo OpenCASCADE ;;
         libplanegcs* | planegcs*) echo PlaneGCS ;;
         libfreetype* | freetype*) echo FreeType ;;

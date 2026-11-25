@@ -52,8 +52,7 @@ fi
 
 notice_for_name() {
     case "$1" in
-        libQt* | Qt*) echo Qt ;;
-        qwindows* | qsvg* | qgif* | qico* | qjpeg* | qmodernwindows* | qsvgicon*) echo Qt ;;
+        libQt* | Qt* | libq*) echo Qt ;;
         libTK* | TK*) echo OpenCASCADE ;;
         libplanegcs* | planegcs*) echo PlaneGCS ;;
         libfreetype* | freetype*) echo FreeType ;;
