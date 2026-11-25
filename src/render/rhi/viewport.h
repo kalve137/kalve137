@@ -35,6 +35,8 @@ namespace kalve137::render {
 
 class RhiBackend;
 
+inline constexpr std::uint64_t kPickChunkIds = std::uint64_t{1} << 48;
+
 struct DeviceProbe {
     bool created = false;
     bool texelFetch = false;
@@ -84,6 +86,8 @@ public:
     std::optional<camera::Box> fitBounds(double emptyHalfSize) const;
     void setScene(snapshot::Scene scene);
     const snapshot::Scene& scene() const { return m_scene; }
+    void setPickScene(std::optional<snapshot::Scene> scene);
+    const snapshot::Scene& pickScene() const { return m_pickScene ? *m_pickScene : m_scene; }
     const std::optional<camera::Box>& sceneBounds() const { return m_bounds; }
     void setSketches(std::vector<snapshot::Sketch> sketches);
     const std::vector<snapshot::Sketch>& sketches() const { return m_sketches; }
@@ -161,6 +165,7 @@ private:
     struct IdTargets;
 
     void updateChunks();
+    const ChunkSet& pickChunks() const { return m_pickScene ? m_pickChunks : m_chunks; }
     void refreshDatums();
     void refreshMarkers();
     void refreshPreview();
@@ -210,6 +215,8 @@ private:
     std::uint64_t m_handleRevision = 0;
     QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
+    std::optional<snapshot::Scene> m_pickScene;
+    ChunkSet m_pickChunks{ChunkSet::kDefaultVertexBudget, kPickChunkIds};
     std::unique_ptr<RhiBackend> m_bodies;
     std::unique_ptr<IdTargets> m_ids;
     IdStyle m_idStyle;

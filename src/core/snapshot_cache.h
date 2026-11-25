@@ -25,6 +25,7 @@ public:
     std::shared_ptr<const snapshot::Body> body(const Body& body);
     snapshot::Scene scene(const Model& model, const Visible& visible = {});
     void seed(const TopoDS_Shape& shape, std::shared_ptr<const snapshot::Mesh> mesh);
+    void seedFrom(const SnapshotCache& other);
     void clear()
     {
         m_entries.clear();

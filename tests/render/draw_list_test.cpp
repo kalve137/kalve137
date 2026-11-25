@@ -661,6 +661,53 @@ TEST(ChunkSet, AHighlightCarriesItsHaloAndHiddenGeometry)
     EXPECT_EQ(wire.selectedFaces.size(), 6U) << "the highlight outlives a style change";
 }
 
+TEST(ChunkSet, AnOverlaidBodyDrawsItsHighlightFromTheModelMesh)
+{
+    const auto preview = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const auto model = test::edgedBox({4.0, 0.0, 0.0}, {5.0, 1.0, 1.0});
+    const snapshot::Scene scene{.bodies = {preview}, .origin = {}, .hidden = {}};
+    ChunkSet chunks;
+    drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges));
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 7)},
+                         .selected = {itemOf(PickKind::Edge, 0), itemOf(PickKind::Face, 4)},
+                         .hoveredOutline = {},
+                         .selectedOutline = {}});
+    const std::uint64_t paletteBuilds = chunks.paletteBuilds();
+    const std::uint64_t highlightWrites = chunks.highlightWrites();
+    EXPECT_TRUE(chunks.draw(frameAt({})).highlight.overlayEdges.empty()) << "the drawn body takes the palette";
+
+    chunks.setOverlaid({{{1, 0}, model}});
+    const DrawList list = chunks.draw(frameAt({}));
+    const HighlightDraw& highlight = list.highlight;
+    EXPECT_EQ(chunks.paletteBuilds(), paletteBuilds);
+    EXPECT_GT(chunks.highlightWrites(), highlightWrites) << "the preview's palette drops the model's picks";
+    EXPECT_EQ(highlight.overlayEdges.size(), 1U) << "the picked edge draws in gold from the model mesh";
+    ASSERT_EQ(highlight.overlayFaces.size(), 6U) << "and the picked face, two triangles";
+    EXPECT_GE(highlight.overlayFaces.front()[0], 4.0F) << "where the model's face is";
+    EXPECT_EQ(highlight.lines.size(), 2U) << "the hovered and picked edges keep their halo";
+    ASSERT_EQ(highlight.selectedFaces.size(), 6U);
+    EXPECT_GE(highlight.selectedFaces.front()[0], 4.0F);
+    EXPECT_TRUE(highlight.overlayHoverFaces.empty());
+
+    chunks.setHighlight(
+        {.hovered = {itemOf(PickKind::Face, 2)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
+    const DrawList hovered = chunks.draw(frameAt({}));
+    ASSERT_EQ(hovered.highlight.overlayHoverFaces.size(), 6U) << "a hovered face tints the model mesh";
+    EXPECT_GE(hovered.highlight.overlayHoverFaces.front()[0], 4.0F);
+
+    chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 7)},
+                         .selected = {itemOf(PickKind::Edge, 0), itemOf(PickKind::Face, 4)},
+                         .hoveredOutline = {},
+                         .selectedOutline = {}});
+    chunks.setOverlaid({});
+    const DrawList after = chunks.draw(frameAt({}));
+    const HighlightDraw& back = after.highlight;
+    EXPECT_TRUE(back.overlayEdges.empty()) << "without a model behind it the drawn body shows the picks again";
+    EXPECT_TRUE(back.overlayFaces.empty());
+    ASSERT_EQ(back.selectedFaces.size(), 6U);
+    EXPECT_LE(back.selectedFaces.front()[0], 1.0F);
+}
+
 TEST(ChunkSet, AHoverAloneMatchesTheWholeHighlightAndKeepsTheSelection)
 {
     const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));

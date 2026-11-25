@@ -91,7 +91,7 @@ bool ViewportPicker::canBox() const
 
 std::shared_ptr<const snapshot::Mesh> ViewportPicker::meshOf(const render::PickedItem& item) const
 {
-    for (const auto& body : m_view->scene().bodies) {
+    for (const auto& body : m_view->pickScene().bodies) {
         if (body->feature == item.feature && body->part == item.part) {
             return body->mesh;
         }
@@ -103,7 +103,7 @@ std::vector<render::PickedItem> ViewportPicker::boxItems(QPointF from, QPointF t
 {
     const camera::ScreenPoint start{from.x(), from.y()};
     const camera::ScreenPoint end{to.x(), to.y()};
-    const snapshot::Scene& scene = m_view->scene();
+    const snapshot::Scene& scene = m_view->pickScene();
     const camera::Viewport viewport = m_view->viewport();
     std::vector<render::PickedItem> candidates =
         render::boxCandidates(scene.bodies, m_view->camera(), viewport, render::ScreenRect::spanning(start, end),
@@ -465,7 +465,7 @@ void ViewportPicker::press(QPointF position, Qt::MouseButton button, Qt::MouseBu
     m_pressModifiers = modifiers;
     m_boxFromPress = canBox() && !pickAt(position);
     if (m_boxFromPress) {
-        m_rays->prepare(m_view->scene());
+        m_rays->prepare(m_view->pickScene());
     }
 }
 
@@ -527,7 +527,7 @@ void ViewportPicker::dropStale()
             return std::ranges::find(m_view->sketchGeometry().keys, *found.sketch) ==
                    m_view->sketchGeometry().keys.end();
         }
-        return std::ranges::none_of(m_view->scene().bodies, [&](const auto& body) {
+        return std::ranges::none_of(m_view->pickScene().bodies, [&](const auto& body) {
             return body->feature == found.item.feature && body->part == found.item.part && body->mesh == found.mesh;
         });
     };
@@ -575,8 +575,8 @@ bool ViewportPicker::mapPanelPicks()
 {
     std::vector<const core::Body*> shown;
     if (!m_panelPicks.empty()) {
-        shown.reserve(m_view->scene().bodies.size());
-        for (const auto& body : m_view->scene().bodies) {
+        shown.reserve(m_view->pickScene().bodies.size());
+        for (const auto& body : m_view->pickScene().bodies) {
             shown.push_back(bodyOf(core::BodyKey{.feature = body->feature, .part = body->part}));
         }
     }

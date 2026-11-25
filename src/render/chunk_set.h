@@ -44,16 +44,22 @@ struct Highlight {
     bool operator==(const Highlight&) const = default;
 };
 
+using BodyMeshes = std::map<std::pair<int, int>, std::shared_ptr<const snapshot::Mesh>>;
+
 class ChunkSet {
 public:
     static constexpr std::size_t kDefaultVertexBudget = std::size_t{1} << 16;
 
-    explicit ChunkSet(std::size_t vertexBudget = kDefaultVertexBudget) : m_vertexBudget(vertexBudget) {}
+    explicit ChunkSet(std::size_t vertexBudget = kDefaultVertexBudget, std::uint64_t firstId = 1)
+        : m_vertexBudget(vertexBudget), m_nextId(firstId)
+    {}
 
     void update(const snapshot::Scene& scene, const ViewportStyle& style);
     void setHighlight(Highlight highlight);
+    void setOverlaid(BodyMeshes overlaid);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
     const Highlight& highlight() const { return m_highlight; }
+    const BodyMeshes& overlaid() const { return m_overlaid; }
     DrawList draw(const Frame& frame) const;
     DrawList pickList(const Frame& frame) const;
     void clear();
@@ -149,11 +155,15 @@ private:
     snapshot::Color m_fallback;
     snapshot::Color m_fill;
     Highlight m_highlight;
+    BodyMeshes m_overlaid;
     std::vector<Segment> m_lines;
     std::vector<Segment> m_selectedLines;
     std::vector<Segment> m_selectedEdges;
     std::vector<Position> m_selectedFaces;
     std::vector<Position> m_hoveredFaces;
+    std::vector<Segment> m_overlayEdges;
+    std::vector<Position> m_overlayFaces;
+    std::vector<Position> m_overlayHoverFaces;
     std::map<std::pair<int, int>, ItemIndex> m_itemIndexes;
     std::map<std::pair<int, int>, std::set<std::uint32_t>> m_selectedLineIds;
     std::uint64_t m_highlightRevision = 0;
