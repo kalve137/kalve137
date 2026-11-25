@@ -6,6 +6,7 @@
 #include "render/positions.h"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <unordered_map>
@@ -151,7 +152,8 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
         Data& chunk = *it->second;
         Slot& slot = chunk.members.at(it->first);
         const auto found = shown.find(it->first);
-        bool keep = found != shown.end() && found->second.body->mesh->closed == chunk.closed;
+        bool keep = found != shown.end() && found->second.body->mesh->closed == chunk.closed &&
+                    opacityOf(*found->second.body) == chunk.opacity;
         if (keep && found->second.body->mesh != slot.mesh) {
             const snapshot::Mesh& mesh = *found->second.body->mesh;
             const std::uint32_t piece = std::get<2>(it->first);
@@ -215,9 +217,10 @@ void ChunkSet::place(const Key& key, const Shown& shown)
     const std::uint32_t entries = entriesOf(mesh, piece);
     const std::uint32_t edgeEntries = edgeEntriesOf(mesh, piece);
     const std::uint32_t pointEntries = pointEntriesOf(mesh, piece);
+    const float opacity = opacityOf(*shown.body);
     const auto fits = [&](const auto& chunk) {
-        return chunk->closed == mesh.closed && chunk->vertexCount + vertices <= m_vertexBudget &&
-               chunk->entryCount + entries <= kPaletteEntries &&
+        return chunk->closed == mesh.closed && chunk->opacity == opacity &&
+               chunk->vertexCount + vertices <= m_vertexBudget && chunk->entryCount + entries <= kPaletteEntries &&
                chunk->edgeEntryCount + edgeEntries <= kPaletteEntries &&
                chunk->pointEntryCount + pointEntries <= kPaletteEntries;
     };
@@ -226,6 +229,7 @@ void ChunkSet::place(const Key& key, const Shown& shown)
         auto chunk = std::make_unique<Data>();
         chunk->id = m_nextId++;
         chunk->closed = mesh.closed;
+        chunk->opacity = opacity;
         m_chunks.push_back(std::move(chunk));
         found = std::prev(m_chunks.end());
     }
@@ -257,6 +261,7 @@ void ChunkSet::buildMesh(Data& chunk)
     chunk.indices.clear();
     chunk.segments.clear();
     chunk.points.clear();
+    chunk.ranges.clear();
     std::uint32_t entry = 0;
     std::uint32_t edgeEntry = 0;
     std::uint32_t pointEntry = 0;
@@ -267,9 +272,17 @@ void ChunkSet::buildMesh(Data& chunk)
         edgeEntry += slot.edgeEntryCount;
         slot.firstPointEntry = pointEntry;
         pointEntry += slot.pointEntryCount;
+        const snapshot::Mesh& mesh = *slot.mesh;
+        const snapshot::Point center{(mesh.low[0] + mesh.high[0]) / 2.0, (mesh.low[1] + mesh.high[1]) / 2.0,
+                                     (mesh.low[2] + mesh.high[2]) / 2.0};
+        BodyRange& range =
+            chunk.ranges.emplace_back(BodyRange{.center = relativePosition(center, m_origin),
+                                                .firstIndex = static_cast<std::uint32_t>(chunk.indices.size()),
+                                                .indexCount = 0,
+                                                .firstSegment = static_cast<std::uint32_t>(chunk.segments.size()),
+                                                .segmentCount = 0});
         addSegments(chunk, slot);
         addPoints(chunk, slot);
-        const snapshot::Mesh& mesh = *slot.mesh;
         const std::vector<Normal> normals = normalsOf(mesh);
         const std::size_t first = chunk.vertices.size();
         std::vector<std::uint32_t> mapped(mesh.vertices.size(), kUnmapped);
@@ -305,6 +318,8 @@ void ChunkSet::buildMesh(Data& chunk)
             }
         }
         slot.vertexCount = chunk.vertices.size() - first;
+        range.indexCount = static_cast<std::uint32_t>(chunk.indices.size()) - range.firstIndex;
+        range.segmentCount = static_cast<std::uint32_t>(chunk.segments.size()) - range.firstSegment;
     }
     chunk.vertexCount = chunk.vertices.size();
     chunk.entryCount = entry;
@@ -679,7 +694,20 @@ DrawList ChunkSet::draw(const Frame& frame) const
             continue;
         }
         list.chunks.push_back(chunkOf(*chunk));
+        if (!list.chunks.back().transparent()) {
+            continue;
+        }
+        std::size_t range = 0;
+        for (const auto& [key, slot] : chunk->members) {
+            if (slot.visible && range < chunk->ranges.size()) {
+                list.transparent.push_back({.chunk = list.chunks.size() - 1,
+                                            .range = range,
+                                            .farness = farness(chunk->ranges[range].center, frame)});
+            }
+            ++range;
+        }
     }
+    std::ranges::stable_sort(list.transparent, std::greater{}, &TransparentDraw::farness);
     return list;
 }
 
@@ -690,6 +718,7 @@ DrawList ChunkSet::pickList(const Frame& frame) const
     list.highlightedEdgesOnly = false;
     list.highlight = {};
     list.chunks.clear();
+    list.transparent.clear();
     for (const auto& chunk : m_chunks) {
         if (std::ranges::any_of(chunk->members, [](const auto& item) { return item.second.visible; })) {
             list.chunks.push_back(chunkOf(*chunk));
@@ -704,13 +733,15 @@ Chunk ChunkSet::chunkOf(const Data& chunk) const
             .meshRevision = chunk.meshRevision,
             .paletteRevision = chunk.paletteRevision,
             .closed = chunk.closed,
+            .opacity = chunk.opacity,
             .vertices = chunk.vertices,
             .indices = chunk.indices,
             .palette = chunk.palette,
             .segments = chunk.segments,
             .edgePalette = chunk.edgePalette,
             .points = chunk.points,
-            .pointPalette = chunk.pointPalette};
+            .pointPalette = chunk.pointPalette,
+            .ranges = chunk.ranges};
 }
 
 std::optional<PickedItem> ChunkSet::itemOf(std::uint64_t chunk, PickKind kind, std::uint32_t entry) const

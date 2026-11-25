@@ -193,7 +193,11 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     for (Owned<QRhiGraphicsPipeline>& face : m_faces) {
         face.reset();
     }
+    for (Owned<QRhiGraphicsPipeline>& face : m_transparentFaces) {
+        face.reset();
+    }
     m_edges.reset();
+    m_transparentEdges.reset();
     m_halo.reset();
     m_maskFill.reset();
     m_goldFill.reset();
@@ -220,12 +224,16 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
         return false;
     }
     for (int i = 0; i < static_cast<int>(m_faces.size()); ++i) {
-        m_faces.at(static_cast<std::size_t>(i)) = facePipeline(pass, samples, (i & kCulled) != 0, (i & kBiased) != 0);
+        m_faces.at(static_cast<std::size_t>(i)) =
+            facePipeline(pass, samples, (i & kCulled) != 0, (i & kBiased) != 0, false);
         if (m_faces.at(static_cast<std::size_t>(i)) == nullptr) {
             return false;
         }
     }
-    m_edges = edgePipeline(pass, samples);
+    if (!createTransparentPipelines(pass, samples)) {
+        return false;
+    }
+    m_edges = edgePipeline(pass, samples, false);
     const auto make = [&](const PipelineSpec& spec) { return pipelineFor(spec, pass, samples, m_layout.get()); };
     m_halo = make({"halo.vert", "halo.frag", Input::Lines, Depth::LessOrEqual, 0, 0.0F, Blend::Mask});
     m_maskFill = make({"layer.vert", "mask.frag", Input::Positions, Depth::Off, 0, 0.0F, Blend::Mask});
@@ -600,8 +608,11 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
 {
     m_calls.clear();
     m_edgeCalls.clear();
+    m_transparentCalls.clear();
     m_postNeeded = false;
-    if (m_edges == nullptr || std::ranges::any_of(m_faces, [](const auto& face) { return face == nullptr; })) {
+    const auto missing = [](const auto& face) { return face == nullptr; };
+    if (m_edges == nullptr || m_transparentEdges == nullptr || std::ranges::any_of(m_faces, missing) ||
+        std::ranges::any_of(m_transparentFaces, missing)) {
         return false;
     }
     writeUniforms(list, updates);
@@ -650,7 +661,9 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
         gpu.used = false;
     }
     bool complete = true;
-    for (const Chunk& chunk : list.chunks) {
+    std::vector<const Gpu*> placed(list.chunks.size(), nullptr);
+    for (std::size_t i = 0; i < list.chunks.size(); ++i) {
+        const Chunk& chunk = list.chunks[i];
         if (chunk.indices.empty() && chunk.segments.empty()) {
             continue;
         }
@@ -660,6 +673,10 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
             continue;
         }
         gpu.used = true;
+        placed[i] = &gpu;
+        if (chunk.transparent()) {
+            continue;
+        }
         if (list.faces && gpu.indexCount > 0) {
             m_calls.push_back({.gpu = &gpu, .cull = list.cullClosed && chunk.closed});
         }
@@ -669,6 +686,7 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     }
     std::erase_if(m_chunks, [](const auto& item) { return !item.second.used; });
     std::ranges::stable_partition(m_calls, [](const Call& call) { return call.cull; });
+    prepareTransparent(list, placed);
     m_biased = list.edges || m_sketches.curves.count > 0;
     if (!complete) {
         K137_ERROR(Viewer, "The viewport could not create the GPU resources for every chunk");
@@ -715,6 +733,7 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
             buffer->draw(kEdgeCorners, gpu->segmentCount);
         }
     }
+    drawTransparent(buffer, viewport);
     drawGrid(buffer, viewport);
     drawDatums(buffer, viewport);
     if (m_hiddenPass) {

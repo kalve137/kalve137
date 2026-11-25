@@ -716,7 +716,7 @@ void MainWindow::refreshScene()
     const auto showSnapshot = [this](const snapshot::Scene& scene, const core::Document& shown,
                                      const core::Model& model) {
         m_viewportPicker->showModel(model);
-        m_viewport->setScene(scene);
+        showViewportScene(scene);
         m_viewport->setSketches(sketchSnapshots(shown, model, *m_session));
     };
     const int index = sketch != 0 ? document.indexOf(sketch) : -1;
@@ -748,7 +748,7 @@ void MainWindow::refreshVisibility(const std::vector<core::BodyKey>& keys, bool 
     }
     if (m_viewport != nullptr) {
         m_viewportPicker->showModel(m_session->model());
-        m_viewport->setScene(withVisibility(m_viewport->scene(), m_session->model(), *m_session));
+        showViewportScene(withVisibility(m_viewport->scene(), m_session->model(), *m_session));
     }
 }
 

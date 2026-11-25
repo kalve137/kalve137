@@ -8,6 +8,7 @@ include(GoogleTest)
 add_executable(kalve137_tests
     app/badge_placement_test.cpp
     app/batch_import_test.cpp
+    app/body_opacity_test.cpp
     app/design_session_test.cpp
     app/panel_picks_test.cpp
     app/startup_options_test.cpp
@@ -54,6 +55,7 @@ add_executable(kalve137_tests
     render/sketches_test.cpp
     render/start_problem_test.cpp
     render/test_meshes.h
+    render/transparency_test.cpp
     sketch/build_test.cpp
     sketch/dimension_test.cpp
     sketch/draft_test.cpp
@@ -122,6 +124,7 @@ add_executable(kalve137_uitests
     ui/viewport_handle_ui_test.cpp
     ui/viewport_pick_ui_test.cpp
     ui/viewport_scene_ui_test.cpp
+    ui/viewport_transparent_ui_test.cpp
     ui/viewport_ui_support.cpp
     ui/viewport_ui_support.h
     ui/pair_shots.cpp

@@ -95,6 +95,12 @@ private:
         const Gpu* gpu = nullptr;
         bool cull = false;
     };
+    struct TransparentCall {
+        const Gpu* gpu = nullptr;
+        BodyRange range;
+        float opacity = 1.0F;
+        bool cull = false;
+    };
     struct IdCall {
         const Gpu* gpu = nullptr;
         PickKind kind = PickKind::None;
@@ -208,8 +214,12 @@ private:
     bool createShared();
     Owned<QRhiShaderResourceBindings> bindingsFor(QRhiTexture* palette) const;
     Owned<QRhiShaderResourceBindings> bindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms) const;
-    Owned<QRhiGraphicsPipeline> facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull, bool biased) const;
-    Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const;
+    Owned<QRhiGraphicsPipeline> facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull, bool biased,
+                                             bool transparent) const;
+    bool createTransparentPipelines(QRhiRenderPassDescriptor* pass, int samples);
+    void prepareTransparent(const DrawList& list, const std::vector<const Gpu*>& placed);
+    void drawTransparent(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    Owned<QRhiGraphicsPipeline> edgePipeline(QRhiRenderPassDescriptor* pass, int samples, bool transparent) const;
     Owned<QRhiGraphicsPipeline> idPipeline(QRhiRenderPassDescriptor* pass, PickKind kind, bool cull) const;
     Owned<QRhiShaderResourceBindings> idBindingsFor(QRhiTexture* palette, QRhiBuffer* pick) const;
     Owned<QRhiShaderResourceBindings> idBindingsWith(QRhiTexture* palette, QRhiBuffer* uniforms,
@@ -260,8 +270,12 @@ private:
     Owned<QRhiSampler> m_sampler;
     Owned<QRhiTexture> m_layoutTexture;
     Owned<QRhiShaderResourceBindings> m_layout;
+    Owned<QRhiShaderResourceBindings> m_transparentLayout;
+    Owned<QRhiShaderResourceBindings> m_transparentEdgeLayout;
     std::array<Owned<QRhiGraphicsPipeline>, 4> m_faces;
+    std::array<Owned<QRhiGraphicsPipeline>, 4> m_transparentFaces;
     Owned<QRhiGraphicsPipeline> m_edges;
+    Owned<QRhiGraphicsPipeline> m_transparentEdges;
     Owned<QRhiGraphicsPipeline> m_halo;
     Owned<QRhiGraphicsPipeline> m_maskFill;
     Owned<QRhiGraphicsPipeline> m_goldFill;
@@ -325,6 +339,9 @@ private:
     std::unordered_map<std::uint64_t, Gpu> m_chunks;
     std::vector<Call> m_calls;
     std::vector<const Gpu*> m_edgeCalls;
+    std::vector<TransparentCall> m_transparentCalls;
+    bool m_transparentFacesShown = false;
+    bool m_transparentEdgesShown = false;
     std::vector<IdCall> m_idCalls;
     std::vector<std::uint64_t> m_idChunks;
     bool m_biased = false;

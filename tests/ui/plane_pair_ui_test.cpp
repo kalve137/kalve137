@@ -81,6 +81,7 @@ constexpr double kPickScale = 70.0;
 constexpr int kPickSlack = 1;
 constexpr double kPickMissShare = 0.03;
 constexpr double kPivotPlane = 40.0;
+constexpr double kBehindPlane = 10.0;
 constexpr double kPivotScale = 200.0;
 constexpr double kPivotShare = 1e-4;
 constexpr double kEdgeOnCosine = 1e-3;
@@ -278,6 +279,80 @@ protected:
             << stem << ": the viewport covers as many pixels as the old view";
     }
 
+    void expectPicksLikeTheOldView(app::PickMode mode, const std::string& name, const Aim& aim, std::ofstream& misses,
+                                   std::ofstream& summary)
+    {
+        auto* picker = m_new->findChild<app::ViewportPicker*>();
+        ASSERT_NE(picker, nullptr);
+        const core::Model& oldModel = m_old->findChild<app::DesignSession*>()->model();
+        const core::Model& newModel = m_new->findChild<app::DesignSession*>()->model();
+        const auto oldPicksNear = [&](const QPointF& at, const std::string& label) {
+            for (int dy = -kPickSlack; dy <= kPickSlack; ++dy) {
+                for (int dx = -kPickSlack; dx <= kPickSlack; ++dx) {
+                    m_old->oldView()->detectAt(at + QPointF(dx, dy));
+                    if (describe(m_old->picks()->hovered(), oldModel) == label) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
+            window->scene()->setPickMode(mode);
+        }
+        QTest::qWait(kSettleMs);
+        shoot(aim, std::format("picking plane {}", name));
+        const QSize size = m_new->viewport()->size();
+        std::map<std::pair<std::string, std::string>, int> counts;
+        std::map<std::string, std::vector<QPointF>> agreed;
+        int picked = 0;
+        int missed = 0;
+        for (int y = kPickStep / 2; y < size.height(); y += kPickStep) {
+            for (int x = kPickStep / 2; x < size.width(); x += kPickStep) {
+                const QPointF at(x, y);
+                m_old->oldView()->detectAt(at);
+                picker->hoverAt(at);
+                const std::string old = describe(m_old->picks()->hovered(), oldModel);
+                const std::string fresh = describe(picker->hovered(), newModel);
+                ++counts[{familyOf(old), familyOf(fresh)}];
+                if (old == fresh) {
+                    if (old != "none") {
+                        agreed[old].push_back(at);
+                    }
+                    if (isDatum(old)) {
+                        ++picked;
+                    }
+                    continue;
+                }
+                const bool datum = isDatum(old) || isDatum(fresh);
+                const bool nearby = oldPicksNear(at, fresh);
+                misses << name << '\t' << x << '\t' << y << '\t' << old << '\t' << fresh << '\t' << nearby << '\n';
+                if (datum) {
+                    ++picked;
+                    missed += nearby ? 0 : 1;
+                }
+            }
+        }
+        for (const auto& [pair, count] : counts) {
+            summary << name << '\t' << pair.first << '\t' << pair.second << '\t' << count << '\n';
+        }
+        ASSERT_GT(picked, 0) << name;
+        EXPECT_LE(missed, static_cast<int>(picked * kPickMissShare))
+            << name << ": " << missed << " of " << picked << " plane and axis hovers differ from the old view";
+        for (const auto& [label, points] : agreed) {
+            const QPointF at = points[points.size() / 2];
+            act(*m_old->oldView(), at, true);
+            picker->clickAt(at, {});
+            const std::vector<app::Pick> old = m_old->picks()->selected();
+            const std::vector<app::Pick> fresh = picker->selected();
+            ASSERT_EQ(old.size(), 1U) << name << " " << label;
+            ASSERT_EQ(fresh.size(), 1U) << name << " " << label;
+            EXPECT_EQ(describe(fresh[0], newModel), describe(old[0], oldModel)) << name << " click on " << label;
+            m_old->picks()->clearSelection();
+            picker->clearSelection();
+        }
+    }
+
     std::unique_ptr<app::MainWindow> m_old;
     std::unique_ptr<app::MainWindow> m_new;
     std::filesystem::path m_folder;
@@ -382,82 +457,39 @@ TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
     document.add(
         core::AxisFeature{core::AxisSource::TwoPoints, gp_Ax1(gp_Pnt(0.0, 0.0, kHalfPlane), gp::DY()), "Points"});
     load(document, true);
-    auto* picker = m_new->findChild<app::ViewportPicker*>();
-    ASSERT_NE(picker, nullptr);
-    const core::Model& oldModel = m_old->findChild<app::DesignSession*>()->model();
-    const core::Model& newModel = m_new->findChild<app::DesignSession*>()->model();
     std::ofstream misses(m_folder / "pick-record.tsv");
     misses << "mode\tx\ty\told\tnew\tnearby\n";
     std::ofstream summary(m_folder / "pick-summary.tsv");
     summary << "mode\told\tnew\tpoints\n";
-    const auto oldPicksNear = [&](const QPointF& at, const std::string& label) {
-        for (int dy = -kPickSlack; dy <= kPickSlack; ++dy) {
-            for (int dx = -kPickSlack; dx <= kPickSlack; ++dx) {
-                m_old->oldView()->detectAt(at + QPointF(dx, dy));
-                if (describe(m_old->picks()->hovered(), oldModel) == label) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
+    const Aim aim = orbit({0.0, 0.0, kHalfPlane}, -60.0, 25.0, kPickScale, camera::Projection::Perspective);
     for (const auto& [mode, name] : {std::pair{app::PickMode::Planes, "planes"}, {app::PickMode::Faces, "faces"}}) {
-        for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
-            window->scene()->setPickMode(mode);
-        }
-        QTest::qWait(kSettleMs);
-        shoot(orbit({0.0, 0.0, kHalfPlane}, -60.0, 25.0, kPickScale, camera::Projection::Perspective),
-              std::format("picking plane {}", name));
-        const QSize size = m_new->viewport()->size();
-        std::map<std::pair<std::string, std::string>, int> counts;
-        std::map<std::string, std::vector<QPointF>> agreed;
-        int picked = 0;
-        int missed = 0;
-        for (int y = kPickStep / 2; y < size.height(); y += kPickStep) {
-            for (int x = kPickStep / 2; x < size.width(); x += kPickStep) {
-                const QPointF at(x, y);
-                m_old->oldView()->detectAt(at);
-                picker->hoverAt(at);
-                const std::string old = describe(m_old->picks()->hovered(), oldModel);
-                const std::string fresh = describe(picker->hovered(), newModel);
-                ++counts[{familyOf(old), familyOf(fresh)}];
-                if (old == fresh) {
-                    if (old != "none") {
-                        agreed[old].push_back(at);
-                    }
-                    if (isDatum(old)) {
-                        ++picked;
-                    }
-                    continue;
-                }
-                const bool datum = isDatum(old) || isDatum(fresh);
-                const bool nearby = oldPicksNear(at, fresh);
-                misses << name << '\t' << x << '\t' << y << '\t' << old << '\t' << fresh << '\t' << nearby << '\n';
-                if (datum) {
-                    ++picked;
-                    missed += nearby ? 0 : 1;
-                }
-            }
-        }
-        for (const auto& [pair, count] : counts) {
-            summary << name << '\t' << pair.first << '\t' << pair.second << '\t' << count << '\n';
-        }
-        ASSERT_GT(picked, 0) << name;
-        EXPECT_LE(missed, static_cast<int>(picked * kPickMissShare))
-            << name << ": " << missed << " of " << picked << " plane and axis hovers differ from the old view";
-        for (const auto& [label, points] : agreed) {
-            const QPointF at = points[points.size() / 2];
-            act(*m_old->oldView(), at, true);
-            picker->clickAt(at, {});
-            const std::vector<app::Pick> old = m_old->picks()->selected();
-            const std::vector<app::Pick> fresh = picker->selected();
-            ASSERT_EQ(old.size(), 1U) << name << " " << label;
-            ASSERT_EQ(fresh.size(), 1U) << name << " " << label;
-            EXPECT_EQ(describe(fresh[0], newModel), describe(old[0], oldModel)) << name << " click on " << label;
-            m_old->picks()->clearSelection();
-            picker->clearSelection();
-        }
+        expectPicksLikeTheOldView(mode, name, aim, misses, summary);
     }
+}
+
+TEST_F(PlanePairTest, APlaneBehindAHalfTransparentBodyPicksAsOnTheOldView)
+{
+    if (const std::optional<std::string> missing = viewportMissing()) {
+        GTEST_SKIP() << *missing;
+    }
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
+    core::Document document = blockDocument();
+    document.add(offsetPlane(-kBehindPlane));
+    load(document, false);
+    std::ofstream misses(m_folder / "behind-record.tsv");
+    misses << "mode\tx\ty\told\tnew\tnearby\n";
+    std::ofstream summary(m_folder / "behind-summary.tsv");
+    summary << "mode\told\tnew\tpoints\n";
+    expectPicksLikeTheOldView(app::PickMode::Planes, "behind",
+                              orbit({0.0, 0.0, kHalfPlane}, -60.0, 50.0, kPickScale, camera::Projection::Perspective),
+                              misses, summary);
+    load(blockDocument(), true);
+    for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
+        window->scene()->setPickMode(app::PickMode::Planes);
+    }
+    QTest::qWait(kSettleMs);
+    shoot(orbit({0.0, 0.0, 0.0}, -60.0, 30.0, kPickScale, camera::Projection::Perspective),
+          "origin planes in planes mode");
 }
 
 TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)

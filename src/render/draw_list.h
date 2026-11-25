@@ -12,6 +12,7 @@
 #include "snapshot/sketch.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -70,11 +71,22 @@ inline constexpr std::uint32_t kPaletteEntries = 1U << 16;
 
 enum class EdgeState : std::uint8_t { Normal, Hovered, Selected, SelectedHovered };
 
+struct BodyRange {
+    Position center{};
+    std::uint32_t firstIndex = 0;
+    std::uint32_t indexCount = 0;
+    std::uint32_t firstSegment = 0;
+    std::uint32_t segmentCount = 0;
+
+    bool operator==(const BodyRange&) const = default;
+};
+
 struct Chunk {
     std::uint64_t id = 0;
     std::uint64_t meshRevision = 0;
     std::uint64_t paletteRevision = 0;
     bool closed = false;
+    float opacity = 1.0F;
     std::span<const Vertex> vertices;
     std::span<const std::uint32_t> indices;
     std::span<const Entry> palette;
@@ -82,7 +94,19 @@ struct Chunk {
     std::span<const Entry> edgePalette;
     std::span<const Segment> points;
     std::span<const Entry> pointPalette;
+    std::span<const BodyRange> ranges;
+
+    bool transparent() const { return opacity < 1.0F; }
 };
+
+struct TransparentDraw {
+    std::size_t chunk = 0;
+    std::size_t range = 0;
+    double farness = 0.0;
+};
+
+double farness(const Position& center, const Frame& frame);
+float opacityOf(const snapshot::Body& body);
 
 struct HighlightDraw {
     std::uint64_t revision = 0;
@@ -245,6 +269,7 @@ struct DrawList {
     bool cullClosed = true;
     double pixelRatio = 1.0;
     std::vector<Chunk> chunks;
+    std::vector<TransparentDraw> transparent;
     bool faces = true;
     bool edges = false;
     bool highlightedEdgesOnly = false;

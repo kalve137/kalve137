@@ -27,7 +27,7 @@ namespace kalve137::render {
 using namespace rhi_backend_detail;
 
 RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassDescriptor* pass, int samples, bool cull,
-                                                                 bool biased) const
+                                                                 bool biased, bool transparent) const
 {
     const QShader vertex = loadShader(QStringLiteral("body.vert"));
     const QShader fragment = loadShader(QStringLiteral("body.frag"));
@@ -46,23 +46,34 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassD
     result->setFrontFace(QRhiGraphicsPipeline::CCW);
     result->setCullMode(cull ? QRhiGraphicsPipeline::Back : QRhiGraphicsPipeline::None);
     result->setDepthTest(true);
-    result->setDepthWrite(true);
+    result->setDepthWrite(!transparent);
     result->setDepthOp(QRhiGraphicsPipeline::Less);
     if (biased) {
         result->setDepthBias(kFaceBiasUnits);
         result->setSlopeScaledDepthBias(kFaceBiasSlope);
     }
+    if (transparent) {
+        QRhiGraphicsPipeline::TargetBlend blend;
+        blend.enable = true;
+        blend.srcColor = QRhiGraphicsPipeline::ConstantColor;
+        blend.dstColor = QRhiGraphicsPipeline::OneMinusConstantColor;
+        blend.srcAlpha = QRhiGraphicsPipeline::One;
+        blend.dstAlpha = QRhiGraphicsPipeline::Zero;
+        result->setTargetBlends({blend});
+    }
     result->setSampleCount(samples);
-    result->setShaderResourceBindings(m_layout.get());
+    result->setShaderResourceBindings(transparent ? m_transparentLayout.get() : m_layout.get());
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The viewport could not create its body pipeline at {}x samples", samples);
+        K137_ERROR(Viewer, "The viewport could not create its {} body pipeline at {}x samples",
+                   transparent ? "transparent" : "opaque", samples);
         return nullptr;
     }
     return result;
 }
 
-RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::edgePipeline(QRhiRenderPassDescriptor* pass, int samples) const
+RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::edgePipeline(QRhiRenderPassDescriptor* pass, int samples,
+                                                                 bool transparent) const
 {
     const QShader vertex = loadShader(QStringLiteral("edge.vert"));
     const QShader fragment = loadShader(QStringLiteral("edge.frag"));
@@ -83,13 +94,14 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::edgePipeline(QRhiRenderPassD
     result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
     result->setCullMode(QRhiGraphicsPipeline::None);
     result->setDepthTest(true);
-    result->setDepthWrite(true);
+    result->setDepthWrite(!transparent);
     result->setDepthOp(QRhiGraphicsPipeline::LessOrEqual);
     result->setSampleCount(samples);
-    result->setShaderResourceBindings(m_layout.get());
+    result->setShaderResourceBindings(transparent ? m_transparentEdgeLayout.get() : m_layout.get());
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The viewport could not create its edge pipeline at {}x samples", samples);
+        K137_ERROR(Viewer, "The viewport could not create its {} edge pipeline at {}x samples",
+                   transparent ? "transparent" : "opaque", samples);
         return nullptr;
     }
     return result;
