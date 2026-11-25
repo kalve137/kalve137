@@ -55,26 +55,67 @@ try {
         'bin\THIRD-PARTY-NOTICES.md'
         'bin\fonts\roboto\Roboto-Regular.ttf'
         'bin\fonts\roboto\Roboto-Medium.ttf'
-        'bin\planegcs.dll'
-        'bin\TKOffset.dll'
         'bin\vcruntime140.dll'
         'bin\msvcp140.dll'
         'bin\samples\dodecahedron.k137'
-        'bin\notices\Kalve137.txt'
-        'bin\notices\Qt.txt'
-        'bin\notices\OpenCASCADE.txt'
-        'bin\notices\PlaneGCS.txt'
-        'bin\notices\occt-qt-tools.txt'
-        'bin\notices\tinybvh.txt'
-        'bin\notices\Roboto.txt'
-        'bin\notices\Boost.txt'
-        'bin\notices\Eigen.txt'
         'plugins\platforms\qwindows.dll'
         'plugins\imageformats\qsvg.dll'
     )
     $missing = $expected | Where-Object { -not (Test-Path (Join-Path $top $_)) }
     if ($missing) {
         throw "The package is missing: $($missing -join ', ')"
+    }
+
+    function SkipPackagedDll([string]$name) {
+        return $name -match '^(vcruntime|msvcp|concrt)\d'
+    }
+
+    function NoticeForDll([string]$name) {
+        $base = [IO.Path]::GetFileNameWithoutExtension($name)
+        switch -Regex ($base) {
+            '^Qt6' { return 'Qt' }
+            '^q(windows|svg|gif|ico|jpeg|modernwindows|svgicon)' { return 'Qt' }
+            '^TK' { return 'OpenCASCADE' }
+            '^planegcs$' { return 'PlaneGCS' }
+            '^freetype' { return 'FreeType' }
+            '^libpng' { return 'libpng' }
+            '^z$' { return 'zlib' }
+            '^bz2$' { return 'bzip2' }
+            '^brotli' { return 'Brotli' }
+            '^fmt$' { return 'fmt' }
+            '^miniz$' { return 'miniz' }
+            '^spdlog$' { return 'spdlog' }
+            default { return $null }
+        }
+    }
+
+    $noticesDir = Join-Path $bin 'notices'
+    $requiredNotices = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $unmapped = @()
+    foreach ($dll in Get-ChildItem -Path $top -Recurse -Filter '*.dll') {
+        $name = $dll.Name
+        if (SkipPackagedDll $name) {
+            continue
+        }
+        $notice = NoticeForDll $name
+        if ($notice) {
+            [void]$requiredNotices.Add($notice)
+        } else {
+            $unmapped += $dll.FullName.Substring($top.Length + 1)
+        }
+    }
+    foreach ($name in @(
+            'Kalve137', 'PlaneGCS', 'occt-qt-tools', 'tinybvh', 'Roboto',
+            'Boost', 'Eigen', 'nlohmann-json'
+        )) {
+        [void]$requiredNotices.Add($name)
+    }
+    if ($unmapped) {
+        throw "The package has DLLs with no notice mapping: $($unmapped -join ', ')"
+    }
+    $missingNotices = $requiredNotices | Where-Object { -not (Test-Path (Join-Path $noticesDir "$_.txt")) }
+    if ($missingNotices) {
+        throw "The package is missing license notices: $($missingNotices -join ', ')"
     }
     $unwanted = 'bin\kalve137.pdb', 'bin\vc_redist.x64.exe', 'bin\opengl32sw.dll', 'bin\opengl32.dll', 'translations'
     $unwanted += 'plugins\tls', 'plugins\networkinformation', 'plugins\generic\qtuiotouchplugin.dll'
