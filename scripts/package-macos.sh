@@ -76,6 +76,19 @@ is_bad_dep() {
     return 1
 }
 
+own_id() {
+    otool -D "$1" | sed -n 2p
+}
+
+is_leak() {
+    case "$1" in
+        @rpath/* | @executable_path/* | @loader_path/*) return 1 ;;
+        /System/* | /usr/lib/*) return 1 ;;
+        /*) return 0 ;;
+    esac
+    return 1
+}
+
 add_exec_rpath() {
     local target="$1"
     if ! otool -l "$target" | grep -q 'path @executable_path/../Frameworks'; then
@@ -86,11 +99,13 @@ add_exec_rpath() {
 fix_dependencies() {
     local target="$1"
     local deps=()
+    local id
+    id="$(own_id "$target")"
     while IFS= read -r line; do
         deps+=("$line")
     done < <(otool -L "$target" | tail -n +2 | awk '{print $1}')
     for dep in "${deps[@]}"; do
-        if should_skip_dep "$dep"; then
+        if [[ "$dep" == "$id" ]] || should_skip_dep "$dep"; then
             continue
         fi
         if [[ ! -f "$dep" ]]; then
@@ -158,17 +173,20 @@ if [[ -e "$macos_dir/fonts" || -e "$staging/bin/fonts" ]]; then
     exit 1
 fi
 
-bad=0
+leaks=0
 while IFS= read -r macho; do
     [[ -z "$macho" ]] && continue
+    id="$(own_id "$macho")"
     while IFS= read -r dep; do
-        if is_bad_dep "$dep"; then
+        [[ -n "$id" && "$dep" == "$id" ]] && continue
+        if is_leak "$dep"; then
             echo "Dependency leak in $macho: $dep" >&2
-            bad=1
+            leaks=$((leaks + 1))
         fi
     done < <(otool -L "$macho" | tail -n +2 | awk '{print $1}')
 done < <(list_machos)
-if [[ "$bad" -ne 0 ]]; then
+if [[ "$leaks" -ne 0 ]]; then
+    echo "$leaks dependency leaks in $app" >&2
     exit 1
 fi
 
