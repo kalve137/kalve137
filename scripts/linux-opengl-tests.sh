@@ -37,8 +37,6 @@ EXCLUDED = {
         "old view differs on Linux, viewport same on both",
     "BadgePairTest.EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor":
         "old view differs on Linux, viewport same on both",
-    "WorkflowTest.FinishedSketchLinesStaySolidOnTheGrid":
-        "167 of 201 samples show the line, 180 needed, same on Windows OpenGL, depth bias changes nothing",
     "ScreenTest.FloorFitsTheWindowAndBothToolbars":
         "sketch bar drops its labels at full width with the Linux fonts",
     "SelectTest.WindowOverThousandsOfFacesStaysFast":
