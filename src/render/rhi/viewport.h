@@ -111,7 +111,8 @@ public:
     HandleDraw handleDraw() const;
     void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
-    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
+    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
+                  std::set<std::pair<int, int>> tinted = {});
     void setCamera(const camera::Camera& camera);
     const camera::Camera& camera() const { return m_camera; }
     void setLeftButtonCaptured(bool captured) { m_leftCaptured = captured; }

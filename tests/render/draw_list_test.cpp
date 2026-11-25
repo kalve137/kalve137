@@ -708,6 +708,39 @@ TEST(ChunkSet, AnOverlaidBodyDrawsItsHighlightFromTheModelMesh)
     EXPECT_LE(back.selectedFaces.front()[0], 1.0F);
 }
 
+TEST(ChunkSet, ATintedBodyFollowsTheDrawnMeshWhileItsPicksStayOnTheModel)
+{
+    const auto preview = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
+    const auto model = test::edgedBox({4.0, 0.0, 0.0}, {5.0, 1.0, 1.0});
+    const snapshot::Scene scene{.bodies = {preview}, .origin = {}, .hidden = {}};
+    ChunkSet chunks;
+    drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges));
+    chunks.setOverlaid({{{1, 0}, model}});
+    const std::pair key{preview->feature, preview->part};
+
+    chunks.setHover({itemOf(PickKind::Face, 2)}, {}, {key});
+    const DrawList list = chunks.draw(frameAt({}));
+    EXPECT_EQ(chunks.tints().size(), 6U + preview->mesh->edges.size());
+    for (const Entry& entry : list.chunks.at(0).palette) {
+        EXPECT_NE(entry[3] & kEntryHovered, 0) << "every face of the drawn body is tinted";
+    }
+    const auto onPreview =
+        std::ranges::count_if(list.highlight.hoveredFaces, [](const Position& at) { return at[0] <= 1.0F; });
+    EXPECT_EQ(onPreview, 6 * 2 * 3) << "the tint draws every face of the drawn mesh";
+    ASSERT_EQ(list.highlight.lines.size(), preview->mesh->edges.size()) << "with its outline";
+    ASSERT_EQ(list.highlight.overlayHoverFaces.size(), 6U) << "a hovered face still tints the model mesh";
+    EXPECT_GE(list.highlight.overlayHoverFaces.front()[0], 4.0F);
+
+    chunks.setHover({}, {}, {});
+    const DrawList cleared = chunks.draw(frameAt({}));
+    EXPECT_TRUE(chunks.tints().empty());
+    for (const Entry& entry : cleared.chunks.at(0).palette) {
+        EXPECT_EQ(entry[3] & kEntryHovered, 0) << "dropping the tint clears the drawn body";
+    }
+    EXPECT_TRUE(cleared.highlight.hoveredFaces.empty());
+    EXPECT_TRUE(cleared.highlight.lines.empty());
+}
+
 TEST(ChunkSet, AHoverAloneMatchesTheWholeHighlightAndKeepsTheSelection)
 {
     const auto body = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
