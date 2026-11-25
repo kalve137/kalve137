@@ -44,6 +44,15 @@ jobs:
         shell: pwsh
         run: ./scripts/format.ps1 -Check
 
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the nightly checkouts
+        run: python3 scripts/check-workflows.py
+
   source:
     name: Source
     runs-on: ubuntu-latest

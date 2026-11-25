@@ -153,8 +153,28 @@ for font in Roboto-Regular.ttf Roboto-Medium.ttf; do
         exit 1
     fi
 done
-if [[ -e "$macos_dir/fonts" || -e "$staging/bin/fonts" ]]; then
+if [[ -e "$macos_dir/fonts" ]]; then
     echo "Fonts were installed outside $app/Contents/Resources" >&2
+    exit 1
+fi
+
+resources="$app/Contents/Resources"
+missing=0
+for file in THIRD-PARTY-NOTICES.md samples/dodecahedron.k137 notices/Kalve137.txt notices/Qt.txt \
+    notices/OpenCASCADE.txt notices/PlaneGCS.txt notices/occt-qt-tools.txt notices/tinybvh.txt notices/Roboto.txt \
+    notices/Boost.txt notices/Eigen.txt notices/spdlog.txt notices/fmt.txt notices/nlohmann-json.txt \
+    notices/miniz.txt; do
+    if [[ ! -f "$resources/$file" ]]; then
+        echo "The bundle is missing $resources/$file" >&2
+        missing=1
+    fi
+done
+if [[ "$missing" -ne 0 ]]; then
+    exit 1
+fi
+if [[ -e "$staging/bin" ]]; then
+    echo "Install wrote files beside the bundle in $staging/bin:" >&2
+    find "$staging/bin" -print >&2
     exit 1
 fi
 
@@ -191,7 +211,11 @@ if [[ -z "$unpacked_app" ]]; then
     exit 1
 fi
 
-sample="$root/assets/samples/dodecahedron.k137"
+sample="$unpacked_app/Contents/Resources/samples/dodecahedron.k137"
+if [[ ! -f "$sample" ]]; then
+    echo "The zip has no sample at $sample" >&2
+    exit 1
+fi
 
 smoke_out="$smoke_root/out"
 mkdir -p "$smoke_out"
