@@ -147,6 +147,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
     if (m_viewport != nullptr) {
         m_viewportPicker = new ViewportPicker(*m_viewport, *m_session, *m_scene, m_session->rays(), this);
         m_scene->setPicks(*m_viewportPicker);
+        m_scene->setDrawsBodies(false);
         m_picks = m_viewportPicker;
         connect(m_scene.get(), &Scene::rebuilt, this, [this] {
             m_viewport->setDatums(m_scene->datums());

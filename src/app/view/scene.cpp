@@ -342,6 +342,15 @@ void Scene::show(const core::Document& document, const core::Model& model, const
     rebuild();
 }
 
+void Scene::setDrawsBodies(bool draws)
+{
+    if (m_drawsBodies == draws) {
+        return;
+    }
+    m_drawsBodies = draws;
+    dropBodies();
+}
+
 void Scene::setPickMode(PickMode mode)
 {
     if (m_mode == mode) {
@@ -547,6 +556,16 @@ void Scene::displayBody(const BodyObject& body)
 
 bool Scene::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible)
 {
+    if (!m_drawsBodies) {
+        for (const core::BodyKey& key : keys) {
+            if (visible) {
+                m_hiddenBodies.erase(key);
+            } else {
+                m_hiddenBodies.insert(key);
+            }
+        }
+        return true;
+    }
     const auto byKey = [](const core::BodyKey& key) {
         return [&key](const BodyObject& body) { return body.key == key; };
     };
@@ -683,6 +702,9 @@ std::size_t Scene::showBodies()
         m_bodySelection = selection;
     }
     dropErased();
+    if (!m_drawsBodies) {
+        return 0;
+    }
     std::vector<BodyObject> previous = std::exchange(m_bodies, {});
     std::size_t reused = 0;
     for (const core::Body& body : m_model.bodies) {
@@ -738,6 +760,9 @@ void Scene::showHighlights()
         Pick pick;
         pick.kind = Pick::Kind::Face;
         display(object, kWholeObject, pick);
+    }
+    if (!m_drawsBodies) {
+        return;
     }
     for (const TopoDS_Shape& body : m_highlightedBodies) {
         Handle(AIS_Shape) object = makeSurface(body, theme::palette().chrome.accent, kHighlightTransparency);
