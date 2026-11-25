@@ -33,6 +33,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -79,6 +81,7 @@ ViewportPicker::ViewportPicker(render::Viewport& view, const DesignSession& sess
             [this](QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { move(position, buttons); });
     connect(m_view, &render::Viewport::mouseLeft, this, [this] { setHovered(std::nullopt); });
     connect(m_view, &render::Viewport::sceneChanged, this, &ViewportPicker::dropStale);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &ViewportPicker::showOpenings);
     connect(m_scene, &Scene::pickModeChanged, this, [this] {
         m_selected.clear();
         m_hovered.reset();
@@ -638,6 +641,31 @@ void ViewportPicker::showMarks()
     m_view->setDatumMarks(std::move(datums));
     m_view->setSketchMarks(std::move(sketches));
     showVertexMarks();
+    showOpenings();
+}
+
+void ViewportPicker::showOpenings()
+{
+    const theme::Palette& palette = theme::palette();
+    std::vector<render::OutlineItem> outlines;
+    for (const render::PickedItem& face : m_panelItems.opened) {
+        const core::Body* body = bodyOf(face);
+        const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(face);
+        if (body == nullptr || body->shape.IsNull() || mesh == nullptr) {
+            continue;
+        }
+        const bool hovered = m_hovered && !m_hovered->overlay() && m_hovered->item == face;
+        const snapshot::Color color = colorOf(hovered ? palette.viewport.hover : palette.chrome.accent);
+        std::set<render::PickedItem> edges;
+        app::addOutline(*body, face.index, m_shapes, edges);
+        for (const snapshot::Edge& edge : mesh->edges) {
+            if (edges.contains(
+                    {.feature = face.feature, .part = face.part, .kind = render::PickKind::Edge, .index = edge.id})) {
+                outlines.push_back({.points = edge.points, .color = color});
+            }
+        }
+    }
+    m_view->setOutlines(std::move(outlines));
 }
 
 void ViewportPicker::showVertexMarks()
@@ -669,7 +697,7 @@ void ViewportPicker::showVertexMarks()
 
 void ViewportPicker::addHover(render::Highlight& highlight) const
 {
-    if (m_hovered && !m_hovered->overlay()) {
+    if (m_hovered && !m_hovered->overlay() && !m_panelItems.opened.contains(m_hovered->item)) {
         highlight.hovered.insert(m_hovered->item);
         addOutline(m_hovered->item, highlight.hoveredOutline);
     }

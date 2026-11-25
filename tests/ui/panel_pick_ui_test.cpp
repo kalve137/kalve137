@@ -149,7 +149,7 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         block(*driver);
     }
     for (const Case& pick :
-         {Case{"fillet", "Fillet", kTopFrontEdge, Shows::Edge}, Case{"shell", "Shell", kTopFace, Shows::Face},
+         {Case{"fillet", "Fillet", kTopFrontEdge, Shows::Edge},
           Case{"press pull", "Press Pull", kTopFace, Shows::Face, true}, Case{"move", "Move", kTopFace, Shows::Body},
           Case{"pattern", "Pattern", kTopFace, Shows::Body}}) {
         const std::string name = pick.name;

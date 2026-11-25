@@ -195,8 +195,10 @@ private:
         std::uint64_t revision = 0;
         Geometry arrows;
         Geometry guides;
+        Geometry outlines;
         Owned<QRhiShaderResourceBindings> arrowBindings;
         Owned<QRhiShaderResourceBindings> guideBindings;
+        Owned<QRhiShaderResourceBindings> outlineBindings;
     };
     enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, Markers, Annotations, Handles, None };
     enum class Depth { Off, LessOrEqual, Greater, Write, Reset };
@@ -254,6 +256,7 @@ private:
     bool createHandlePipelines(QRhiRenderPassDescriptor* pass, int samples);
     bool refreshHandles(const HandleDraw& handles, QRhiResourceUpdateBatch* updates);
     void drawHandles(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
+    void drawOutlines(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     void drawFill(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
                   const Geometry& fill, const QRhiViewport& viewport) const;
     bool upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
@@ -311,6 +314,7 @@ private:
     Owned<QRhiGraphicsPipeline> m_annotationQuads;
     Owned<QRhiGraphicsPipeline> m_handleArrows;
     Owned<QRhiGraphicsPipeline> m_handleGuides;
+    Owned<QRhiGraphicsPipeline> m_handleOutlines;
     HandleGpu m_handles;
     QString m_textFamily = QStringLiteral("Roboto");
     std::unique_ptr<GlyphAtlas> m_atlas;

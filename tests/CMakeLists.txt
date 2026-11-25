@@ -146,6 +146,7 @@ add_executable(kalve137_uitests
     ui/scenario.h
     ui/screen_ui_test.cpp
     ui/shading_pair_ui_test.cpp
+    ui/shell_cavity_ui_test.cpp
     ui/sketch_pair_ui_test.cpp
     ui/sketch_project_ui_test.cpp
     ui/ui_driver.cpp
@@ -216,7 +217,7 @@ set_tests_properties(Viewport.Sketch PROPERTIES
     RUN_SERIAL TRUE
 )
 add_test(NAME Viewport.Features
-    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*:MeasureTest.*:PanelPickPairTest.*:PreviewPairTest.*:VertexMarkTest.*:ScreenTest.LongSelectionKeepsPanelButtonsInView)
+    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*:MeasureTest.*:PanelPickPairTest.*:PreviewPairTest.*:ShellCavityTest.*:VertexMarkTest.*:ScreenTest.LongSelectionKeepsPanelButtonsInView)
 set_tests_properties(Viewport.Features PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui

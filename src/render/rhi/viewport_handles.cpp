@@ -29,9 +29,21 @@ void Viewport::setMeasure(MeasureItems measure)
     refreshHandles();
 }
 
+void Viewport::setOutlines(std::vector<OutlineItem> outlines)
+{
+    if (outlines == m_outlines) {
+        return;
+    }
+    m_outlines = std::move(outlines);
+    refreshHandles();
+}
+
 HandleDraw Viewport::handleDraw() const
 {
-    return {.revision = m_handleRevision, .arrows = m_handleGeometry.arrows, .guides = m_handleGeometry.guides};
+    return {.revision = m_handleRevision,
+            .arrows = m_handleGeometry.arrows,
+            .guides = m_handleGeometry.guides,
+            .outlines = m_handleGeometry.outlines};
 }
 
 void Viewport::refreshHandles()
@@ -39,6 +51,7 @@ void Viewport::refreshHandles()
     HandleGeometry geometry = placeHandles(m_handles, m_scene.origin);
     std::vector<DatumLine> measure = placeMeasureLines(m_measure, m_scene.origin);
     geometry.guides.insert(geometry.guides.end(), measure.begin(), measure.end());
+    geometry.outlines = placeOutlines(m_outlines, m_scene.origin);
     if (geometry != m_handleGeometry) {
         m_handleGeometry = std::move(geometry);
         ++m_handleRevision;

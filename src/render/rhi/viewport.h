@@ -11,6 +11,7 @@
 #include "render/grid_overlay.h"
 #include "render/handles.h"
 #include "render/measure.h"
+#include "render/outlines.h"
 #include "render/pick_id.h"
 #include "render/sketches.h"
 #include "render/style.h"
@@ -112,6 +113,8 @@ public:
     HandleDraw handleDraw() const;
     void setMeasure(MeasureItems measure);
     const MeasureItems& measure() const { return m_measure; }
+    void setOutlines(std::vector<OutlineItem> outlines);
+    const std::vector<OutlineItem>& outlines() const { return m_outlines; }
     void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
@@ -221,6 +224,7 @@ private:
     HandleGeometry m_handleGeometry;
     std::uint64_t m_handleRevision = 0;
     MeasureItems m_measure;
+    std::vector<OutlineItem> m_outlines;
     QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
     std::optional<snapshot::Scene> m_pickScene;

@@ -30,6 +30,8 @@ add_library(kalve137_render STATIC
     handles.h
     measure.cpp
     measure.h
+    outlines.cpp
+    outlines.h
     pick_id.cpp
     pick_id.h
     positions.h
