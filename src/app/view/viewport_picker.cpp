@@ -57,6 +57,12 @@ const typename Map::mapped_type* findIn(const Map& shown, const Map& saved, core
     return at != saved.end() ? &at->second : nullptr;
 }
 
+snapshot::Color colorOf(const QColor& color)
+{
+    return {static_cast<float>(color.redF()), static_cast<float>(color.greenF()), static_cast<float>(color.blueF()),
+            static_cast<float>(color.alphaF())};
+}
+
 } // namespace
 
 ViewportPicker::ViewportPicker(render::Viewport& view, const DesignSession& session, Scene& scene,
@@ -631,6 +637,34 @@ void ViewportPicker::showMarks()
     }
     m_view->setDatumMarks(std::move(datums));
     m_view->setSketchMarks(std::move(sketches));
+    showVertexMarks();
+}
+
+void ViewportPicker::showVertexMarks()
+{
+    const theme::Palette& palette = theme::palette();
+    const VertexColors colors{.hovered = colorOf(palette.viewport.hover), .selected = colorOf(palette.chrome.accent)};
+    std::vector<render::MarkerItem> marks;
+    const auto add = [&](const render::PickedItem& item, bool selected) {
+        if (item.kind != render::PickKind::Point) {
+            return;
+        }
+        if (const core::Body* body = bodyOf(item); body != nullptr && !body->shape.IsNull()) {
+            addVertexMark(*body, item.index, selected, colors, m_shapes, marks);
+        }
+    };
+    if (m_hovered && !m_hovered->overlay()) {
+        add(m_hovered->item, false);
+    }
+    for (const Found& found : m_selected) {
+        if (!found.overlay()) {
+            add(found.item, true);
+        }
+    }
+    for (const render::PickedItem& item : m_panelItems.selected) {
+        add(item, true);
+    }
+    m_view->setVertexMarks(std::move(marks));
 }
 
 void ViewportPicker::addHover(render::Highlight& highlight) const

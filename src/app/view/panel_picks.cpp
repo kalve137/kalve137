@@ -3,11 +3,15 @@
 
 #include "app/view/panel_picks.h"
 
+#include <BRep_Tool.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include <gp_Pnt.hxx>
 
 #include <algorithm>
+#include <cmath>
 
 namespace kalve137::app {
 
@@ -54,6 +58,35 @@ void addOutline(const core::Body& body, std::uint32_t face, BodyShapeCache& shap
     }
 }
 
+std::optional<camera::Vec3> vertexAt(const core::Body& body, std::uint32_t vertex, BodyShapeCache& shapes)
+{
+    const BodyShapes& indexed = shapes.of(body);
+    const auto index = static_cast<int>(vertex) + 1;
+    if (index > indexed.vertices.Extent()) {
+        return std::nullopt;
+    }
+    const gp_Pnt point = BRep_Tool::Pnt(TopoDS::Vertex(indexed.vertices.FindKey(index)));
+    if (!std::isfinite(point.X()) || !std::isfinite(point.Y()) || !std::isfinite(point.Z())) {
+        return std::nullopt;
+    }
+    return camera::Vec3{point.X(), point.Y(), point.Z()};
+}
+
+void addVertexMark(const core::Body& body, std::uint32_t vertex, bool selected, const VertexColors& colors,
+                   BodyShapeCache& shapes, std::vector<render::MarkerItem>& marks)
+{
+    const std::optional<camera::Vec3> at = vertexAt(body, vertex, shapes);
+    if (!at) {
+        return;
+    }
+    marks.push_back({.anchor = *at,
+                     .shape = selected ? render::MarkerShape::Ball : render::MarkerShape::Ring,
+                     .scale = render::MarkerScale::Small,
+                     .color = selected ? colors.selected : colors.hovered,
+                     .flags = render::kMarkerTopmost,
+                     .pick = 0});
+}
+
 void addWholeBody(const core::Body& body, BodyShapeCache& shapes, std::set<render::PickedItem>& faces,
                   std::set<render::PickedItem>& edges)
 {
@@ -86,6 +119,11 @@ PanelItems panelItems(const PanelPicks& picks, std::span<const core::Body* const
             if (const int index = indexed.faces.FindIndex(face); index > 0) {
                 items.selected.insert(itemOf(*body, render::PickKind::Face, index));
                 addOutline(*body, static_cast<std::uint32_t>(index - 1), shapes, items.selectedOutline);
+            }
+        }
+        for (const TopoDS_Vertex& vertex : picks.vertices) {
+            if (const int index = indexed.vertices.FindIndex(vertex); index > 0) {
+                items.selected.insert(itemOf(*body, render::PickKind::Point, index));
             }
         }
         if (std::ranges::find(picks.bodies, body->key()) != picks.bodies.end()) {

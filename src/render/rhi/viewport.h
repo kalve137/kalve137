@@ -82,6 +82,8 @@ public:
     DatumDraw datumDraw() const;
     void setMarkers(std::vector<MarkerItem> markers);
     const std::vector<MarkerItem>& markers() const { return m_markers; }
+    void setVertexMarks(std::vector<MarkerItem> marks);
+    const std::vector<MarkerItem>& vertexMarks() const { return m_vertexMarks; }
     MarkerDraw markerDraw() const;
     std::optional<camera::Box> fitBounds(double emptyHalfSize) const;
     void setScene(snapshot::Scene scene);
@@ -205,6 +207,7 @@ private:
     DatumGeometry m_datumGeometry;
     std::uint64_t m_datumRevision = 0;
     std::vector<MarkerItem> m_markers;
+    std::vector<MarkerItem> m_vertexMarks;
     std::vector<Marker> m_markerGeometry;
     std::uint64_t m_markerRevision = 0;
     Annotations m_annotations;
