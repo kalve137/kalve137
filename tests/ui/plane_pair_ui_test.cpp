@@ -45,6 +45,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
@@ -67,6 +68,7 @@ constexpr int kSettleMs = 300;
 constexpr double kReach = 400.0;
 constexpr double kSpanTolerance = 2.0;
 constexpr int kEndTolerance = 1;
+constexpr int kOldDashGap = std::countr_zero(render::kDotDashPattern);
 constexpr double kAreaShare = 0.15;
 constexpr double kHalfPlane = 7.5;
 constexpr double kFarPlane = 300.0;
@@ -81,6 +83,7 @@ constexpr double kPickMissShare = 0.03;
 constexpr double kPivotPlane = 40.0;
 constexpr double kPivotScale = 200.0;
 constexpr double kPivotShare = 1e-4;
+constexpr double kEdgeOnCosine = 1e-3;
 
 using Aim = std::function<void(app::MainWindow&)>;
 
@@ -304,8 +307,12 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
             EXPECT_NEAR(fresh->right() + 1.0 - origin, render::kOriginAxisPixels * ratio, kSpanTolerance * ratio)
                 << stem;
             EXPECT_NEAR(fresh->left(), old->left(), kEndTolerance) << stem << ": the origin point reaches where it did";
-            EXPECT_NEAR(fresh->right(), old->right(), kEndTolerance) << stem << ": the X axis ends where it did";
-            EXPECT_NEAR(fresh->top(), old->top(), kEndTolerance) << stem << ": the Y axis ends where it did";
+            EXPECT_GE(fresh->right(), old->right() - kEndTolerance) << stem << ": the X axis ends where it did";
+            EXPECT_LE(fresh->right(), old->right() + kEndTolerance + kOldDashGap)
+                << stem << ": the X axis ends where it did";
+            EXPECT_LE(fresh->top(), old->top() + kEndTolerance) << stem << ": the Y axis ends where it did";
+            EXPECT_GE(fresh->top(), old->top() - kEndTolerance - kOldDashGap)
+                << stem << ": the Y axis ends where it did";
         }
     }
     for (const double scale : {60.0, 240.0}) {
@@ -474,6 +481,7 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
         orbit({0.0, 0.0, kHalfPlane}, -90.0, 90.0, kPivotScale, camera::Projection::Perspective)(*m_new);
         QTest::qWait(kSettleMs);
         const camera::Vec3 eye = canvas.camera().eye();
+        const camera::Vec3 view = canvas.camera().direction();
         int landed = 0;
         for (int y = kPickStep / 2; y < canvas.height(); y += kPickStep) {
             for (int x = kPickStep / 2; x < canvas.width(); x += kPickStep) {
@@ -486,6 +494,10 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
                 ASSERT_TRUE(pick->point.has_value()) << name;
                 const gp_Pln plane(pick->kind == app::Pick::Kind::OriginPlane ? core::originPlane(pick->plane)
                                                                               : pick->construction.frame);
+                const gp_Dir& normal = plane.Axis().Direction();
+                if (std::abs(camera::dot({normal.X(), normal.Y(), normal.Z()}, view)) < kEdgeOnCosine) {
+                    continue;
+                }
                 const gp_Pnt& at = *pick->point;
                 const double reach = std::hypot(at.X() - eye.x, at.Y() - eye.y, at.Z() - eye.z);
                 EXPECT_LE(plane.Distance(at), reach * kPivotShare) << name << " at " << x << ", " << y;

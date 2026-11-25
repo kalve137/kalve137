@@ -15,6 +15,7 @@ namespace kalve137::app {
 inline constexpr const char* kViewFlag = "--view";
 inline constexpr const char* kGraphicsApiFlag = "--graphics-api";
 inline constexpr const char* kViewVariable = "KALVE137_VIEW";
+inline constexpr const char* kGraphicsApiVariable = "KALVE137_GRAPHICS_API";
 
 enum class ViewKind { Old, New };
 
@@ -30,6 +31,7 @@ struct ParsedStartup {
 };
 
 ParsedStartup parseStartup(QStringList arguments, const QString& viewVariable);
+ParsedStartup parseStartupVariables(const QString& viewVariable, const QString& graphicsApiVariable);
 StartupOptions startupFromEnvironment();
 
 } // namespace kalve137::app

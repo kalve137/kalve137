@@ -34,17 +34,13 @@ import xml.etree.ElementTree as ET
 
 EXCLUDED = {
     "MarkerPairTest.ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView":
-        "point inside the body is #E8A87C against the old view's #848A92",
+        "old view differs on Linux, viewport same on both",
     "BadgePairTest.EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor":
-        "labels sit 2 px lower than the old view, tolerance 1 px",
-    "PlanePairTest.TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms":
-        "origin axes span 101 px against 104 px, tolerance 2 px",
+        "old view differs on Linux, viewport same on both",
     "PlanePairTest.PlaneAndAxisPicksFollowTheOldViewsRecord":
-        "8 of 149 plane and axis hovers differ from the old view, 4 allowed",
-    "PlanePairTest.PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody":
-        "picks in front of the body land 0.198 from the plane, 0.021 allowed",
+        "8 of 149 hovers differ on the 510x443 canvas, 4 allowed, Direct3D 11 at 510x443 gives the same 8",
     "WorkflowTest.FinishedSketchLinesStaySolidOnTheGrid":
-        "167 of 201 samples show the line, 180 needed",
+        "167 of 201 samples show the line, 180 needed, same on Windows OpenGL, depth bias changes nothing",
     "ScreenTest.FloorFitsTheWindowAndBothToolbars":
         "sketch bar drops its labels at full width with the Linux fonts",
     "SelectTest.WindowOverThousandsOfFacesStaysFast":

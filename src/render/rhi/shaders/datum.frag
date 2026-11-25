@@ -7,6 +7,7 @@ layout(location = 0) in vec4 linearColor;
 layout(location = 1) in vec2 depthAndW;
 layout(location = 2) flat in vec2 bias;
 layout(location = 3) flat in vec2 dash;
+layout(location = 4) in vec2 fromEndAndW;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -48,6 +49,9 @@ void main()
     float row = options.z > 0.5 ? gl_FragCoord.y : target.y - gl_FragCoord.y;
     float at = dash.x > 0.5 ? gl_FragCoord.x : row;
     uint bit = uint(floor(at / overlayScale.y + 0.5)) & 15u;
+    if (overlayScale.w > 0.5) {
+        bit = 15u - (uint(floor(fromEndAndW.x / fromEndAndW.y / overlayScale.y)) & 15u);
+    }
     if ((uint(dash.y) & (1u << bit)) == 0u) {
         discard;
     }
