@@ -17,6 +17,7 @@ add_library(kalve137_app STATIC
     feature/feature_panel_detail.h
     feature/feature_panel_form.cpp
     feature/feature_panel_selection.cpp
+    feature/feature_panel_view.cpp
     feature/measure_panel.cpp
     feature/measure_panel.h
     feature/recent_values.cpp

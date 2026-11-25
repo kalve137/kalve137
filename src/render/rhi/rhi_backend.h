@@ -182,7 +182,14 @@ private:
         Owned<QRhiTexture> atlas;
         Owned<QRhiShaderResourceBindings> bindings;
     };
-    enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, Markers, Annotations, None };
+    struct HandleGpu {
+        std::uint64_t revision = 0;
+        Geometry arrows;
+        Geometry guides;
+        Owned<QRhiShaderResourceBindings> arrowBindings;
+        Owned<QRhiShaderResourceBindings> guideBindings;
+    };
+    enum class Input { Lines, Positions, OverlayLines, OverlayFill, DatumLines, Markers, Annotations, Handles, None };
     enum class Depth { Off, LessOrEqual, Greater, Write, Reset };
     enum class Blend { Opaque, Mask, Constant, Alpha, Hidden };
     struct PipelineSpec {
@@ -230,6 +237,10 @@ private:
     void drawActiveSketch(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     bool refreshAnnotations(const AnnotationDraw& annotations, double ratio, QRhiResourceUpdateBatch* updates);
     bool uploadAtlas(QRhiResourceUpdateBatch* updates);
+    bool createHandleShared();
+    bool createHandlePipelines(QRhiRenderPassDescriptor* pass, int samples);
+    bool refreshHandles(const HandleDraw& handles, QRhiResourceUpdateBatch* updates);
+    void drawHandles(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const;
     void drawFill(QRhiCommandBuffer* buffer, QRhiGraphicsPipeline* pipeline, QRhiShaderResourceBindings* bindings,
                   const Geometry& fill, const QRhiViewport& viewport) const;
     bool upload(const void* data, std::size_t bytes, std::size_t count, Geometry& geometry,
@@ -275,6 +286,9 @@ private:
     Owned<QRhiGraphicsPipeline> m_activeFills;
     Owned<QRhiGraphicsPipeline> m_activeLines;
     Owned<QRhiGraphicsPipeline> m_annotationQuads;
+    Owned<QRhiGraphicsPipeline> m_handleArrows;
+    Owned<QRhiGraphicsPipeline> m_handleGuides;
+    HandleGpu m_handles;
     QString m_textFamily = QStringLiteral("Roboto");
     std::unique_ptr<GlyphAtlas> m_atlas;
     AnnotationGpu m_annotations;

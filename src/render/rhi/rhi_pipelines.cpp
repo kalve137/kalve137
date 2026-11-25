@@ -215,6 +215,19 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
                               {1, 7, QRhiVertexInputAttribute::Float2, offsetof(AnnotationQuad, shape)}});
         result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
         break;
+    case Input::Handles:
+        layout.setBindings({QRhiVertexInputBinding(kCornerStride),
+                            QRhiVertexInputBinding(sizeof(Handle), QRhiVertexInputBinding::PerInstance)});
+        layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float2, 0},
+                              {1, 1, QRhiVertexInputAttribute::Float3, offsetof(Handle, anchor)},
+                              {1, 2, QRhiVertexInputAttribute::Float3, offsetof(Handle, toward)},
+                              {1, 3, QRhiVertexInputAttribute::UNormByte4, offsetof(Handle, fill)},
+                              {1, 4, QRhiVertexInputAttribute::UNormByte4, offsetof(Handle, outline)},
+                              {1, 5, QRhiVertexInputAttribute::UNormByte4, offsetof(Handle, glow)},
+                              {1, 6, QRhiVertexInputAttribute::Float4, offsetof(Handle, arrow)},
+                              {1, 7, QRhiVertexInputAttribute::Float2, offsetof(Handle, stroke)}});
+        result->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+        break;
     case Input::OverlayFill:
         layout.setBindings({QRhiVertexInputBinding(kOverlayVertexStride)});
         layout.setAttributes({{0, 0, QRhiVertexInputAttribute::Float3, offsetof(OverlayVertex, position)},

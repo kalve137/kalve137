@@ -534,6 +534,7 @@ void Viewport::setScene(snapshot::Scene scene)
     refreshActiveSketch();
     refreshPreview();
     refreshAnnotations();
+    refreshHandles();
     updateChunks();
     emit sceneChanged();
 }
