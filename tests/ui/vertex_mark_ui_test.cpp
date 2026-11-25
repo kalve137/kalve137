@@ -11,7 +11,6 @@
 #include "app/view/viewport_picker.h"
 #include "render/draw_list.h"
 #include "render/rhi/viewport.h"
-#include "render/style.h"
 #include "snapshot/body.h"
 
 #include <QImage>
@@ -37,28 +36,10 @@ namespace {
 
 constexpr int kChangedPixels = 10;
 constexpr int kChange = 10;
-constexpr int kWindowMargin = 2;
 constexpr QPointF kAwayFromBlock{6.0, 6.0};
 const gp_Pnt kBottomCorner(-kBlockWidth / 2, -kBlockDepth / 2, 0);
 const gp_Pnt kTopFace(5, 3, kBlockHeight);
 constexpr snapshot::Color kWhite{1.0F, 1.0F, 1.0F, 1.0F};
-
-int changedAround(const QImage& before, const QImage& after, QPointF at)
-{
-    const double ratio = before.devicePixelRatio();
-    const int half = static_cast<int>(std::ceil(((render::kMarkerSmallRing + kWindowMargin) * ratio) / 2.0));
-    const QPoint center((at * ratio).toPoint());
-    int changed = 0;
-    for (int dy = -half; dy <= half; ++dy) {
-        for (int dx = -half; dx <= half; ++dx) {
-            const QPoint pixel = center + QPoint(dx, dy);
-            if (before.rect().contains(pixel) && gapOf(before.pixel(pixel), after.pixel(pixel)) >= kChange) {
-                ++changed;
-            }
-        }
-    }
-    return changed;
-}
 
 using VertexMarkTest = UiTest;
 
@@ -85,7 +66,7 @@ TEST_F(VertexMarkTest, AHoveredVertexShowsARingAndAPickedOneABall)
     ASSERT_EQ(pick->kind, app::Pick::Kind::Vertex);
     ASSERT_EQ(canvas->vertexMarks().size(), 1U);
     EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ring);
-    const int ring = changedAround(away, hovered, ui->at(kBottomCorner));
+    const int ring = markerChangeAround(away, hovered, ui->at(kBottomCorner));
     std::printf("hovered vertex: %d pixels changed by %d or more\n", ring, kChange);
     EXPECT_GE(ring, kChangedPixels) << "the hovered vertex shows";
 
@@ -98,7 +79,7 @@ TEST_F(VertexMarkTest, AHoveredVertexShowsARingAndAPickedOneABall)
     ui->save("vertex picked");
     ASSERT_EQ(canvas->vertexMarks().size(), 1U);
     EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ball);
-    const int ball = changedAround(away, picked, ui->at(kBottomCorner));
+    const int ball = markerChangeAround(away, picked, ui->at(kBottomCorner));
     std::printf("picked vertex: %d pixels changed by %d or more\n", ball, kChange);
     EXPECT_GE(ball, kChangedPixels) << "the picked vertex shows";
 

@@ -522,9 +522,9 @@ void Viewport::refreshMarkers()
 {
     std::vector<Marker> markers;
     markers.reserve(m_datumGeometry.markers.size() + m_sketchGeometry.markers.size() + m_markers.size() +
-                    m_sketchPreview.markers.size() + m_vertexMarks.size());
-    for (const std::vector<MarkerItem>* items :
-         {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers, &m_sketchPreview.markers, &m_vertexMarks}) {
+                    m_sketchPreview.markers.size() + m_vertexMarks.size() + m_measure.markers.size());
+    for (const std::vector<MarkerItem>* items : {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers,
+                                                 &m_sketchPreview.markers, &m_vertexMarks, &m_measure.markers}) {
         for (const MarkerItem& item : *items) {
             markers.push_back(placeMarker(item, m_scene.origin));
         }

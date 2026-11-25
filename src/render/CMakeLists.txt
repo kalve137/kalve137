@@ -28,6 +28,8 @@ add_library(kalve137_render STATIC
     grid_overlay.h
     handles.cpp
     handles.h
+    measure.cpp
+    measure.h
     pick_id.cpp
     pick_id.h
     positions.h
