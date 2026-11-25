@@ -20,10 +20,14 @@ endfunction()
 
 function(kalve137_stage_runtime target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "FONT_DIRS")
+    set(font_root "$<TARGET_FILE_DIR:${target}>/fonts")
+    if(APPLE)
+        set(font_root "$<TARGET_BUNDLE_CONTENT_DIR:${target}>/Resources/fonts")
+    endif()
     foreach(dir IN LISTS arg_FONT_DIRS)
         get_filename_component(name "${dir}" NAME)
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${dir}" "$<TARGET_FILE_DIR:${target}>/fonts/${name}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${dir}" "${font_root}/${name}"
             VERBATIM
         )
     endforeach()
@@ -46,19 +50,22 @@ function(kalve137_install_app target)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         BUNDLE DESTINATION .
     )
-    foreach(dir IN LISTS arg_FONT_DIRS)
-        install(DIRECTORY "${dir}" DESTINATION ${CMAKE_INSTALL_BINDIR}/fonts)
-    endforeach()
+    if(NOT APPLE)
+        foreach(dir IN LISTS arg_FONT_DIRS)
+            install(DIRECTORY "${dir}" DESTINATION ${CMAKE_INSTALL_BINDIR}/fonts)
+        endforeach()
+    endif()
 
-    set(kalve137_deploy_options --exclude-plugins qtuiotouchplugin)
+    set(kalve137_deploy_options)
     if(WIN32)
         list(APPEND kalve137_deploy_options
+            --exclude-plugins qtuiotouchplugin
             --no-opengl-sw
             --no-system-d3d-compiler
             --no-system-dxc-compiler
         )
     elseif(APPLE)
-        list(APPEND kalve137_deploy_options --no-strip)
+        list(APPEND kalve137_deploy_options -no-strip)
     endif()
     qt_generate_deploy_app_script(
         TARGET ${target}

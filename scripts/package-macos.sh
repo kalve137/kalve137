@@ -141,9 +141,22 @@ bundle_dylibs() {
     done
 }
 
-"$macdeployqt" "$app" -verbose=1 -always-overwrite
+"$macdeployqt" "$app" -verbose=1 -always-overwrite -no-strip
+rm -f "$app/Contents/PlugIns/generic/libqtuiotouchplugin.dylib"
 bundle_dylibs
 add_exec_rpath "$macos_dir/kalve137"
+
+fonts="$app/Contents/Resources/fonts/roboto"
+for font in Roboto-Regular.ttf Roboto-Medium.ttf; do
+    if [[ ! -f "$fonts/$font" ]]; then
+        echo "The bundle is missing $fonts/$font" >&2
+        exit 1
+    fi
+done
+if [[ -e "$macos_dir/fonts" || -e "$staging/bin/fonts" ]]; then
+    echo "Fonts were installed outside $app/Contents/Resources" >&2
+    exit 1
+fi
 
 bad=0
 while IFS= read -r macho; do
@@ -158,6 +171,9 @@ done < <(list_machos)
 if [[ "$bad" -ne 0 ]]; then
     exit 1
 fi
+
+codesign --force --deep --sign - "$app"
+codesign --verify --deep --strict "$app"
 
 zip="$package_dir/kalve137-macos-arm64.zip"
 rm -f "$zip"
@@ -175,16 +191,11 @@ if [[ -z "$unpacked_app" ]]; then
     exit 1
 fi
 
-sample="$unpacked_app/Contents/MacOS/samples/dodecahedron.k137"
-if [[ ! -f "$sample" ]]; then
-    echo "The bundle is missing $sample" >&2
-    exit 1
-fi
+sample="$root/assets/samples/dodecahedron.k137"
 
 smoke_out="$smoke_root/out"
 mkdir -p "$smoke_out"
-unset DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_INSERT_LIBRARIES DYLD_FALLBACK_LIBRARY_PATH || true
-export QT_QPA_PLATFORM=offscreen
+unset DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_INSERT_LIBRARIES DYLD_FALLBACK_LIBRARY_PATH QT_QPA_PLATFORM
 exe="$unpacked_app/Contents/MacOS/kalve137"
 if ! "$exe" --smoke "$sample" "$smoke_out"; then
     echo "Smoke failed" >&2
