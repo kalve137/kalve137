@@ -41,6 +41,8 @@ class MainWindow;
 
 namespace kalve137::uitest {
 
+std::filesystem::path shotFolder();
+std::filesystem::path scratchFolder();
 void installHarness();
 void resetSettings();
 std::vector<std::string> takeProblems();

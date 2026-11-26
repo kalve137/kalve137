@@ -228,17 +228,53 @@ private:
     bool m_onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
 };
 
-std::filesystem::path shotFolder()
+QString testKey()
 {
-    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
-    std::filesystem::path root =
-        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
-                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
-    if (const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info()) {
-        root /= std::format("{}.{}", test->test_suite_name(), test->name());
+    QString pid = QString::number(QCoreApplication::applicationPid());
+    const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info();
+    if (test == nullptr) {
+        return pid;
     }
-    return root;
+    return QStringLiteral("%1.%2-%3")
+        .arg(QString::fromUtf8(test->test_suite_name()), QString::fromUtf8(test->name()), pid);
 }
+
+QString isolatedName()
+{
+    return QStringLiteral("kalve137-uitests/") + testKey();
+}
+
+QString testRoot()
+{
+    return QDir::tempPath() + u'/' + isolatedName();
+}
+
+class Isolation : public testing::EmptyTestEventListener {
+public:
+    void OnTestStart(const testing::TestInfo&) override
+    {
+        m_organization = QCoreApplication::organizationName();
+        QCoreApplication::setOrganizationName(isolatedName());
+        resetSettings();
+    }
+
+    void OnTestEnd(const testing::TestInfo&) override
+    {
+        const QString key = testKey();
+        for (const QStandardPaths::StandardLocation location :
+             {QStandardPaths::AppLocalDataLocation, QStandardPaths::AppDataLocation}) {
+            QDir folder(QStandardPaths::writableLocation(location));
+            if (folder.cdUp() && folder.dirName() == key) {
+                folder.removeRecursively();
+            }
+        }
+        QDir(testRoot()).removeRecursively();
+        QCoreApplication::setOrganizationName(m_organization);
+    }
+
+private:
+    QString m_organization;
+};
 
 std::string healthName(core::FeatureHealth health)
 {
@@ -304,9 +340,29 @@ nlohmann::json dimensionsOf(const sketch::Sketch& s, const gp_Ax3& plane)
 
 } // namespace
 
+std::filesystem::path shotFolder()
+{
+    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
+    std::filesystem::path root =
+        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
+                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
+    if (const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info()) {
+        root /= std::format("{}.{}", test->test_suite_name(), test->name());
+    }
+    return root;
+}
+
+std::filesystem::path scratchFolder()
+{
+    return std::filesystem::path(testRoot().toStdU16String()) / "scratch";
+}
+
 void installHarness()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir::tempPath());
+    testing::UnitTest::GetInstance()->listeners().Append(new Isolation);
     g_previousHandler = qInstallMessageHandler(onQtMessage);
     log::Options options;
     options.debuggerOutput = recordLog;

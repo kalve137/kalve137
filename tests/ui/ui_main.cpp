@@ -37,7 +37,6 @@ int main(int argc, char** argv)
     kalve137::app::theme::apply(app, kalve137::app::theme::Scheme::Dark);
     testing::AddGlobalTestEnvironment(new FontsEnvironment);
     const int result = RUN_ALL_TESTS();
-    kalve137::uitest::resetSettings();
     kalve137::log::shutdown();
     return result;
 }

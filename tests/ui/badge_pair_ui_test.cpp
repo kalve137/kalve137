@@ -374,7 +374,7 @@ protected:
             session->setOriginVisible(false);
         }
         QTest::qWait(kSettleMs);
-        m_folder = pairFolder("BadgePairTest");
+        m_folder = shotFolder();
         std::filesystem::create_directories(m_folder);
         return true;
     }

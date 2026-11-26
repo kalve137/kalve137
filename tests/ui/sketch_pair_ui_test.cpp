@@ -264,7 +264,7 @@ protected:
             }
         }
         showGrid(false);
-        m_folder = pairFolder("SketchPairTest");
+        m_folder = shotFolder();
         std::filesystem::create_directories(m_folder);
         return true;
     }

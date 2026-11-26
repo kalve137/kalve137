@@ -12,8 +12,6 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QByteArray>
-#include <QCoreApplication>
 #include <QMouseEvent>
 #include <QPoint>
 #include <QSize>
@@ -65,15 +63,6 @@ void hideViewCube(viewer::OcctViewWidget& view)
 }
 
 } // namespace
-
-std::filesystem::path pairFolder(const std::string& suite)
-{
-    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
-    const std::filesystem::path root =
-        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
-                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
-    return root / suite;
-}
 
 std::optional<std::string> viewportMissing()
 {
@@ -190,11 +179,14 @@ void homeCamera(app::MainWindow& window)
 Shots grabPair(app::MainWindow& oldWindow, app::MainWindow& newWindow, const std::function<void(app::MainWindow&)>& aim)
 {
     render::Viewport& canvas = *newWindow.viewport();
+    viewer::OcctViewWidget& old = *oldWindow.oldView();
+    EXPECT_TRUE(
+        QTest::qWaitFor([&] { return !newWindow.cameraCommands()->isAnimating() && !old.isAnimating(); }, kReadyMs))
+        << "The camera kept moving before the pair was aimed";
     aim(newWindow);
     QTest::qWait(kSettleMs);
     const camera::Camera camera = canvas.camera();
     const camera::Viewport viewport = canvas.viewport();
-    viewer::OcctViewWidget& old = *oldWindow.oldView();
     hideViewCube(old);
     old.setSyncedCamera(camera, viewport);
     QTest::qWait(kSettleMs);
