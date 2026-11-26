@@ -2,11 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Run the viewport UI tests of ctest's Viewport.* on OpenGL with Mesa llvmpipe under Xvfb, after a
-# linux-release build. Tests in EXCLUDED don't run here and are printed with their reason. Fails
-# when a test fails, when no test ran, when the viewport found no OpenGL device or when a
-# reference color test skipped.
-
 set -euo pipefail
 
 sudo=""

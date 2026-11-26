@@ -422,7 +422,7 @@ protected:
 
 TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     const std::filesystem::path folder = pairFolder("HighlightPairTest");

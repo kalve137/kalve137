@@ -254,7 +254,7 @@ protected:
 
 TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -292,7 +292,7 @@ TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
 
 TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -338,7 +338,7 @@ TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
 
 TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -371,7 +371,7 @@ TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
 
 TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -406,7 +406,7 @@ TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
 
 TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

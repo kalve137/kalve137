@@ -97,7 +97,7 @@ public:
         bool operator==(const Hit&) const = default;
     };
 
-    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::Viewport* newView,
+    SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view, render::Viewport* viewport,
                  QObject* parent = nullptr);
     ~SketchEditor() override;
 

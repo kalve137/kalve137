@@ -426,7 +426,7 @@ protected:
 
 TEST_F(ProjectPairTest, ProjectedCurvesDrawInTheirColorAndLostOnesInTheConflictColor)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

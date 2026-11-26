@@ -29,9 +29,9 @@ camera::Vec3 toVec(const gp_Dir& direction)
 
 } // namespace
 
-CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::Viewport* newView,
+CameraCommands::CameraCommands(viewer::OcctViewWidget& view, render::Viewport* viewport,
                                std::function<bool()> sceneIsEmpty, QObject* parent)
-    : QObject(parent), m_view(&view), m_viewport(newView), m_sceneIsEmpty(std::move(sceneIsEmpty))
+    : QObject(parent), m_view(&view), m_viewport(viewport), m_sceneIsEmpty(std::move(sceneIsEmpty))
 {
     if (m_viewport == nullptr) {
         return;

@@ -413,7 +413,7 @@ protected:
 
 TEST_F(EdgePairTest, EdgesMatchTheOldViewInNumbers)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     const std::filesystem::path folder = pairFolder("EdgePairTest");
