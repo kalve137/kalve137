@@ -6,6 +6,10 @@ name: Packages
 on:
   workflow_call:
     inputs:
+      ref:
+        required: false
+        type: string
+        default: ""
       version_base:
         required: false
         type: string
@@ -37,6 +41,8 @@ jobs:
       SOFTWARE_GL_DIR: C:\software-gl
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -148,6 +154,8 @@ jobs:
       VCPKG_TRIPLET: x64-linux-dynamic-release
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install the system packages
         run: bash scripts/linux-deps.sh
@@ -253,6 +261,8 @@ jobs:
       VCPKG_TRIPLET: arm64-osx-dynamic-release
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install the build tools
         run: brew install autoconf autoconf-archive automake libtool ninja pkgconf
