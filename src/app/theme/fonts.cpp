@@ -46,6 +46,13 @@ QString addToOcct(const QString& path)
     return QString::fromUtf8(font->FontName().ToCString());
 }
 
+QDir fontFolder()
+{
+    const QString appDir = QApplication::applicationDirPath();
+    const QDir bundled(appDir + QLatin1String("/../Resources/") + QLatin1String(kFolder));
+    return bundled.exists() ? bundled : QDir(appDir + QLatin1Char('/') + QLatin1String(kFolder));
+}
+
 } // namespace
 
 const Families& load()
@@ -53,7 +60,7 @@ const Families& load()
     const QString system = QApplication::font().family();
     g_families = {system, system, system};
 
-    const QDir folder(QApplication::applicationDirPath() + QLatin1Char('/') + QLatin1String(kFolder));
+    const QDir folder = fontFolder();
     const QString regularPath = folder.filePath(QLatin1String(kRegularFile));
     const QString mediumPath = folder.filePath(QLatin1String(kMediumFile));
     const QString qt = addToQt(regularPath);
