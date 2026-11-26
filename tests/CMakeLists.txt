@@ -71,7 +71,12 @@ add_executable(kalve137_tests
     viewer/grid_test.cpp
     viewer/view_turn_test.cpp
 )
-target_compile_definitions(kalve137_tests PRIVATE KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_compile_definitions(kalve137_tests PRIVATE
+    KALVE137_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    KALVE137_TEST_PROJECT_VERSION="${PROJECT_VERSION}"
+    KALVE137_TEST_VERSION_BASE="${KALVE137_VERSION_BASE}"
+    KALVE137_TEST_VERSION_SUFFIX="${KALVE137_VERSION_SUFFIX}"
+)
 target_link_libraries(kalve137_tests PRIVATE
     kalve137_app
     kalve137_camera
