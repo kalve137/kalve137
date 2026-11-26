@@ -11,8 +11,10 @@ add_library(kalve137_render_rhi STATIC
     rhi_datums.cpp
     rhi_ids.cpp
     rhi_pipelines.cpp
-    rhi_view.cpp
-    rhi_view.h
+    viewport.cpp
+    viewport.h
+    viewport_input.cpp
+    viewport_record.cpp
 )
 target_include_directories(kalve137_render_rhi PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(kalve137_render_rhi

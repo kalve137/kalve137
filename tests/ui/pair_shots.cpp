@@ -6,7 +6,7 @@
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
 #include "render/graphics_api.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QAction>
@@ -65,7 +65,7 @@ std::optional<std::string> newViewMissing()
     }
     const render::GraphicsApi api = render::platformGraphicsApi();
     if (!render::canStart(api)) {
-        return std::format("The new view has no usable {} device here", render::graphicsApiName(api));
+        return std::format("The viewport has no usable {} device here", render::graphicsApiName(api));
     }
     return std::nullopt;
 }
@@ -79,7 +79,8 @@ std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view)
     const bool settled = QTest::qWaitFor(
         [&] {
             if (view == app::ViewKind::New) {
-                return window->newView() == nullptr || window->newView()->isReady() || window->newView()->hasFailed();
+                return window->viewport() == nullptr || window->viewport()->isReady() ||
+                       window->viewport()->hasFailed();
             }
             return window->oldView()->isReady();
         },
@@ -147,7 +148,7 @@ void homeCamera(app::MainWindow& window)
 
 Shots grabPair(app::MainWindow& oldWindow, app::MainWindow& newWindow, const std::function<void(app::MainWindow&)>& aim)
 {
-    render::RhiView& canvas = *newWindow.newView();
+    render::Viewport& canvas = *newWindow.viewport();
     aim(newWindow);
     QTest::qWait(kSettleMs);
     const camera::Camera camera = canvas.camera();
@@ -186,7 +187,7 @@ void send(QWidget& widget, QEvent::Type type, QPointF at, Qt::MouseButton button
     QApplication::processEvents();
     if (auto* old = qobject_cast<viewer::OcctViewWidget*>(&widget)) {
         old->grabFramebuffer();
-    } else if (auto* fresh = qobject_cast<render::RhiView*>(&widget)) {
+    } else if (auto* fresh = qobject_cast<render::Viewport*>(&widget)) {
         fresh->grabFramebuffer();
     }
 }

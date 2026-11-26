@@ -174,7 +174,7 @@ TEST_F(PreferencesTest, LightThemeShowsABodyASketchAndADialog)
     ui = std::make_unique<UiDriver>();
     ui->trigger("Open Sample");
     const std::filesystem::path folder = ui->save("light body").parent_path();
-    const bool oldView = ui->newView() == nullptr;
+    const bool oldView = ui->viewport() == nullptr;
     const auto saveCube = [&](const QRectF& cube, const std::string& name) {
         const QRect area = cube.toAlignedRect().adjusted(-kCubeMargin, -kCubeMargin, kCubeMargin, kCubeMargin);
         const QPoint corner = ui->view().mapTo(ui->view().window(), area.topLeft());

@@ -12,7 +12,7 @@
 #include <optional>
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::app {
@@ -21,21 +21,21 @@ class CameraCommands;
 
 class SnapshotNavigationScene : public camera::NavigationScene {
 public:
-    explicit SnapshotNavigationScene(render::RhiView& view);
+    explicit SnapshotNavigationScene(render::Viewport& view);
 
     std::optional<camera::Vec3> pick(const camera::Camera& camera, const camera::Viewport& viewport,
                                      const camera::Pixel& pixel, bool onRay) const override;
     camera::Vec3 gravityPoint(const camera::Camera& camera, const camera::Viewport& viewport) const override;
 
 private:
-    render::RhiView* m_view;
+    render::Viewport* m_view;
 };
 
-class NewViewNavigation : public QObject {
+class ViewportNavigation : public QObject {
     Q_OBJECT
 
 public:
-    NewViewNavigation(render::RhiView& view, CameraCommands& commands);
+    ViewportNavigation(render::Viewport& view, CameraCommands& commands);
 
     void setNavigation(const camera::Navigation& navigation);
 
@@ -50,7 +50,7 @@ private:
     std::optional<camera::Pixel> pixelAt(QPointF position) const;
     void flush();
 
-    render::RhiView* m_view;
+    render::Viewport* m_view;
     CameraCommands* m_commands;
     camera::Navigator m_navigator;
     SnapshotNavigationScene m_scene;

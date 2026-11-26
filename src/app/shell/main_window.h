@@ -34,7 +34,7 @@ class OcctViewWidget;
 }
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::app {
@@ -46,7 +46,7 @@ class CommandSearch;
 class DesignSession;
 class FeaturePanel;
 class MeasurePanel;
-class NewViewPicker;
+class ViewportPicker;
 class ParametersDialog;
 class PickSource;
 class ProjectPanel;
@@ -67,7 +67,7 @@ public:
     void openDesignWhenShown(const std::filesystem::path& path);
     void addImport(const std::filesystem::path& path, ImportedStep imported);
     viewer::OcctViewWidget* oldView() const { return m_view; }
-    render::RhiView* newView() const { return m_rhiView; }
+    render::Viewport* viewport() const { return m_viewport; }
     CameraCommands* cameraCommands() const { return m_cameraCommands; }
     PickSource* picks() const { return m_picks; }
     Scene* scene() const { return m_scene.get(); }
@@ -140,8 +140,8 @@ private:
     void showGridSettings();
     void applyPreferences();
     void applyViewportTheme();
-    void applyNewViewStyle();
-    void syncNewViewGrid();
+    void applyViewportStyle();
+    void syncViewportGrid();
     void lookAtSketch();
 
     static constexpr int kMessageTimeoutMs = 5000;
@@ -150,12 +150,12 @@ private:
     DesignSession* m_session = nullptr;
     Autosave* m_autosave = nullptr;
     viewer::OcctViewWidget* m_view = nullptr;
-    render::RhiView* m_rhiView = nullptr;
+    render::Viewport* m_viewport = nullptr;
     std::unique_ptr<viewer::OcctViewWidget> m_hiddenView;
     CameraCommands* m_cameraCommands = nullptr;
     std::unique_ptr<Scene> m_scene;
     PickSource* m_picks = nullptr;
-    NewViewPicker* m_newViewPicker = nullptr;
+    ViewportPicker* m_viewportPicker = nullptr;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
     TimelineWidget* m_timeline = nullptr;

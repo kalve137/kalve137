@@ -5,17 +5,17 @@
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
 #include "app/view/pick_source.h"
 #include "app/view/scene.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "scenario.h"
 #include "ui_driver.h"
@@ -87,7 +87,7 @@ using Aim = std::function<void(app::MainWindow&)>;
 Aim orbit(const camera::Vec3& center, double degrees, double elevation, double scale, camera::Projection projection)
 {
     return [=](app::MainWindow& window) {
-        render::RhiView& canvas = *window.newView();
+        render::Viewport& canvas = *window.viewport();
         camera::Camera camera = canvas.camera();
         camera.setProjectionType(projection);
         const double angle = degrees * std::numbers::pi / 180.0;
@@ -228,7 +228,7 @@ protected:
     bool start()
     {
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -272,7 +272,7 @@ protected:
         table << stem << '\t' << old << '\t' << fresh << '\n';
         ASSERT_GT(old, 0U) << stem;
         EXPECT_NEAR(static_cast<double>(fresh), static_cast<double>(old), static_cast<double>(old) * kAreaShare)
-            << stem << ": the new view covers as many pixels as the old view";
+            << stem << ": the viewport covers as many pixels as the old view";
     }
 
     std::unique_ptr<app::MainWindow> m_old;
@@ -285,7 +285,7 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     std::ofstream table(m_folder / "origin-spans.tsv");
     table << "view\told right\tnew right\told top\tnew top\tnew width\n";
     load(core::Document{}, true);
@@ -319,7 +319,7 @@ TEST_F(PlanePairTest, AConstructionPlaneCuttingABodyCoversTheOldViewsArea)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     std::ofstream table(m_folder / "plane-areas.tsv");
     table << "view\told pixels\tnew pixels\n";
     const Aim aim = orbit({0.0, 0.0, kHalfPlane}, -60.0, 25.0, 200.0, camera::Projection::Perspective);
@@ -347,7 +347,7 @@ TEST_F(PlanePairTest, PlanesAndAxesFarFromASmallBodyCoverTheOldViewsArea)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     std::ofstream table(m_folder / "far-areas.tsv");
     table << "view\told pixels\tnew pixels\n";
     const Aim aim = orbit({kFarBody / 2.0, 0.0, 0.0}, -60.0, 30.0, 400.0, camera::Projection::Perspective);
@@ -369,13 +369,13 @@ TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     core::Document document = blockDocument();
     document.add(offsetPlane(kHalfPlane));
     document.add(
         core::AxisFeature{core::AxisSource::TwoPoints, gp_Ax1(gp_Pnt(0.0, 0.0, kHalfPlane), gp::DY()), "Points"});
     load(document, true);
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     const core::Model& oldModel = m_old->findChild<app::DesignSession*>()->model();
     const core::Model& newModel = m_new->findChild<app::DesignSession*>()->model();
@@ -401,7 +401,7 @@ TEST_F(PlanePairTest, PlaneAndAxisPicksFollowTheOldViewsRecord)
         QTest::qWait(kSettleMs);
         shoot(orbit({0.0, 0.0, kHalfPlane}, -60.0, 25.0, kPickScale, camera::Projection::Perspective),
               std::format("picking plane {}", name));
-        const QSize size = m_new->newView()->size();
+        const QSize size = m_new->viewport()->size();
         std::map<std::pair<std::string, std::string>, int> counts;
         std::map<std::string, std::vector<QPointF>> agreed;
         int picked = 0;
@@ -458,11 +458,11 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     m_new->scene()->setPickMode(app::PickMode::Planes);
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
-    render::RhiView& canvas = *m_new->newView();
+    render::Viewport& canvas = *m_new->viewport();
     const std::vector<std::pair<std::string, std::optional<double>>> cases{
         {"in front", kPivotPlane}, {"inside", kHalfPlane}, {"behind", -kPivotPlane}, {"origin", std::nullopt}};
     for (const auto& [name, offset] : cases) {
@@ -509,7 +509,7 @@ TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
         actionNamed(*window, QStringLiteral("Show Grid"))->trigger();
     }
@@ -532,11 +532,11 @@ TEST_F(PlanePairTest, FitFramesConstructionGeometryAndAnEmptyDesign)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     core::Document planes;
     planes.add(offsetPlane(kFarPlane));
     load(planes, false);
-    render::RhiView& canvas = *m_new->newView();
+    render::Viewport& canvas = *m_new->viewport();
     m_new->cameraCommands()->fit(app::CameraCommands::Move::Jump);
     QTest::qWait(kSettleMs);
     const QPointF anchor = screenOf(canvas.camera(), canvas.viewport(), {0.0, 0.0, kFarPlane});

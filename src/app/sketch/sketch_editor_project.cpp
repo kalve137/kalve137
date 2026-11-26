@@ -10,7 +10,7 @@
 #include "core/projection.h"
 #include "geometry/modeling.h"
 #include "log/log.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <BRepAdaptor_Curve.hxx>
@@ -254,8 +254,8 @@ void unproject(sketch::Sketch& s, const core::Projection& link)
 
 void SketchEditor::setModelPicking(bool picking)
 {
-    if (m_newView != nullptr) {
-        m_newView->setLeftButtonCaptured(!picking);
+    if (m_viewport != nullptr) {
+        m_viewport->setLeftButtonCaptured(!picking);
     } else {
         m_view->setLeftButtonCaptured(!picking);
     }

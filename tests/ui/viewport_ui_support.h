@@ -9,7 +9,7 @@
 #include "camera/camera.h"
 #include "render/cpu_backend.h"
 #include "render/graphics_api.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "snapshot/mesh.h"
 
 #include <QColor>
@@ -41,7 +41,7 @@ struct Comparison {
 
 class GridHidden {
 public:
-    explicit GridHidden(render::RhiView& canvas) : m_canvas(canvas), m_original(canvas.grid().settings())
+    explicit GridHidden(render::Viewport& canvas) : m_canvas(canvas), m_original(canvas.grid().settings())
     {
         render::GridSettings hidden = m_original;
         hidden.visible = false;
@@ -52,7 +52,7 @@ public:
     ~GridHidden() { m_canvas.setGrid(m_original); }
 
 private:
-    render::RhiView& m_canvas;
+    render::Viewport& m_canvas;
     render::GridSettings m_original;
 };
 
@@ -60,16 +60,16 @@ void waitForCamera(app::CameraCommands& commands);
 void expectSameMatrix(const camera::Mat4& ours, const camera::Mat4& theirs, const std::string& what);
 void expectFollowed(UiDriver& ui, const std::string& step);
 void expectDirection(const camera::Camera& camera, const camera::Vec3& direction, const std::string& step);
-void sendMouse(render::RhiView& canvas, QEvent::Type type, QPointF pos, Qt::MouseButton button,
+void sendMouse(render::Viewport& canvas, QEvent::Type type, QPointF pos, Qt::MouseButton button,
                Qt::MouseButtons buttons);
 bool sameColor(const QColor& a, const QColor& b);
-render::Image cpuOf(const render::RhiView& canvas);
+render::Image cpuOf(const render::Viewport& canvas);
 Comparison compare(const QImage& gpu, const render::Image& cpu);
-QImage grabbed(render::RhiView& canvas);
-void expectShown(render::RhiView& canvas, const QImage& before, const std::string& step);
+QImage grabbed(render::Viewport& canvas);
+void expectShown(render::Viewport& canvas, const QImage& before, const std::string& step);
 std::size_t differing(const QImage& a, const QImage& b);
 camera::Camera obliqueAt(const snapshot::Point& center, double scale);
 
-using NewViewTest = UiTest;
+using ViewportTest = UiTest;
 
 } // namespace kalve137::uitest

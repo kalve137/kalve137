@@ -50,7 +50,7 @@ TEST(StartupOptions, RejectsUnknownValues)
                      .error.isEmpty());
 }
 
-TEST(StartupOptions, TheApiOverrideNeedsTheNewView)
+TEST(StartupOptions, TheApiOverrideNeedsTheViewport)
 {
     EXPECT_FALSE(
         parseStartup({kProgram, QStringLiteral("--graphics-api"), QStringLiteral("d3d12")}, {}).error.isEmpty());

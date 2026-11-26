@@ -5,7 +5,7 @@
 
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QAbstractButton>
@@ -31,7 +31,7 @@ using HarnessTest = UiTest;
 TEST_F(HarnessTest, RendersTheWindowOffScreen)
 {
     EXPECT_TRUE(ui->window().testAttribute(Qt::WA_DontShowOnScreen));
-    if (render::RhiView* canvas = ui->newView()) {
+    if (render::Viewport* canvas = ui->viewport()) {
         EXPECT_FALSE(canvas->grabFramebuffer().isNull());
     } else {
         const QImage view = ui->view().grabFramebuffer();

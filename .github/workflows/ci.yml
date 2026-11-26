@@ -255,7 +255,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset linux-release -LE ui
 
-      - name: Test the new view on OpenGL
+      - name: Test the viewport on OpenGL
         run: bash scripts/linux-opengl-tests.sh
 
       - name: Upload UI screenshots

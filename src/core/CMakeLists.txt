@@ -17,6 +17,7 @@ add_library(kalve137_core STATIC
     parameter_table.cpp
     parameter_table.h
     parameters.cpp
+    parameters_expression.cpp
     parameters.h
     project.cpp
     project.h

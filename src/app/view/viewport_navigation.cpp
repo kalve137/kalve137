@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "app/view/new_view_navigation.h"
+#include "app/view/viewport_navigation.h"
 
 #include "app/view/camera_commands.h"
 #include "camera/gravity.h"
 #include "render/draw_list.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 
 #include <memory>
 
@@ -34,7 +34,7 @@ unsigned toModifiers(Qt::KeyboardModifiers modifiers)
 
 } // namespace
 
-SnapshotNavigationScene::SnapshotNavigationScene(render::RhiView& view) : m_view(&view) {}
+SnapshotNavigationScene::SnapshotNavigationScene(render::Viewport& view) : m_view(&view) {}
 
 std::optional<camera::Vec3> SnapshotNavigationScene::pick(const camera::Camera& camera,
                                                           const camera::Viewport& viewport, const camera::Pixel& pixel,
@@ -54,25 +54,25 @@ camera::Vec3 SnapshotNavigationScene::gravityPoint(const camera::Camera& camera,
     return camera::gravityPoint(camera, render::bodyBounds(m_view->scene()));
 }
 
-NewViewNavigation::NewViewNavigation(render::RhiView& view, CameraCommands& commands)
+ViewportNavigation::ViewportNavigation(render::Viewport& view, CameraCommands& commands)
     : QObject(&commands), m_view(&view), m_commands(&commands), m_scene(view)
 {
-    connect(m_view, &render::RhiView::mousePressed, this, &NewViewNavigation::press);
-    connect(m_view, &render::RhiView::mouseReleased, this,
+    connect(m_view, &render::Viewport::mousePressed, this, &ViewportNavigation::press);
+    connect(m_view, &render::Viewport::mouseReleased, this,
             [this](QPointF position, Qt::MouseButton, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers) {
                 release(position, buttons, modifiers);
             });
-    connect(m_view, &render::RhiView::mouseMoved, this, &NewViewNavigation::move);
-    connect(m_view, &render::RhiView::wheelTurned, this, &NewViewNavigation::wheel);
+    connect(m_view, &render::Viewport::mouseMoved, this, &ViewportNavigation::move);
+    connect(m_view, &render::Viewport::wheelTurned, this, &ViewportNavigation::wheel);
 }
 
-void NewViewNavigation::setNavigation(const camera::Navigation& navigation)
+void ViewportNavigation::setNavigation(const camera::Navigation& navigation)
 {
     m_navigator.setNavigation(navigation);
 }
 
-void NewViewNavigation::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
-                              Qt::KeyboardModifiers modifiers)
+void ViewportNavigation::press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons,
+                               Qt::KeyboardModifiers modifiers)
 {
     const Qt::MouseButton menuButton = m_navigator.navigation().preset == camera::NavigationPreset::RightOrbitsCtrlPans
                                            ? Qt::MiddleButton
@@ -87,7 +87,7 @@ void NewViewNavigation::press(QPointF position, Qt::MouseButton button, Qt::Mous
     }
 }
 
-void NewViewNavigation::release(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers)
+void ViewportNavigation::release(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers)
 {
     if (const std::optional<camera::Pixel> pixel = pixelAt(position)) {
         m_navigator.buttons(*pixel, toButtons(buttons), toModifiers(modifiers));
@@ -95,7 +95,7 @@ void NewViewNavigation::release(QPointF position, Qt::MouseButtons buttons, Qt::
     }
 }
 
-void NewViewNavigation::move(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers)
+void ViewportNavigation::move(QPointF position, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers)
 {
     if (const std::optional<camera::Pixel> pixel = pixelAt(position)) {
         m_navigator.move(*pixel, toButtons(buttons), toModifiers(modifiers));
@@ -103,7 +103,7 @@ void NewViewNavigation::move(QPointF position, Qt::MouseButtons buttons, Qt::Key
     }
 }
 
-void NewViewNavigation::wheel(QPointF position, double notches)
+void ViewportNavigation::wheel(QPointF position, double notches)
 {
     if (const std::optional<camera::Pixel> pixel = pixelAt(position)) {
         m_navigator.wheel(*pixel, notches);
@@ -111,7 +111,7 @@ void NewViewNavigation::wheel(QPointF position, double notches)
     }
 }
 
-std::optional<camera::Pixel> NewViewNavigation::pixelAt(QPointF position) const
+std::optional<camera::Pixel> ViewportNavigation::pixelAt(QPointF position) const
 {
     const std::optional<camera::Viewport> viewport = m_commands->viewport();
     if (!viewport) {
@@ -120,7 +120,7 @@ std::optional<camera::Pixel> NewViewNavigation::pixelAt(QPointF position) const
     return camera::toPixel({position.x(), position.y()}, *viewport);
 }
 
-void NewViewNavigation::flush()
+void ViewportNavigation::flush()
 {
     if (!m_navigator.hasPending()) {
         return;

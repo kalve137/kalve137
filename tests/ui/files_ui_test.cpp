@@ -7,7 +7,7 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QAbstractButton>
@@ -218,8 +218,8 @@ TEST_F(FilesTest, ADesignFromTheCommandLineOpensAfterTheWindowHasDrawn)
             lastEmptyFrame = view.size();
         }
     };
-    if (render::RhiView* canvas = window.newView()) {
-        QObject::connect(canvas, &render::RhiView::ready, &window, [&, canvas] { recordFrame(*canvas); });
+    if (render::Viewport* canvas = window.viewport()) {
+        QObject::connect(canvas, &render::Viewport::ready, &window, [&, canvas] { recordFrame(*canvas); });
     } else {
         viewer::OcctViewWidget* view = window.oldView();
         QObject::connect(view, &viewer::OcctViewWidget::rendered, &window, [&, view] { recordFrame(*view); });

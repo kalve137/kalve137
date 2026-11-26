@@ -9,7 +9,7 @@
 #include "core/document.h"
 #include "core/feature.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/sketches.h"
 #include "scenario.h"
 #include "sketch/dimension.h"
@@ -134,7 +134,7 @@ QRectF sketchBox(UiDriver& ui, double margin)
 Counts compareHits(UiDriver& ui, app::SketchEditor& editor, const std::string& name, std::ofstream& record)
 {
     Counts counts;
-    const bool oldView = ui.newView() == nullptr;
+    const bool oldView = ui.viewport() == nullptr;
     const QRectF box = sketchBox(ui, kMargin);
     int listed = 0;
     for (int y = static_cast<int>(box.top()); y < static_cast<int>(box.bottom()); y += kStride) {
@@ -167,8 +167,8 @@ TEST_F(SketchInputTest, HitsThroughTheCameraMatchTheView)
     sketch::Vec2 label;
     app::SketchEditor* editor = openInputSketch(*ui, label);
     ASSERT_NE(editor, nullptr);
-    ASSERT_EQ(editor->hasCameraInput(), ui->newView() != nullptr);
-    const bool oldView = ui->newView() == nullptr;
+    ASSERT_EQ(editor->hasCameraInput(), ui->viewport() != nullptr);
+    const bool oldView = ui->viewport() == nullptr;
     std::ofstream record(ui->save("sketch input").parent_path() / "sketch-input.tsv");
     record << "case\tx\ty\tview_kind\tview_id\tcamera_kind\tcamera_id\n";
     std::map<std::string, Counts> results;
@@ -240,7 +240,7 @@ TEST_F(SketchInputTest, ANavigationDragOverALineSkipsTheRedrawThatAPlainMoveMake
     const gp_Pnt line(19.0, -15.0, 0.0);
     ui->move(ui->at(empty));
     const auto drawn = [&] {
-        return ui->newView() != nullptr ? ui->newView()->activeSketch() : render::ActiveSketch{};
+        return ui->viewport() != nullptr ? ui->viewport()->activeSketch() : render::ActiveSketch{};
     };
     const render::ActiveSketch start = drawn();
     QSignalSpy redraws(editor, &app::SketchEditor::stateChanged);
@@ -251,7 +251,7 @@ TEST_F(SketchInputTest, ANavigationDragOverALineSkipsTheRedrawThatAPlainMoveMake
     EXPECT_EQ(drawn(), start);
     ui->move(ui->at(empty));
     ui->move(ui->at(line));
-    if (ui->newView() != nullptr) {
+    if (ui->viewport() != nullptr) {
         EXPECT_NE(drawn(), start);
     } else {
         EXPECT_GT(redraws.count(), 0);
@@ -291,7 +291,7 @@ bool drawsStroke(UiDriver& ui, const gp_Pnt& from, const gp_Pnt& to)
     const auto near = [](const snapshot::Point& p, const gp_Pnt& q) {
         return std::hypot(p[0] - q.X(), p[1] - q.Y(), p[2] - q.Z()) < kStrokeSlack;
     };
-    return std::ranges::any_of(ui.newView()->activeSketch().strokes, [&](const render::SketchStroke& stroke) {
+    return std::ranges::any_of(ui.viewport()->activeSketch().strokes, [&](const render::SketchStroke& stroke) {
         return stroke.points.size() == 2 && ((near(stroke.points.front(), from) && near(stroke.points.back(), to)) ||
                                              (near(stroke.points.front(), to) && near(stroke.points.back(), from)));
     });
@@ -342,7 +342,7 @@ TEST_F(SketchInputTest, AHoverAfterAnEditOrUndoDrawsTheSketchAsItIsNow)
     ui->move(ui->at(empty));
     ui->move(ui->at(middle));
     EXPECT_TRUE(paintsNear(*ui, middle, hoverColor()));
-    if (ui->newView() != nullptr) {
+    if (ui->viewport() != nullptr) {
         EXPECT_TRUE(drawsStroke(*ui, from, to));
     }
 
@@ -350,7 +350,7 @@ TEST_F(SketchInputTest, AHoverAfterAnEditOrUndoDrawsTheSketchAsItIsNow)
     ui->key(Qt::Key_Z, Qt::ControlModifier);
     ui->move(ui->at(middle));
     EXPECT_FALSE(paintsNear(*ui, middle, hoverColor()));
-    if (ui->newView() != nullptr) {
+    if (ui->viewport() != nullptr) {
         EXPECT_FALSE(drawsStroke(*ui, from, to));
     }
 }
@@ -376,17 +376,17 @@ bool changesAround(const QImage& before, const QImage& after, const QPointF& at,
 
 TEST_F(SketchInputTest, ActiveSketchFollowsTheCameraHereAndOnOpenGl)
 {
-    if (ui->newView() == nullptr) {
+    if (ui->viewport() == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
     sketch::Vec2 label;
     ASSERT_NE(openInputSketch(*ui, label), nullptr);
     ui->settle(kRescaleSettleMs);
-    render::RhiView& canvas = *ui->newView();
+    render::Viewport& canvas = *ui->viewport();
     const render::ActiveSketch active = canvas.activeSketch();
     ASSERT_FALSE(active.strokes.empty());
     const camera::Camera start = canvas.camera();
-    const auto check = [&](render::RhiView& view, const std::string& name) {
+    const auto check = [&](render::Viewport& view, const std::string& name) {
         for (int move = 0; move < kCameraMoves; ++move) {
             camera::Camera camera = start;
             const double angle = 0.5 * move;
@@ -410,7 +410,7 @@ TEST_F(SketchInputTest, ActiveSketchFollowsTheCameraHereAndOnOpenGl)
     if (!render::canStart(render::GraphicsApi::OpenGL)) {
         return;
     }
-    render::RhiView view(render::GraphicsApi::OpenGL);
+    render::Viewport view(render::GraphicsApi::OpenGL);
     view.setAttribute(Qt::WA_DontShowOnScreen);
     view.resize(canvas.size());
     view.show();

@@ -76,7 +76,7 @@ void SketchEditor::redraw()
     clearObjects(m_objects);
     m_constraintObjects.clear();
     if (!isActive() || feature() == nullptr) {
-        if (m_newView != nullptr) {
+        if (m_viewport != nullptr) {
             clearView();
         } else {
             m_view->redraw();
@@ -89,7 +89,7 @@ void SketchEditor::redraw()
     m_solve = cache.solve;
     const std::set<Id> conflicted = cache.conflicted;
 
-    if (m_newView != nullptr) {
+    if (m_viewport != nullptr) {
         drawViewSketch(shown, conflicted);
     } else {
         drawSketch(shown, conflicted);
@@ -101,7 +101,7 @@ void SketchEditor::redraw()
         const Id id = shown.addConstraint(pending->kind, pending->refs, pending->value);
         shown.constraint(id)->labelOffset = pending->labelOffset;
     }
-    if (m_newView != nullptr) {
+    if (m_viewport != nullptr) {
         drawViewConstraints(shown, m_solve);
         publish();
     } else {
@@ -377,7 +377,7 @@ void SketchEditor::redrawPreview()
     m_viewPreview.clear();
     m_viewPreviewMarkers.clear();
     if (!isActive() || !m_hasCursor || feature() == nullptr) {
-        if (m_newView != nullptr) {
+        if (m_viewport != nullptr) {
             publishPreview();
         } else {
             m_view->redraw();
@@ -386,7 +386,7 @@ void SketchEditor::redrawPreview()
     }
     const gp_Ax3 ax = plane();
     const sketch::Placement placement = sketch::placementOf(ax);
-    const bool inView = m_newView != nullptr;
+    const bool inView = m_viewport != nullptr;
     const auto world = [&](Vec2 p) { return sketch::toWorld(ax, p); };
     const auto addEdge = [&](const TopoDS_Shape& shape) {
         Handle(AIS_Shape) object = new AIS_Shape(shape);

@@ -29,7 +29,7 @@ struct Mesh;
 }
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::pick {
@@ -42,12 +42,12 @@ class BandOverlay;
 class DesignSession;
 class Scene;
 
-class NewViewPicker : public PickSource {
+class ViewportPicker : public PickSource {
     Q_OBJECT
 
 public:
-    NewViewPicker(render::RhiView& view, const DesignSession& session, Scene& scene, pick::SceneRays& rays,
-                  QObject* parent = nullptr);
+    ViewportPicker(render::Viewport& view, const DesignSession& session, Scene& scene, pick::SceneRays& rays,
+                   QObject* parent = nullptr);
 
     std::optional<Pick> hovered() const override;
     std::vector<Pick> selected() const override;
@@ -108,7 +108,7 @@ private:
     void addHover(render::Highlight& highlight) const;
     void announce(void (PickSource::*signal)());
 
-    render::RhiView* m_view;
+    render::Viewport* m_view;
     const DesignSession* m_session;
     Scene* m_scene;
     pick::SceneRays* m_rays;
