@@ -217,16 +217,79 @@ if [[ -e "$macos_dir/fonts" ]]; then
 fi
 
 resources="$app/Contents/Resources"
+notices_dir="$resources/notices"
+
+notice_for_name() {
+    case "$1" in
+        Qt* | libQt* | libq*) echo Qt ;;
+        libTK* | TK*) echo OpenCASCADE ;;
+        libplanegcs* | planegcs*) echo PlaneGCS ;;
+        libfreetype* | freetype*) echo FreeType ;;
+        libpng* | libpng16*) echo libpng ;;
+        libz.* | libz | libzlib*) echo zlib ;;
+        libbz2* | bz2*) echo bzip2 ;;
+        libbrotli* | brotli*) echo Brotli ;;
+        libfmt* | fmt*) echo fmt ;;
+        libminiz* | miniz*) echo miniz ;;
+        libspdlog* | spdlog*) echo spdlog ;;
+        libboost_* | boost_*) echo Boost ;;
+        *) return 1 ;;
+    esac
+}
+
+shipped_name() {
+    local path="$1"
+    local base
+    base="$(basename "$path")"
+    if [[ "$base" == *.framework ]]; then
+        printf '%s\n' "${base%.framework}"
+        return
+    fi
+    if [[ "$base" == *.dylib ]]; then
+        printf '%s\n' "${base%.dylib}"
+        return
+    fi
+    printf '%s\n' "$base"
+}
+
+static_notices=(
+    Kalve137 PlaneGCS occt-qt-tools tinybvh Roboto Boost Eigen nlohmann-json
+)
+
 missing=0
-for file in THIRD-PARTY-NOTICES.md samples/dodecahedron.k137 notices/Kalve137.txt notices/Qt.txt \
-    notices/OpenCASCADE.txt notices/PlaneGCS.txt notices/occt-qt-tools.txt notices/tinybvh.txt notices/Roboto.txt \
-    notices/Boost.txt notices/Eigen.txt notices/spdlog.txt notices/fmt.txt notices/nlohmann-json.txt \
-    notices/miniz.txt; do
+for file in THIRD-PARTY-NOTICES.md samples/dodecahedron.k137; do
     if [[ ! -f "$resources/$file" ]]; then
         echo "The bundle is missing $resources/$file" >&2
         missing=1
     fi
 done
+
+required_notices=()
+while IFS= read -r base; do
+    [[ -z "$base" ]] && continue
+    if notice="$(notice_for_name "$base")"; then
+        required_notices+=("$notice")
+    else
+        echo "No notice mapping for $base" >&2
+        missing=1
+    fi
+done < <(
+    find "$app" \( -name '*.dylib' -o -name '*.framework' \) -print | while IFS= read -r path; do
+        shipped_name "$path"
+    done | sort -u
+)
+
+for notice in "${static_notices[@]}"; do
+    required_notices+=("$notice")
+done
+
+for notice in $(printf '%s\n' "${required_notices[@]}" | sort -u); do
+    if [[ ! -f "$notices_dir/${notice}.txt" ]]; then
+        echo "The bundle is missing $notices_dir/${notice}.txt" >&2
+        missing=1
+    fi
+done
+
 if [[ "$missing" -ne 0 ]]; then
     exit 1
 fi
