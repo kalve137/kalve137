@@ -38,11 +38,15 @@ jobs:
       VCPKG_ROOT: C:\vcpkg-kalve137
       VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
       VCPKG_TRIPLET: x64-windows-release
+      LLVM_VERSION: 22.1.8
       SOFTWARE_GL_DIR: C:\software-gl
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
+
+      - name: Install LLVM
+        run: choco install llvm --version=$env:LLVM_VERSION -y --no-progress --force
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
