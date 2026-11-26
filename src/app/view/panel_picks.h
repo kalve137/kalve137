@@ -3,18 +3,23 @@
 
 #pragma once
 
+#include "camera/camera.h"
 #include "core/feature.h"
 #include "core/recompute.h"
 #include "render/chunk_set.h"
+#include "render/draw_list.h"
+#include "snapshot/color.h"
 
 #include <NCollection_IndexedMap.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Vertex.hxx>
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <set>
 #include <span>
 #include <vector>
@@ -41,6 +46,14 @@ private:
 
 void addOutline(const core::Body& body, std::uint32_t face, BodyShapeCache& shapes,
                 std::set<render::PickedItem>& outline);
+struct VertexColors {
+    snapshot::Color hovered;
+    snapshot::Color selected;
+};
+
+std::optional<camera::Vec3> vertexAt(const core::Body& body, std::uint32_t vertex, BodyShapeCache& shapes);
+void addVertexMark(const core::Body& body, std::uint32_t vertex, bool selected, const VertexColors& colors,
+                   BodyShapeCache& shapes, std::vector<render::MarkerItem>& marks);
 void addWholeBody(const core::Body& body, BodyShapeCache& shapes, std::set<render::PickedItem>& faces,
                   std::set<render::PickedItem>& edges);
 
@@ -48,8 +61,9 @@ struct PanelPicks {
     std::vector<TopoDS_Edge> edges;
     std::vector<TopoDS_Face> faces;
     std::vector<core::BodyKey> bodies;
+    std::vector<TopoDS_Vertex> vertices;
 
-    bool empty() const { return edges.empty() && faces.empty() && bodies.empty(); }
+    bool empty() const { return edges.empty() && faces.empty() && bodies.empty() && vertices.empty(); }
 };
 
 struct PanelItems {

@@ -83,6 +83,7 @@ private:
     std::optional<Pick> datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const;
     static Pick sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point);
     void showMarks();
+    void showVertexMarks();
     const core::Body* bodyOf(const render::PickedItem& item) const;
     const core::Body* bodyOf(core::BodyKey key) const;
     bool mapPanelPicks();
