@@ -19,7 +19,7 @@ std::vector<DatumLine> placeOutlines(std::span<const OutlineItem> items, const s
             lines.push_back({.start = relativePosition(item.points[i - 1], origin),
                              .end = relativePosition(item.points[i], origin),
                              .color = color,
-                             .width = static_cast<float>(kHighlightEdgeWidth),
+                             .width = static_cast<float>(item.width),
                              .pattern = static_cast<float>(kSolidPattern)});
         }
     }

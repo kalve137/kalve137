@@ -54,6 +54,7 @@ struct ViewportColors {
     QColor wire;
     QColor halo;
     QColor hover;
+    QColor previewCut;
     QColor cubeSide;
     QColor cubeEdge;
     QColor cubeCorner;

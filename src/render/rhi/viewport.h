@@ -115,6 +115,8 @@ public:
     const MeasureItems& measure() const { return m_measure; }
     void setOutlines(std::vector<OutlineItem> outlines);
     const std::vector<OutlineItem>& outlines() const { return m_outlines; }
+    void setPreviewEdges(std::vector<OutlineItem> edges);
+    const std::vector<OutlineItem>& previewEdges() const { return m_previewEdges; }
     void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
@@ -225,6 +227,7 @@ private:
     std::uint64_t m_handleRevision = 0;
     MeasureItems m_measure;
     std::vector<OutlineItem> m_outlines;
+    std::vector<OutlineItem> m_previewEdges;
     QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
     std::optional<snapshot::Scene> m_pickScene;

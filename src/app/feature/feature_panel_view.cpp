@@ -4,14 +4,20 @@
 #include "app/feature/distance_handle.h"
 #include "app/feature/feature_panel.h"
 #include "app/session/design_session.h"
+#include "app/theme/theme.h"
 #include "app/view/body_opacity.h"
 #include "app/view/panel_picks.h"
 #include "app/view/sketch_snapshots.h"
 #include "app/view/view_projection.h"
 #include "app/view/viewport_picker.h"
+#include "geometry/body_mesh.h"
 #include "render/handles.h"
+#include "render/outlines.h"
 #include "render/rhi/viewport.h"
 #include "snapshot/body.h"
+#include "viewer/style.h"
+
+#include <QColor>
 
 #include <TopoDS_Shape.hxx>
 
@@ -23,6 +29,37 @@
 #include <vector>
 
 namespace kalve137::app {
+
+namespace {
+
+snapshot::Color colorOf(const QColor& color)
+{
+    return {static_cast<float>(color.redF()), static_cast<float>(color.greenF()), static_cast<float>(color.blueF())};
+}
+
+std::shared_ptr<const snapshot::Body> toolGhost(const core::FeatureTool& tool)
+{
+    snapshot::Body ghost;
+    ghost.feature = tool.feature;
+    ghost.mesh = std::make_shared<const snapshot::Mesh>(geometry::meshBody(tool.shape));
+    ghost.appearance.color = colorOf(theme::palette().viewport.previewCut);
+    ghost.ghost = true;
+    return std::make_shared<const snapshot::Body>(std::move(ghost));
+}
+
+std::vector<render::OutlineItem> capEdges(const core::FeatureTool& tool)
+{
+    const snapshot::Color color = colorOf(theme::palette().viewport.bodyEdge);
+    std::vector<render::OutlineItem> edges;
+    for (const TopoDS_Shape& cap : tool.caps) {
+        for (snapshot::Polyline& line : geometry::edgeLines(cap)) {
+            edges.push_back({.points = std::move(line), .color = color, .width = viewer::style::kStrokeRegular});
+        }
+    }
+    return edges;
+}
+
+} // namespace
 
 void FeaturePanel::publishHandles()
 {
@@ -63,9 +100,15 @@ void FeaturePanel::showPreview(const core::Document& document, const core::Model
             }
         }
     }
+    const auto* extrude = std::get_if<core::ExtrudeFeature>(&*m_data);
+    const bool tooled = extrude != nullptr && model.tool.feature != 0 && !model.tool.shape.IsNull();
+    if (tooled && extrude->operation == core::Operation::Cut) {
+        scene.bodies.push_back(toolGhost(model.tool));
+    }
     picker->showModel(m_baseModel);
     viewport->setPickScene(m_baseSnapshots.scene(m_baseModel, visible));
     viewport->setScene(withBodyOpacity(std::move(scene), m_scene.pickMode()));
+    viewport->setPreviewEdges(tooled ? capEdges(model.tool) : std::vector<render::OutlineItem>{});
     viewport->setSketches(sketchSnapshots(document, model, m_session));
 }
 
@@ -75,6 +118,7 @@ void FeaturePanel::endPreview()
     m_baseSnapshots.clear();
     if (render::Viewport* viewport = m_projection.viewport()) {
         viewport->setPickScene(std::nullopt);
+        viewport->setPreviewEdges({});
     }
 }
 

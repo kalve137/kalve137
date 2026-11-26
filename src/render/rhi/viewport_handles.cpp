@@ -38,6 +38,15 @@ void Viewport::setOutlines(std::vector<OutlineItem> outlines)
     refreshHandles();
 }
 
+void Viewport::setPreviewEdges(std::vector<OutlineItem> edges)
+{
+    if (edges == m_previewEdges) {
+        return;
+    }
+    m_previewEdges = std::move(edges);
+    refreshHandles();
+}
+
 HandleDraw Viewport::handleDraw() const
 {
     return {.revision = m_handleRevision,
@@ -52,6 +61,8 @@ void Viewport::refreshHandles()
     std::vector<DatumLine> measure = placeMeasureLines(m_measure, m_scene.origin);
     geometry.guides.insert(geometry.guides.end(), measure.begin(), measure.end());
     geometry.outlines = placeOutlines(m_outlines, m_scene.origin);
+    std::vector<DatumLine> preview = placeOutlines(m_previewEdges, m_scene.origin);
+    geometry.outlines.insert(geometry.outlines.end(), preview.begin(), preview.end());
     if (geometry != m_handleGeometry) {
         m_handleGeometry = std::move(geometry);
         ++m_handleRevision;

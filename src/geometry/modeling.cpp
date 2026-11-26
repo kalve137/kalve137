@@ -240,11 +240,15 @@ TopoDS_Shape fuseAll(const std::vector<TopoDS_Shape>& shapes)
     return result;
 }
 
-std::optional<TopoDS_Shape> draftSides(const TopoDS_Shape& prism, const gp_Dir& pull, const gp_Pln& neutral,
-                                       double angle)
+struct Prism {
+    TopoDS_Shape solid;
+    TopoDS_Shape cap;
+};
+
+std::optional<Prism> draftSides(const Prism& prism, const gp_Dir& pull, const gp_Pln& neutral, double angle)
 {
-    BRepOffsetAPI_DraftAngle draft(prism);
-    for (TopExp_Explorer it(prism, TopAbs_FACE); it.More(); it.Next()) {
+    BRepOffsetAPI_DraftAngle draft(prism.solid);
+    for (TopExp_Explorer it(prism.solid, TopAbs_FACE); it.More(); it.Next()) {
         const TopoDS_Face& face = TopoDS::Face(it.Current());
         const BRepAdaptor_Surface surface(face);
         if (surface.GetType() == GeomAbs_Plane && surface.Plane().Axis().Direction().IsParallel(pull, kTangentAngle)) {
@@ -259,7 +263,7 @@ std::optional<TopoDS_Shape> draftSides(const TopoDS_Shape& prism, const gp_Dir& 
     if (!draft.IsDone() || draft.Shape().IsNull()) {
         return std::nullopt;
     }
-    return draft.Shape();
+    return Prism{.solid = draft.Shape(), .cap = draft.ModifiedShape(prism.cap)};
 }
 
 bool isSoundSolid(const TopoDS_Shape& shape)
@@ -271,18 +275,19 @@ bool isSoundSolid(const TopoDS_Shape& shape)
     return check.IsValid();
 }
 
-TopoDS_Shape draftedPrism(const TopoDS_Face& face, const gp_Vec& vector, double taperRadians)
+Prism draftedPrism(const TopoDS_Face& face, const gp_Vec& vector, double taperRadians)
 {
-    const TopoDS_Shape straight = BRepPrimAPI_MakePrism(face, vector, true).Shape();
-    const double straightVolume = std::abs(volume(straight));
+    BRepPrimAPI_MakePrism make(face, vector, true);
+    const Prism straight{.solid = make.Shape(), .cap = make.LastShape()};
+    const double straightVolume = std::abs(volume(straight.solid));
     const gp_Dir pull(vector);
     const gp_Pln neutral(facePoint(face), pull);
     for (const double sign : {1.0, -1.0}) {
-        const std::optional<TopoDS_Shape> drafted = draftSides(straight, pull, neutral, sign * taperRadians);
-        if (!drafted || !isSoundSolid(*drafted)) {
+        const std::optional<Prism> drafted = draftSides(straight, pull, neutral, sign * taperRadians);
+        if (!drafted || !isSoundSolid(drafted->solid)) {
             continue;
         }
-        const double draftedVolume = std::abs(volume(*drafted));
+        const double draftedVolume = std::abs(volume(drafted->solid));
         if ((draftedVolume < straightVolume) == (taperRadians > 0.0)) {
             return *drafted;
         }
@@ -291,13 +296,17 @@ TopoDS_Shape draftedPrism(const TopoDS_Face& face, const gp_Vec& vector, double 
 }
 
 TopoDS_Shape taperedExtrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, const gp_Vec& to,
-                            double taperRadians)
+                            double taperRadians, std::vector<TopoDS_Shape>* caps)
 {
     std::vector<TopoDS_Shape> solids;
     for (const TopoDS_Face& face : faces) {
         for (const gp_Vec* end : {&from, &to}) {
             if (end->Magnitude() > kMinDistance) {
-                solids.push_back(draftedPrism(face, *end, taperRadians));
+                Prism prism = draftedPrism(face, *end, taperRadians);
+                solids.push_back(prism.solid);
+                if (caps != nullptr) {
+                    caps->push_back(prism.cap);
+                }
             }
         }
     }
@@ -306,7 +315,8 @@ TopoDS_Shape taperedExtrude(const std::vector<TopoDS_Face>& faces, const gp_Vec&
 
 } // namespace
 
-TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, const gp_Vec& to, double taperRadians)
+TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, const gp_Vec& to, double taperRadians,
+                     std::vector<TopoDS_Shape>* caps)
 {
     if (faces.empty()) {
         fail("Nothing to extrude");
@@ -322,7 +332,7 @@ TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, 
         if (from.Magnitude() > kMinDistance && from.Dot(to) > 0.0) {
             fail("A tapered extrude starts on the sketch plane");
         }
-        return guarded("Extrude failed", [&] { return taperedExtrude(faces, from, to, taperRadians); });
+        return guarded("Extrude failed", [&] { return taperedExtrude(faces, from, to, taperRadians, caps); });
     }
     return guarded("Extrude failed", [&] {
         std::vector<TopoDS_Shape> solids;
@@ -338,6 +348,9 @@ TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, 
                 fail("Extrude failed");
             }
             solids.push_back(prism.Shape());
+            if (caps != nullptr) {
+                caps->push_back(prism.LastShape());
+            }
         }
         return fuseAll(solids);
     });

@@ -3,6 +3,7 @@
 
 #include "app/theme/theme.h"
 #include "app/theme/theme_tokens.h"
+#include "viewer/style.h"
 
 #include <gtest/gtest.h>
 
@@ -147,6 +148,22 @@ TEST(PaletteContrast, DarkMeetsFloors)
 TEST(PaletteContrast, LightMeetsFloors)
 {
     expectFloors(kLightPalette);
+}
+
+TEST(PaletteContrast, PreviewCutReadsRedOverBase)
+{
+    constexpr double kGhostOpacity = 1.0 - kalve137::viewer::style::kTintHalf;
+    constexpr int kRedMargin = 30;
+    for (const Palette* palette : {&kDarkPalette, &kLightPalette}) {
+        const QColor cut = palette->viewport.previewCut;
+        const QColor base = palette->chrome.base;
+        const auto over = [](int front, int back) {
+            return static_cast<int>(std::lround((kGhostOpacity * front) + ((1.0 - kGhostOpacity) * back)));
+        };
+        const int red = over(cut.red(), base.red());
+        EXPECT_GE(red - over(cut.green(), base.green()), kRedMargin) << cut.name().toStdString();
+        EXPECT_GE(red - over(cut.blue(), base.blue()), kRedMargin) << cut.name().toStdString();
+    }
 }
 
 TEST(ThemeStyleSheet, IconsMatchTheirPalette)

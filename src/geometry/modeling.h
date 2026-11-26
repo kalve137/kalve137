@@ -21,7 +21,7 @@ class BRepTools_History;
 namespace kalve137::geometry {
 
 TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, const gp_Vec& to,
-                     double taperRadians = 0.0);
+                     double taperRadians = 0.0, std::vector<TopoDS_Shape>* caps = nullptr);
 TopoDS_Shape revolve(const std::vector<TopoDS_Face>& faces, const gp_Ax1& axis, double angleRadians);
 
 TopoDS_Shape fuse(const TopoDS_Shape& a, const TopoDS_Shape& b, BRepTools_History* history = nullptr);
