@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <optional>
 #include <set>
@@ -87,6 +88,16 @@ int liftAt(const QImage& plain, const QImage& picked, QPointF at)
         lift = std::max(lift, gapOf(plain.pixel(pixel), picked.pixel(pixel)));
     }
     return lift;
+}
+
+QRgb towardGold(QRgb color, float weight)
+{
+    const render::Encoded gold = render::encodedOf(render::kSelectedGold);
+    render::Encoded mixed = encodedOf(color);
+    for (std::size_t c = 0; c < mixed.size(); ++c) {
+        mixed.at(c) += (gold.at(c) - mixed.at(c)) * weight;
+    }
+    return rgbOf(mixed);
 }
 
 QRgb medianAt(const QImage& image, QPointF at)
@@ -157,6 +168,10 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         const auto has = [](const std::set<render::PickedItem>& set, render::PickKind kind) {
             return std::ranges::any_of(set, [kind](const render::PickedItem& item) { return item.kind == kind; });
         };
+        const render::BodyMeshes& overlaid = ui->viewport()->chunks().overlaid();
+        const bool consumed = std::ranges::any_of(items.selected, [&](const render::PickedItem& item) {
+            return overlaid.contains({item.feature, item.part});
+        });
         switch (pick.shows) {
         case Shows::Edge:
             EXPECT_TRUE(has(items.selected, render::PickKind::Edge)) << name;
@@ -184,7 +199,17 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         case Shows::Face:
         case Shows::Body: {
             const bool selected = pick.shows == Shows::Face;
-            const QRgb expected = rgbOf(render::highlighted(encodedOf(medianAt(plain, at)), !selected, selected));
+            QRgb expected = rgbOf(render::highlighted(encodedOf(medianAt(plain, at)), !selected, selected));
+            if (consumed) {
+                const render::Highlight full = shown;
+                render::Highlight bare = full;
+                bare.selected.clear();
+                bare.selectedOutline.clear();
+                ui->viewport()->setHighlight(bare);
+                const QRgb behind = medianAt(ui->canvasImage(), at);
+                ui->viewport()->setHighlight(full);
+                expected = towardGold(behind, pick.oldPreviewCovers ? render::kHiddenFaceWeight : render::kSelectedMix);
+            }
             rule = gapOf(expected, medianAt(picked, at));
             EXPECT_LE(rule, kRuleTolerance)
                 << name << ": expected " << hex(expected) << ", drew " << hex(medianAt(picked, at));

@@ -558,11 +558,36 @@ void Viewport::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hover
     update();
 }
 
+void Viewport::setPickScene(std::optional<snapshot::Scene> scene)
+{
+    if (!scene && !m_pickScene) {
+        return;
+    }
+    m_pickScene = std::move(scene);
+    updateChunks();
+}
+
 void Viewport::updateChunks()
 {
     QElapsedTimer timer;
     timer.start();
     m_chunks.update(m_scene, m_style);
+    BodyMeshes overlaid;
+    if (m_pickScene) {
+        m_pickScene->origin = m_scene.origin;
+        m_pickChunks.update(*m_pickScene, m_style);
+        for (const auto& body : m_pickScene->bodies) {
+            const bool drawn = std::ranges::any_of(m_scene.bodies, [&](const auto& shown) {
+                return shown->feature == body->feature && shown->part == body->part && shown->mesh == body->mesh;
+            });
+            if (!drawn) {
+                overlaid.emplace(std::pair{body->feature, body->part}, body->mesh);
+            }
+        }
+    } else {
+        m_pickChunks.clear();
+    }
+    m_chunks.setOverlaid(std::move(overlaid));
     m_updateMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
     m_idsFresh = false;
     update();
@@ -637,7 +662,7 @@ std::optional<IdImage> Viewport::readIds(const QRect& deviceRect, const IdStyle&
     if (!m_idsFresh || style != m_idStyle) {
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
         refreshDatums();
-        DrawList list = m_chunks.pickList(frame());
+        DrawList list = pickChunks().pickList(frame());
         list.datums = datumDraw();
         list.markers = markerDraw();
         list.sketches = sketchDraw();
@@ -738,7 +763,7 @@ std::optional<IdPick> Viewport::pickAt(QPointF position, const PickKinds& kinds,
     if (id.chunk >= chunks.size()) {
         return std::nullopt;
     }
-    const std::optional<PickedItem> item = m_chunks.itemOf(chunks[id.chunk], id.kind, id.entry);
+    const std::optional<PickedItem> item = pickChunks().itemOf(chunks[id.chunk], id.kind, id.entry);
     if (!item) {
         return std::nullopt;
     }
@@ -777,7 +802,7 @@ std::optional<std::vector<PickedItem>> Viewport::itemsIn(const QRect& deviceRect
         if (outside.contains(raw) || id.chunk >= kBodyChunks || !kinds.has(id.kind) || id.chunk >= chunks.size()) {
             continue;
         }
-        if (const std::optional<PickedItem> item = m_chunks.itemOf(chunks[id.chunk], id.kind, id.entry)) {
+        if (const std::optional<PickedItem> item = pickChunks().itemOf(chunks[id.chunk], id.kind, id.entry)) {
             items.push_back(*item);
         }
     }

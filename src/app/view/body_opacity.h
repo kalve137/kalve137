@@ -8,7 +8,7 @@
 
 namespace kalve137::app {
 
-float bodyOpacity(PickMode mode);
+float bodyOpacity(PickMode mode, bool ghost = false);
 snapshot::Scene withBodyOpacity(snapshot::Scene scene, PickMode mode);
 
 } // namespace kalve137::app

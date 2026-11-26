@@ -117,6 +117,13 @@ void SnapshotCache::seed(const TopoDS_Shape& shape, std::shared_ptr<const snapsh
     m_seeds.push_back({.shape = shape, .mesh = std::move(mesh)});
 }
 
+void SnapshotCache::seedFrom(const SnapshotCache& other)
+{
+    for (const auto& [key, entry] : other.m_entries) {
+        seed(entry.revision, entry.body->mesh);
+    }
+}
+
 std::shared_ptr<const snapshot::Mesh> SnapshotCache::seedFor(const TopoDS_Shape& shape)
 {
     const auto found = std::ranges::find_if(m_seeds, [&](const Seed& seed) { return seed.shape.IsEqual(shape); });

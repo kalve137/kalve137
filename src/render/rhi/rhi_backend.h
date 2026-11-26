@@ -116,6 +116,9 @@ private:
         Geometry selectedEdges;
         Geometry selectedFaces;
         Geometry hoveredFaces;
+        Geometry overlayEdges;
+        Geometry overlayFaces;
+        Geometry overlayHoverFaces;
     };
     struct GridGpu {
         std::uint64_t revision = 0;
@@ -281,11 +284,17 @@ private:
     Owned<QRhiGraphicsPipeline> m_goldFill;
     std::array<Owned<QRhiGraphicsPipeline>, 2> m_hiddenFaces;
     Owned<QRhiGraphicsPipeline> m_hiddenEdges;
+    Owned<QRhiGraphicsPipeline> m_overlayFill;
+    Owned<QRhiGraphicsPipeline> m_overlayLines;
+    Owned<QRhiGraphicsPipeline> m_overlayHoverFill;
     Owned<QRhiShaderResourceBindings> m_haloBindings;
     Owned<QRhiShaderResourceBindings> m_maskBindings;
     Owned<QRhiShaderResourceBindings> m_goldBindings;
     std::array<Owned<QRhiShaderResourceBindings>, 2> m_hiddenFaceBindings;
     Owned<QRhiShaderResourceBindings> m_hiddenEdgeBindings;
+    Owned<QRhiShaderResourceBindings> m_overlayFillBindings;
+    Owned<QRhiShaderResourceBindings> m_overlayLineBindings;
+    Owned<QRhiShaderResourceBindings> m_overlayHoverBindings;
     Owned<QRhiGraphicsPipeline> m_gridWash;
     Owned<QRhiGraphicsPipeline> m_gridLines;
     Owned<QRhiGraphicsPipeline> m_datumFill;

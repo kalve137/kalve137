@@ -132,7 +132,7 @@ TEST_F(ScreenTest, DialogsFitTheFloorAndTheScreen)
 TEST_F(ScreenTest, LongSelectionKeepsPanelButtonsInView)
 {
     block(*ui);
-    ui->wheel(ui->centerOf(&ui->view()), kZoomOutNotches);
+    ui->wheel(ui->centerOf(ui->canvas()), kZoomOutNotches);
     ui->settle(50);
     ui->trigger("Fillet");
     ui->settle(50);
@@ -159,7 +159,7 @@ TEST_F(ScreenTest, LongSelectionKeepsPanelButtonsInView)
     EXPECT_LE(list->height(), kVisibleItems * row->sizeHint().height());
     const QAbstractButton* ok = ui->button("OK");
     ASSERT_NE(ok, nullptr);
-    EXPECT_TRUE(inWindow(*ui, ui->view()).contains(inWindow(*ui, *ok)));
+    EXPECT_TRUE(inWindow(*ui, *ui->canvas()).contains(inWindow(*ui, *ok)));
     ui->save("fillet-nine-edges");
     ui->key(Qt::Key_Escape);
 }
