@@ -50,6 +50,7 @@ jobs:
       VCPKG_TRIPLET: x64-windows-release
       LLVM_VERSION: 22.1.8
       SOFTWARE_GL_DIR: C:\software-gl
+      KALVE137_TIME_BUDGET_SCALE: 2
     steps:
       - uses: actions/checkout@v7
 

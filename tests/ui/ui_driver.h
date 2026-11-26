@@ -55,6 +55,7 @@ void chooseFromMenu(const QString& item);
 std::size_t pendingAnswers();
 bool paintsAccent(QWidget& button);
 bool drawsReferenceColors(const viewer::OcctViewWidget& oldView);
+qint64 timeBudgetMs(qint64 baseMs);
 
 class UiDriver {
 public:
