@@ -201,12 +201,17 @@ void ChunkSet::update(const snapshot::Scene& scene, const ViewportStyle& style)
         }
     }
     std::erase_if(m_chunks, [](const auto& chunk) { return chunk->members.empty(); });
+    std::set<PickedItem> retinted;
+    retint(retinted);
     for (const auto& chunk : m_chunks) {
         if (chunk->meshDirty) {
             buildMesh(*chunk);
         } else if (chunk->paletteDirty || recolor) {
             buildPalette(*chunk);
         }
+    }
+    if (!retinted.empty()) {
+        writeChanged(retinted);
     }
     buildHighlightGeometry(true);
 }
@@ -372,8 +377,8 @@ void ChunkSet::buildPalette(Data& chunk)
         std::fill_n(chunk.edgePalette.begin() + slot.firstEdgeEntry, slot.edgeEntryCount, edge);
         std::fill_n(chunk.pointPalette.begin() + slot.firstPointEntry, slot.pointEntryCount, edge);
     }
-    for (const std::set<PickedItem>* items :
-         {&m_highlight.hovered, &m_highlight.selected, &m_highlight.hoveredOutline, &m_highlight.selectedOutline}) {
+    for (const std::set<PickedItem>* items : {&m_highlight.hovered, &m_highlight.selected, &m_highlight.hoveredOutline,
+                                              &m_highlight.selectedOutline, &m_tints}) {
         for (const PickedItem& item : *items) {
             Data* owner = nullptr;
             if (Entry* entry = entryFor(item, &owner); entry != nullptr && owner == &chunk) {
@@ -401,6 +406,7 @@ void ChunkSet::setHighlight(Highlight highlight)
         addChanged(m_highlight.selectedOutline, highlight.selectedOutline, changed);
     }
     m_highlight = std::move(highlight);
+    retint(changed);
     writeChanged(changed);
     buildHighlightGeometry(selection);
 }
@@ -423,9 +429,11 @@ void ChunkSet::setOverlaid(BodyMeshes overlaid)
     buildHighlightGeometry(true);
 }
 
-void ChunkSet::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline)
+void ChunkSet::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
+                        std::set<std::pair<int, int>> tinted)
 {
-    if (hovered == m_highlight.hovered && hoveredOutline == m_highlight.hoveredOutline) {
+    if (hovered == m_highlight.hovered && hoveredOutline == m_highlight.hoveredOutline &&
+        tinted == m_highlight.tinted) {
         return;
     }
     std::set<PickedItem> changed;
@@ -433,8 +441,40 @@ void ChunkSet::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hover
     addChanged(m_highlight.hoveredOutline, hoveredOutline, changed);
     m_highlight.hovered = std::move(hovered);
     m_highlight.hoveredOutline = std::move(hoveredOutline);
+    m_highlight.tinted = std::move(tinted);
+    retint(changed);
     writeChanged(changed);
     buildHighlightGeometry(false);
+}
+
+std::set<PickedItem> ChunkSet::tintsOf() const
+{
+    std::set<PickedItem> tints;
+    for (const auto& [feature, part] : m_highlight.tinted) {
+        const auto found = m_owner.find({feature, part, 0});
+        if (found == m_owner.end()) {
+            continue;
+        }
+        const Slot& slot = found->second->members.at(found->first);
+        if (!slot.visible) {
+            continue;
+        }
+        const std::uint32_t faces = facesOf(*slot.mesh);
+        for (std::uint32_t face = 0; face < faces; ++face) {
+            tints.insert({.feature = feature, .part = part, .kind = PickKind::Face, .index = face});
+        }
+        for (const snapshot::Edge& edge : slot.mesh->edges) {
+            tints.insert({.feature = feature, .part = part, .kind = PickKind::Edge, .index = edge.id});
+        }
+    }
+    return tints;
+}
+
+void ChunkSet::retint(std::set<PickedItem>& changed)
+{
+    std::set<PickedItem> tints = tintsOf();
+    addChanged(m_tints, tints, changed);
+    m_tints = std::move(tints);
 }
 
 void ChunkSet::addChanged(const std::set<PickedItem>& before, const std::set<PickedItem>& after,
@@ -477,12 +517,16 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
     };
     std::map<Body, std::set<std::uint32_t>> lines;
     std::map<Body, std::set<std::uint32_t>> hoveredFaces;
+    std::map<Body, std::set<std::uint32_t>> tintLines;
+    std::map<Body, std::set<std::uint32_t>> tintFaces;
     collect(m_highlight.hovered, PickKind::Edge, lines);
     collect(m_highlight.hoveredOutline, PickKind::Edge, lines);
     collect(m_highlight.hovered, PickKind::Face, hoveredFaces);
+    collect(m_tints, PickKind::Edge, tintLines);
+    collect(m_tints, PickKind::Face, tintFaces);
     std::erase_if(m_itemIndexes, [](const auto& entry) { return entry.second.mesh.expired(); });
-    const auto meshOf = [this](const Body& body) -> std::shared_ptr<const snapshot::Mesh> {
-        if (const auto overlaid = m_overlaid.find(body); overlaid != m_overlaid.end()) {
+    const auto meshOf = [this](const Body& body, bool drawn) -> std::shared_ptr<const snapshot::Mesh> {
+        if (const auto overlaid = m_overlaid.find(body); !drawn && overlaid != m_overlaid.end()) {
             return overlaid->second;
         }
         const auto found = m_owner.find({body.first, body.second, 0});
@@ -492,9 +536,10 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
         const Slot& slot = found->second->members.at(found->first);
         return slot.visible ? slot.mesh : nullptr;
     };
-    const auto addEdges = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Segment>& into) {
+    const auto addEdges = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Segment>& into,
+                              bool drawn = false) {
         for (const auto& [body, ids] : wanted) {
-            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body);
+            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body, drawn);
             if (mesh == nullptr) {
                 continue;
             }
@@ -511,9 +556,10 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
             }
         }
     };
-    const auto addFaces = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Position>& into) {
+    const auto addFaces = [&](const std::map<Body, std::set<std::uint32_t>>& wanted, std::vector<Position>& into,
+                              bool drawn = false) {
         for (const auto& [body, ids] : wanted) {
-            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body);
+            const std::shared_ptr<const snapshot::Mesh> mesh = meshOf(body, drawn);
             if (mesh == nullptr) {
                 continue;
             }
@@ -568,9 +614,22 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
             std::erase_if(ids, [&](std::uint32_t id) { return selected->second.contains(id); });
         }
     }
+    const auto dropShown = [this](std::map<Body, std::set<std::uint32_t>>& tints,
+                                  const std::map<Body, std::set<std::uint32_t>>& shown) {
+        for (auto& [body, ids] : tints) {
+            if (const auto drawn = shown.find(body); drawn != shown.end() && !m_overlaid.contains(body)) {
+                std::erase_if(ids, [&](std::uint32_t id) { return drawn->second.contains(id); });
+            }
+        }
+    };
+    dropShown(tintLines, m_selectedLineIds);
+    dropShown(tintLines, lines);
+    dropShown(tintFaces, hoveredFaces);
     m_lines.assign(m_selectedLines.begin(), m_selectedLines.end());
     addEdges(lines, m_lines);
+    addEdges(tintLines, m_lines, true);
     addFaces(hoveredFaces, m_hoveredFaces);
+    addFaces(tintFaces, m_hoveredFaces, true);
     std::erase_if(hoveredFaces, [this](const auto& entry) { return !m_overlaid.contains(entry.first); });
     m_overlayHoverFaces.clear();
     addFaces(hoveredFaces, m_overlayHoverFaces);
@@ -616,9 +675,6 @@ const ChunkSet::ItemIndex& ChunkSet::indexOf(std::pair<int, int> body,
 
 Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
 {
-    if (m_overlaid.contains({item.feature, item.part})) {
-        return nullptr;
-    }
     const auto found = m_owner.find({item.feature, item.part, item.index / kPaletteEntries});
     if (found == m_owner.end()) {
         return nullptr;
@@ -661,14 +717,17 @@ Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
 
 void ChunkSet::writeState(const PickedItem& item, Entry& entry) const
 {
+    const bool base = !m_overlaid.contains({item.feature, item.part});
+    const bool tinted = m_tints.contains(item);
     if (item.kind == PickKind::Face) {
-        const auto selected = m_highlight.selected.contains(item) ? kEntrySelected : std::uint8_t{0};
-        const auto hovered = m_highlight.hovered.contains(item) ? kEntryHovered : std::uint8_t{0};
+        const auto selected = base && m_highlight.selected.contains(item) ? kEntrySelected : std::uint8_t{0};
+        const auto hovered = (base && m_highlight.hovered.contains(item)) || tinted ? kEntryHovered : std::uint8_t{0};
         entry[3] = static_cast<std::uint8_t>((entry[3] & kEntryVisible) | selected | hovered);
         return;
     }
-    const bool selected = m_highlight.selected.contains(item) || m_highlight.selectedOutline.contains(item);
-    const bool hovered = m_highlight.hovered.contains(item) || m_highlight.hoveredOutline.contains(item);
+    const bool selected = base && (m_highlight.selected.contains(item) || m_highlight.selectedOutline.contains(item));
+    const bool hovered =
+        (base && (m_highlight.hovered.contains(item) || m_highlight.hoveredOutline.contains(item))) || tinted;
     const EdgeState state = selected && hovered ? EdgeState::SelectedHovered
                             : selected          ? EdgeState::Selected
                             : hovered           ? EdgeState::Hovered
@@ -680,7 +739,8 @@ bool ChunkSet::edgesHighlighted() const
 {
     const auto edge = [](const PickedItem& item) { return item.kind == PickKind::Edge; };
     return std::ranges::any_of(m_highlight.hovered, edge) || std::ranges::any_of(m_highlight.selected, edge) ||
-           !m_highlight.hoveredOutline.empty() || !m_highlight.selectedOutline.empty();
+           !m_highlight.hoveredOutline.empty() || !m_highlight.selectedOutline.empty() ||
+           std::ranges::any_of(m_tints, edge);
 }
 
 Entry ChunkSet::colorEntry(const snapshot::Body& body, bool visible, std::uint32_t face) const

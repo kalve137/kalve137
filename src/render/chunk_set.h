@@ -40,6 +40,7 @@ struct Highlight {
     std::set<PickedItem> selected;
     std::set<PickedItem> hoveredOutline;
     std::set<PickedItem> selectedOutline;
+    std::set<std::pair<int, int>> tinted;
 
     bool operator==(const Highlight&) const = default;
 };
@@ -57,8 +58,10 @@ public:
     void update(const snapshot::Scene& scene, const ViewportStyle& style);
     void setHighlight(Highlight highlight);
     void setOverlaid(BodyMeshes overlaid);
-    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
+    void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
+                  std::set<std::pair<int, int>> tinted = {});
     const Highlight& highlight() const { return m_highlight; }
+    const std::set<PickedItem>& tints() const { return m_tints; }
     const BodyMeshes& overlaid() const { return m_overlaid; }
     DrawList draw(const Frame& frame) const;
     DrawList pickList(const Frame& frame) const;
@@ -137,6 +140,8 @@ private:
     static void addChanged(const std::set<PickedItem>& before, const std::set<PickedItem>& after,
                            std::set<PickedItem>& changed);
     void writeChanged(const std::set<PickedItem>& changed);
+    std::set<PickedItem> tintsOf() const;
+    void retint(std::set<PickedItem>& changed);
     bool edgesHighlighted() const;
     void buildHighlightGeometry(bool selectionChanged);
     const ItemIndex& indexOf(std::pair<int, int> body, const std::shared_ptr<const snapshot::Mesh>& mesh);
@@ -155,6 +160,7 @@ private:
     snapshot::Color m_fallback;
     snapshot::Color m_fill;
     Highlight m_highlight;
+    std::set<PickedItem> m_tints;
     BodyMeshes m_overlaid;
     std::vector<Segment> m_lines;
     std::vector<Segment> m_selectedLines;
