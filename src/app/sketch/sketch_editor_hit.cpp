@@ -41,50 +41,17 @@ bool usesPoint(const sketch::Curve& curve, Id point)
 
 QWidget* SketchEditor::canvas() const
 {
-    return m_viewport != nullptr ? static_cast<QWidget*>(m_viewport) : m_view;
-}
-
-std::optional<SketchEditor::Projection> SketchEditor::projection() const
-{
-    if (m_viewport != nullptr) {
-        const camera::Viewport viewport = m_viewport->viewport();
-        if (!viewport.isValid() || !m_viewport->camera().isUsable()) {
-            return std::nullopt;
-        }
-        return Projection{m_viewport->camera(), viewport};
-    }
-    const std::optional<camera::Viewport> viewport = m_view->viewport();
-    if (!viewport) {
-        return std::nullopt;
-    }
-    const camera::Camera camera = m_view->currentCamera();
-    if (!camera.isUsable()) {
-        return std::nullopt;
-    }
-    return Projection{camera, *viewport};
+    return m_projection.canvas();
 }
 
 double SketchEditor::worldPerPixel() const
 {
-    if (!m_cameraInput) {
-        return m_view->worldPerPixel();
-    }
-    const std::optional<Projection> shown = projection();
-    const double wpp = shown ? shown->camera.worldPerPixel(shown->viewport) : 0.0;
-    return std::isfinite(wpp) && wpp > 0.0 ? wpp : 0.0;
+    return m_projection.worldPerPixel();
 }
 
 QPointF SketchEditor::toScreen(const gp_Pnt& point) const
 {
-    if (!m_cameraInput) {
-        return m_view->toScreen(point);
-    }
-    const std::optional<Projection> shown = projection();
-    if (!shown) {
-        return {};
-    }
-    const camera::ScreenPoint screen = shown->camera.project({point.X(), point.Y(), point.Z()}, shown->viewport);
-    return {screen.x, screen.y};
+    return m_projection.toScreen(point);
 }
 
 double SketchEditor::gridStep() const
@@ -98,11 +65,11 @@ double SketchEditor::gridStep() const
 std::optional<Vec2> SketchEditor::toSketch(QPointF pos) const
 {
     const gp_Ax3 ax = plane();
-    if (!m_cameraInput) {
+    if (!m_projection.hasCameraInput()) {
         const std::optional<gp_Pnt> point = m_view->pickOnPlane(pos, ax);
         return point ? std::optional(sketch::toSketch(ax, *point)) : std::nullopt;
     }
-    const std::optional<Projection> shown = projection();
+    const std::optional<ViewProjection::Projection> shown = m_projection.projection();
     if (!shown) {
         return std::nullopt;
     }
@@ -429,7 +396,7 @@ std::optional<Id> SketchEditor::constraintOnScreen(QPointF pos) const
 
 std::optional<Id> SketchEditor::constraintAt(QPointF pos) const
 {
-    if (m_cameraInput) {
+    if (m_projection.hasCameraInput()) {
         return constraintOnScreen(pos);
     }
     m_view->detectAt(pos);
@@ -438,7 +405,7 @@ std::optional<Id> SketchEditor::constraintAt(QPointF pos) const
 
 SketchEditor::Hit SketchEditor::hitAt(QPointF pos) const
 {
-    if (!m_cameraInput) {
+    if (!m_projection.hasCameraInput()) {
         m_view->detectAt(pos);
     }
     const std::optional<Vec2> p = toSketch(pos);
@@ -446,7 +413,8 @@ SketchEditor::Hit SketchEditor::hitAt(QPointF pos) const
     if (geometry.kind == Hit::Kind::Point) {
         return geometry;
     }
-    if (const std::optional<Id> constraint = m_cameraInput ? constraintOnScreen(pos) : detectedConstraint()) {
+    if (const std::optional<Id> constraint =
+            m_projection.hasCameraInput() ? constraintOnScreen(pos) : detectedConstraint()) {
         return {Hit::Kind::Constraint, *constraint};
     }
     return geometry;

@@ -48,11 +48,12 @@ namespace kalve137::app {
 
 using namespace sketch_editor_detail;
 
-SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view,
-                           render::Viewport* viewport, QObject* parent)
-    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_viewport(viewport),
-      m_cameraInput(viewport != nullptr)
+SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, ViewProjection& projection, QObject* parent)
+    : QObject(parent), m_session(session), m_scene(scene), m_projection(projection), m_view(&projection.view()),
+      m_viewport(projection.viewport())
 {
+    viewer::OcctViewWidget* view = m_view;
+    render::Viewport* viewport = m_viewport;
     m_valueEditor = new QLineEdit(canvas());
     m_valueEditor->setObjectName("dimensionEditor");
     m_valueEditor->setFixedWidth(kValueEditorWidth);

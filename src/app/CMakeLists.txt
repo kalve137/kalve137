@@ -134,6 +134,8 @@ add_library(kalve137_app STATIC
     view/view_cube_arrows.h
     view/view_overlay.cpp
     view/view_overlay.h
+    view/view_projection.cpp
+    view/view_projection.h
 )
 
 find_package(Git QUIET)

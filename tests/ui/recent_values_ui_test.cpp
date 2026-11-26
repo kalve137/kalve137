@@ -5,7 +5,6 @@
 #include "ui_test.h"
 
 #include "app/feature/recent_values.h"
-#include "viewer/occt_view_widget.h"
 
 #include <QAction>
 #include <QLineEdit>
@@ -33,7 +32,7 @@ QAction* recentAction(const QWidget* box)
 
 QLineEdit* handleBox(UiDriver& ui)
 {
-    for (QLineEdit* edit : ui.view().findChildren<QLineEdit*>("canvasInput")) {
+    for (QLineEdit* edit : ui.canvas()->findChildren<QLineEdit*>("canvasInput")) {
         if (edit->isVisible()) {
             return edit;
         }
