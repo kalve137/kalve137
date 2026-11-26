@@ -71,9 +71,19 @@ ParsedStartup parseStartup(QStringList arguments, const QString& viewVariable)
     return parsed;
 }
 
+ParsedStartup parseStartupVariables(const QString& viewVariable, const QString& graphicsApiVariable)
+{
+    QStringList arguments;
+    if (!graphicsApiVariable.isEmpty()) {
+        arguments = {QLatin1String(kGraphicsApiFlag), graphicsApiVariable};
+    }
+    return parseStartup(std::move(arguments), viewVariable);
+}
+
 StartupOptions startupFromEnvironment()
 {
-    return parseStartup({}, qEnvironmentVariable(kViewVariable)).options;
+    return parseStartupVariables(qEnvironmentVariable(kViewVariable), qEnvironmentVariable(kGraphicsApiVariable))
+        .options;
 }
 
 } // namespace kalve137::app

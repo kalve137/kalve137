@@ -14,6 +14,7 @@ layout(location = 0) out vec4 linearColor;
 layout(location = 1) out vec2 depthAndW;
 layout(location = 2) flat out vec2 bias;
 layout(location = 3) flat out vec2 dash;
+layout(location = 4) out vec2 fromEndAndW;
 
 layout(std140, binding = 0) uniform Frame {
     mat4 viewProjection;
@@ -65,6 +66,7 @@ void main()
         gl_Position = outside;
         depthAndW = vec2(0.0, 1.0);
         dash = vec2(0.0, pattern);
+        fromEndAndW = vec2(0.0, 1.0);
         return;
     }
     if (nearA < 0.0) {
@@ -88,4 +90,5 @@ void main()
     result.xy += offset / (size * 0.5) * result.w;
     gl_Position = result;
     depthAndW = vec2(body.z, body.w);
+    fromEndAndW = vec2((atEnd ? 0.0 : len) * result.w, result.w);
 }
