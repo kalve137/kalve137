@@ -21,6 +21,9 @@
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
 
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_Printer.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
@@ -308,6 +311,9 @@ void installHarness()
     log::Options options;
     options.debuggerOutput = recordLog;
     log::init(options);
+    for (const occ::handle<Message_Printer>& printer : Message::DefaultMessenger()->Printers()) {
+        printer->SetTraceLevel(Message_Warning);
+    }
     qApp->installEventFilter(new OffScreen(qApp));
 }
 
