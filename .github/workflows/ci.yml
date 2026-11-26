@@ -74,14 +74,6 @@ jobs:
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 
-      - name: Add the Qt license text
-        run: |
-          $target = 'C:\Qt\Licenses\LICENSE'
-          if (-not (Test-Path $target)) {
-              New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
-              Invoke-WebRequest "https://code.qt.io/cgit/qt/qtbase.git/plain/LICENSES/LGPL-3.0-only.txt?h=v$env:QT_VERSION" -OutFile $target
-          }
-
       - name: Restore the vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v6

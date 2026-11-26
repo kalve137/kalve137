@@ -5,6 +5,7 @@ Kalve 137 is free software under GPL-3.0-or-later. It is built on the components
 | Component | Version | License | Role |
 | --- | --- | --- | --- |
 | [Qt](https://www.qt.io/download-open-source) | 6.12.0 | LGPL-3.0-only | UI toolkit |
+| [ICU](https://icu.unicode.org) | 73.2 | Unicode-DFS-2016 | Unicode text support in Qt on Linux |
 | [Open CASCADE Technology](https://github.com/Open-Cascade-SAS/OCCT) | 8.0.1 | LGPL-2.1-only with the OCCT exception | Modeling kernel and 3D view |
 | [PlaneGCS](third_party/planegcs/README.md) | 1.1.4 | LGPL-2.0-or-later | Sketch constraint solver |
 | [occt-qt-tools](third_party/occt_qt/README.md) | 72e32d3 | MIT | OpenGL glue between the kernel and Qt |
