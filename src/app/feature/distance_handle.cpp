@@ -135,6 +135,7 @@ DistanceHandle::DistanceHandle(const ViewProjection& projection, QObject* parent
         emit accepted();
     });
     connect(&projection, &ViewProjection::changed, this, &DistanceHandle::refresh, Qt::QueuedConnection);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &DistanceHandle::refresh);
     m_canvas->installEventFilter(this);
 }
 
@@ -171,9 +172,7 @@ void DistanceHandle::showCommon(double value)
 {
     m_value = value;
     m_shown = true;
-    if (!m_box->hasFocus()) {
-        m_box->setValue(value);
-    }
+    showBoxValue();
     if (m_overlay != nullptr && !m_overlay->isVisible()) {
         m_overlay->setGeometry(m_canvas->rect());
         m_overlay->show();
@@ -208,10 +207,20 @@ void DistanceHandle::hide()
 void DistanceHandle::setValue(double value)
 {
     m_value = value;
-    if (!m_box->hasFocus()) {
-        m_box->setValue(value);
-    }
+    showBoxValue();
     refresh();
+}
+
+void DistanceHandle::showBoxValue()
+{
+    const bool focused = m_box->hasFocus();
+    if (focused && !m_dragOffset) {
+        return;
+    }
+    m_box->setValue(m_value);
+    if (focused) {
+        m_box->selectAll();
+    }
 }
 
 void DistanceHandle::setActive(bool active)

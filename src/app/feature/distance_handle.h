@@ -56,6 +56,7 @@ protected:
 
 private:
     void showCommon(double value);
+    void showBoxValue();
     gp_Pnt tip() const;
     gp_Pnt toward() const;
     gp_Pnt arcPoint(double degrees) const;
