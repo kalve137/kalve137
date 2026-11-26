@@ -9,7 +9,9 @@
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <ranges>
 #include <unordered_map>
+#include <utility>
 
 namespace kalve137::render {
 
@@ -403,6 +405,24 @@ void ChunkSet::setHighlight(Highlight highlight)
     buildHighlightGeometry(selection);
 }
 
+void ChunkSet::setOverlaid(BodyMeshes overlaid)
+{
+    if (overlaid == m_overlaid) {
+        return;
+    }
+    std::set<PickedItem> items;
+    for (const std::set<PickedItem>* shown :
+         {&m_highlight.hovered, &m_highlight.selected, &m_highlight.hoveredOutline, &m_highlight.selectedOutline}) {
+        items.insert(shown->begin(), shown->end());
+    }
+    Highlight highlight = std::exchange(m_highlight, {});
+    writeChanged(items);
+    m_overlaid = std::move(overlaid);
+    m_highlight = std::move(highlight);
+    writeChanged(items);
+    buildHighlightGeometry(true);
+}
+
 void ChunkSet::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline)
 {
     if (hovered == m_highlight.hovered && hoveredOutline == m_highlight.hoveredOutline) {
@@ -441,8 +461,9 @@ void ChunkSet::writeChanged(const std::set<PickedItem>& changed)
 
 void ChunkSet::buildHighlightGeometry(bool selectionChanged)
 {
-    const bool had =
-        !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() || !m_hoveredFaces.empty();
+    const bool had = !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() ||
+                     !m_hoveredFaces.empty() || !m_overlayEdges.empty() || !m_overlayFaces.empty() ||
+                     !m_overlayHoverFaces.empty();
     m_lines.clear();
     m_hoveredFaces.clear();
     using Body = std::pair<int, int>;
@@ -461,6 +482,9 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
     collect(m_highlight.hovered, PickKind::Face, hoveredFaces);
     std::erase_if(m_itemIndexes, [](const auto& entry) { return entry.second.mesh.expired(); });
     const auto meshOf = [this](const Body& body) -> std::shared_ptr<const snapshot::Mesh> {
+        if (const auto overlaid = m_overlaid.find(body); overlaid != m_overlaid.end()) {
+            return overlaid->second;
+        }
         const auto found = m_owner.find({body.first, body.second, 0});
         if (found == m_owner.end()) {
             return nullptr;
@@ -524,6 +548,20 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
         addEdges(m_selectedLineIds, m_selectedLines);
         addEdges(selectedEdges, m_selectedEdges);
         addFaces(selectedFaces, m_selectedFaces);
+        std::map<Body, std::set<std::uint32_t>> overlaidLines;
+        std::map<Body, std::set<std::uint32_t>> overlaidFaces;
+        for (const Body& body : m_overlaid | std::views::keys) {
+            if (const auto ids = m_selectedLineIds.find(body); ids != m_selectedLineIds.end()) {
+                overlaidLines.insert(*ids);
+            }
+            if (const auto ids = selectedFaces.find(body); ids != selectedFaces.end()) {
+                overlaidFaces.insert(*ids);
+            }
+        }
+        m_overlayEdges.clear();
+        m_overlayFaces.clear();
+        addEdges(overlaidLines, m_overlayEdges);
+        addFaces(overlaidFaces, m_overlayFaces);
     }
     for (auto& [body, ids] : lines) {
         if (const auto selected = m_selectedLineIds.find(body); selected != m_selectedLineIds.end()) {
@@ -533,8 +571,12 @@ void ChunkSet::buildHighlightGeometry(bool selectionChanged)
     m_lines.assign(m_selectedLines.begin(), m_selectedLines.end());
     addEdges(lines, m_lines);
     addFaces(hoveredFaces, m_hoveredFaces);
-    const bool has =
-        !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() || !m_hoveredFaces.empty();
+    std::erase_if(hoveredFaces, [this](const auto& entry) { return !m_overlaid.contains(entry.first); });
+    m_overlayHoverFaces.clear();
+    addFaces(hoveredFaces, m_overlayHoverFaces);
+    const bool has = !m_lines.empty() || !m_selectedEdges.empty() || !m_selectedFaces.empty() ||
+                     !m_hoveredFaces.empty() || !m_overlayEdges.empty() || !m_overlayFaces.empty() ||
+                     !m_overlayHoverFaces.empty();
     if (had || has) {
         m_highlightRevision = m_nextId++;
     }
@@ -574,6 +616,9 @@ const ChunkSet::ItemIndex& ChunkSet::indexOf(std::pair<int, int> body,
 
 Entry* ChunkSet::entryFor(const PickedItem& item, Data** chunk)
 {
+    if (m_overlaid.contains({item.feature, item.part})) {
+        return nullptr;
+    }
     const auto found = m_owner.find({item.feature, item.part, item.index / kPaletteEntries});
     if (found == m_owner.end()) {
         return nullptr;
@@ -683,6 +728,9 @@ DrawList ChunkSet::draw(const Frame& frame) const
                                 .selectedEdges = m_selectedEdges,
                                 .selectedFaces = m_selectedFaces,
                                 .hoveredFaces = m_hoveredFaces,
+                                .overlayEdges = m_overlayEdges,
+                                .overlayFaces = m_overlayFaces,
+                                .overlayHoverFaces = m_overlayHoverFaces,
                                 .hidden = m_drawn,
                                 .wireFill = !m_drawn}};
     for (const auto& chunk : m_chunks) {

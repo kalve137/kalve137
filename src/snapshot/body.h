@@ -25,6 +25,7 @@ struct Body {
     std::shared_ptr<const Mesh> mesh;
     Appearance appearance;
     float opacity = 1.0F;
+    bool ghost = false;
 };
 
 struct Scene {

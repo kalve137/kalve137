@@ -750,6 +750,7 @@ void FeaturePanel::finish()
     m_secondHandle->hide();
     m_thirdHandle->hide();
     showPicks({}, {});
+    endPreview();
     m_scene.setPreviewBodies({});
     m_scene.setPickMode(PickMode::None);
     emit selectionSummary({});
@@ -785,6 +786,7 @@ void FeaturePanel::updatePreview()
     emit selectionSummary(summaryOf(resolved));
     updateHandles(resolved);
     refreshItems(resolved.items);
+    showPreview(document, model);
     showPicks(resolved, highlightedBodies(model, feature.id));
     m_scene.setPreviewBodies(previewBodies(model));
     m_scene.show(document, model, m_session);

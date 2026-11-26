@@ -50,5 +50,19 @@ TEST(BodyOpacity, OtherModesShowBodiesOpaqueAndKeepUnchangedBodies)
     EXPECT_FLOAT_EQ(back.bodies[0]->opacity, 1.0F);
 }
 
+TEST(BodyOpacity, APreviewGhostStaysHalfTransparentInEveryMode)
+{
+    snapshot::Body preview = *bodyWith(0);
+    preview.ghost = true;
+    const auto ghost = std::make_shared<const snapshot::Body>(std::move(preview));
+    const auto model = bodyWith(1);
+    for (const PickMode mode : {PickMode::None, PickMode::Faces, PickMode::Edges, PickMode::Planes}) {
+        const snapshot::Scene scene = withBodyOpacity({.bodies = {ghost, model}, .origin = {}, .hidden = {}}, mode);
+        EXPECT_FLOAT_EQ(scene.bodies[0]->opacity, bodyOpacity(PickMode::Planes));
+        EXPECT_TRUE(scene.bodies[0]->ghost);
+        EXPECT_FLOAT_EQ(scene.bodies[1]->opacity, bodyOpacity(mode));
+    }
+}
+
 } // namespace
 } // namespace kalve137::app

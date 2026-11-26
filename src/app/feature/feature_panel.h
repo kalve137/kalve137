@@ -7,6 +7,7 @@
 
 #include "core/document.h"
 #include "core/recompute.h"
+#include "core/snapshot_cache.h"
 
 #include <QString>
 #include <QWidget>
@@ -131,6 +132,8 @@ private:
     void resolvePlane(const core::PlaneFeature& plane, Resolved& resolved) const;
     std::vector<const core::Body*> highlightedBodies(const core::Model& model, core::FeatureId featureId) const;
     void showPicks(const Resolved& resolved, const std::vector<const core::Body*>& bodies);
+    void showPreview(const core::Document& document, const core::Model& model);
+    void endPreview();
     std::set<core::BodyKey> previewBodies(const core::Model& model) const;
     core::FilletSet& activeSet(core::FilletFeature& fillet);
     const core::FilletSet& activeSet(const core::FilletFeature& fillet) const;
@@ -154,6 +157,8 @@ private:
     core::FeatureId m_editing = 0;
     core::Document m_base;
     core::Model m_baseModel;
+    core::SnapshotCache m_previewSnapshots;
+    core::SnapshotCache m_baseSnapshots;
 
     QVBoxLayout* m_layout = nullptr;
     QWidget* m_form = nullptr;

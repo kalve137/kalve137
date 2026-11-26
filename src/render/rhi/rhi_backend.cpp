@@ -98,6 +98,9 @@ bool RhiBackend::createShared()
         bindings = bindingsFor(m_layoutTexture.get());
     }
     m_hiddenEdgeBindings = bindingsFor(m_layoutTexture.get());
+    m_overlayFillBindings = bindingsFor(m_layoutTexture.get());
+    m_overlayLineBindings = bindingsFor(m_layoutTexture.get());
+    m_overlayHoverBindings = bindingsFor(m_layoutTexture.get());
     m_datums.fillBindings = bindingsFor(m_layoutTexture.get());
     m_datums.lineBindings = bindingsFor(m_layoutTexture.get());
     m_datums.originFillBindings = bindingsWith(m_layoutTexture.get(), m_originUniforms.get());
@@ -119,16 +122,17 @@ bool RhiBackend::createShared()
         return false;
     }
     m_markers.idBindings = idBindingsFor(m_layoutTexture.get(), m_markers.pick.get());
-    const bool complete = createSketchShared() && createHandleShared() && m_markers.depthBindings != nullptr &&
-                          m_markers.topBindings != nullptr && m_markers.idBindings != nullptr && layout != nullptr &&
-                          m_idLayout != nullptr && m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr &&
-                          m_haloBindings != nullptr && m_maskBindings != nullptr && m_goldBindings != nullptr &&
-                          m_hiddenFaceBindings.at(0) != nullptr && m_hiddenFaceBindings.at(1) != nullptr &&
-                          m_hiddenEdgeBindings != nullptr && m_datums.fillBindings != nullptr &&
-                          m_datums.lineBindings != nullptr && m_datums.originFillBindings != nullptr &&
-                          m_datums.originLineBindings != nullptr && m_datums.resetBindings != nullptr &&
-                          m_datums.idFillBindings != nullptr && m_datums.idLineBindings != nullptr &&
-                          m_datums.originIdFillBindings != nullptr && m_datums.originIdLineBindings != nullptr;
+    const bool complete =
+        createSketchShared() && createHandleShared() && m_markers.depthBindings != nullptr &&
+        m_markers.topBindings != nullptr && m_markers.idBindings != nullptr && layout != nullptr &&
+        m_idLayout != nullptr && m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr &&
+        m_haloBindings != nullptr && m_maskBindings != nullptr && m_goldBindings != nullptr &&
+        m_hiddenFaceBindings.at(0) != nullptr && m_hiddenFaceBindings.at(1) != nullptr &&
+        m_hiddenEdgeBindings != nullptr && m_overlayFillBindings != nullptr && m_overlayLineBindings != nullptr &&
+        m_overlayHoverBindings != nullptr && m_datums.fillBindings != nullptr && m_datums.lineBindings != nullptr &&
+        m_datums.originFillBindings != nullptr && m_datums.originLineBindings != nullptr &&
+        m_datums.resetBindings != nullptr && m_datums.idFillBindings != nullptr && m_datums.idLineBindings != nullptr &&
+        m_datums.originIdFillBindings != nullptr && m_datums.originIdLineBindings != nullptr;
     if (complete) {
         m_layout = std::move(layout);
     }
@@ -203,6 +207,9 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_goldFill.reset();
     m_hiddenFaces = {};
     m_hiddenEdges.reset();
+    m_overlayFill.reset();
+    m_overlayLines.reset();
+    m_overlayHoverFill.reset();
     m_gridWash.reset();
     m_gridLines.reset();
     m_datumFill.reset();
@@ -243,6 +250,11 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_hiddenFaces.at(1) =
         make({"layer.vert", "layer.frag", Input::Positions, Depth::Greater, 0, 0.0F, Blend::Constant});
     m_hiddenEdges = make({"dash.vert", "dash.frag", Input::Lines, Depth::Greater, 0, 0.0F, Blend::Opaque});
+    m_overlayFill = make({"layer.vert", "layer.frag", Input::Positions, Depth::LessOrEqual, -kFaceBiasUnits,
+                          -kFaceBiasSlope, Blend::Constant});
+    m_overlayLines = make({"dash.vert", "layer.frag", Input::Lines, Depth::LessOrEqual, 0, 0.0F, Blend::Opaque});
+    m_overlayHoverFill = make({"layer.vert", "hover.frag", Input::Positions, Depth::LessOrEqual, -kFaceBiasUnits,
+                               -kFaceBiasSlope, Blend::Constant});
     const bool clamped = m_rhi->isFeatureSupported(QRhi::DepthClamp);
     const char* overlay = clamped ? "grid.frag" : "grid_depth.frag";
     const auto overlayPipeline = [&](const char* vertex, Input input, int units, float slope) {
@@ -273,7 +285,8 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     return createHandlePipelines(pass, samples) && m_annotationQuads != nullptr && m_activeFills != nullptr &&
            m_activeLines != nullptr && m_sketchCurves != nullptr && m_sketchProfiles != nullptr && m_edges != nullptr &&
            m_halo != nullptr && m_maskFill != nullptr && m_goldFill != nullptr && m_hiddenFaces.at(0) != nullptr &&
-           m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr && m_gridWash != nullptr &&
+           m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr && m_overlayFill != nullptr &&
+           m_overlayLines != nullptr && m_overlayHoverFill != nullptr && m_gridWash != nullptr &&
            m_gridLines != nullptr && m_datumFill != nullptr && m_datumLines != nullptr && m_originFill != nullptr &&
            m_originLines != nullptr && m_depthReset != nullptr && m_markerDepth != nullptr && m_markerTop != nullptr;
 }
@@ -501,7 +514,13 @@ bool RhiBackend::refreshHighlight(const HighlightDraw& highlight, QRhiResourceUp
                           upload(highlight.selectedFaces.data(), highlight.selectedFaces.size_bytes(),
                                  highlight.selectedFaces.size(), m_highlight.selectedFaces, updates) &&
                           upload(highlight.hoveredFaces.data(), highlight.hoveredFaces.size_bytes(),
-                                 highlight.hoveredFaces.size(), m_highlight.hoveredFaces, updates);
+                                 highlight.hoveredFaces.size(), m_highlight.hoveredFaces, updates) &&
+                          upload(highlight.overlayEdges.data(), highlight.overlayEdges.size_bytes(),
+                                 highlight.overlayEdges.size(), m_highlight.overlayEdges, updates) &&
+                          upload(highlight.overlayFaces.data(), highlight.overlayFaces.size_bytes(),
+                                 highlight.overlayFaces.size(), m_highlight.overlayFaces, updates) &&
+                          upload(highlight.overlayHoverFaces.data(), highlight.overlayHoverFaces.size_bytes(),
+                                 highlight.overlayHoverFaces.size(), m_highlight.overlayHoverFaces, updates);
     if (uploaded) {
         m_highlight.revision = highlight.revision;
     }
@@ -733,6 +752,11 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
             buffer->draw(kEdgeCorners, gpu->segmentCount);
         }
     }
+    drawTriangles(buffer, m_overlayFill.get(), m_overlayFillBindings.get(), m_highlight.overlayFaces, viewport,
+                  kSelectedMix);
+    drawTriangles(buffer, m_overlayHoverFill.get(), m_overlayHoverBindings.get(), m_highlight.overlayHoverFaces,
+                  viewport, kHoverStep);
+    drawLines(buffer, m_overlayLines.get(), m_overlayLineBindings.get(), m_highlight.overlayEdges, viewport);
     drawGrid(buffer, viewport);
     drawFill(buffer, m_sketchProfiles.get(), m_sketches.profileBindings.get(), m_sketches.profiles, viewport);
     drawTransparent(buffer, viewport);

@@ -114,12 +114,16 @@ struct HighlightDraw {
     std::span<const Segment> selectedEdges;
     std::span<const Position> selectedFaces;
     std::span<const Position> hoveredFaces;
+    std::span<const Segment> overlayEdges;
+    std::span<const Position> overlayFaces;
+    std::span<const Position> overlayHoverFaces;
     bool hidden = false;
     bool wireFill = false;
 
     bool empty() const
     {
-        return lines.empty() && selectedEdges.empty() && selectedFaces.empty() && hoveredFaces.empty();
+        return lines.empty() && selectedEdges.empty() && selectedFaces.empty() && hoveredFaces.empty() &&
+               overlayEdges.empty() && overlayFaces.empty() && overlayHoverFaces.empty();
     }
 };
 
