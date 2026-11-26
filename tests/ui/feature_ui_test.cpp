@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "app/session/design_session.h"
+#include "app/shell/main_window.h"
+#include "app/view/camera_commands.h"
 #include "scenario.h"
 #include "ui_test.h"
 
@@ -187,7 +190,9 @@ TEST_F(FeatureTest, ClosesWithEveryCommandOpen)
         ui->click(kTopFace);
         ui.reset();
         ui = std::make_unique<UiDriver>();
-        block(*ui);
+        ui->session().reset(blockDocument(), {});
+        ui->window().cameraCommands()->home(app::CameraCommands::Move::Jump);
+        ASSERT_NEAR(volume(*ui), kBlockVolume, kTolerance) << ui->state().dump(2);
     }
 }
 
