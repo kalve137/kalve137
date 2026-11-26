@@ -7,8 +7,11 @@
 
 #include <TopoDS_Shape.hxx>
 
+#include <vector>
+
 namespace kalve137::geometry {
 
 snapshot::Mesh meshBody(const TopoDS_Shape& shape);
+std::vector<snapshot::Polyline> edgeLines(const TopoDS_Shape& shape);
 
 } // namespace kalve137::geometry

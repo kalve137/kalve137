@@ -50,6 +50,12 @@ struct FeatureStatus {
     std::string message;
 };
 
+struct FeatureTool {
+    FeatureId feature = 0;
+    TopoDS_Shape shape;
+    std::vector<TopoDS_Shape> caps;
+};
+
 struct Model {
     std::vector<Body> bodies;
     std::map<FeatureId, SketchState> sketches;
@@ -57,6 +63,7 @@ struct Model {
     std::map<FeatureId, gp_Ax1> axes;
     std::map<FeatureId, gp_Pnt> points;
     std::map<FeatureId, FeatureStatus> status;
+    FeatureTool tool;
 
     const Body* body(BodyKey key) const;
     std::vector<TopoDS_Shape> shapes() const;

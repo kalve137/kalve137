@@ -155,6 +155,7 @@ FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& pic
     m_previewTimer->setSingleShot(true);
     m_previewTimer->setInterval(kDragPreviewMs);
     connect(m_previewTimer, &QTimer::timeout, this, &FeaturePanel::updatePreview);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &FeaturePanel::updatePreview);
 
     m_handle = new DistanceHandle(projection, this);
     connect(m_handle, &DistanceHandle::dragged, this, &FeaturePanel::onHandleValue);

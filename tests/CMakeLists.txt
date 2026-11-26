@@ -112,6 +112,7 @@ add_executable(kalve137_uitests
     ui/crash_trace.cpp
     ui/crash_trace.h
     ui/dimension_ui_test.cpp
+    ui/extrude_ghost_ui_test.cpp
     ui/feature_ui_test.cpp
     ui/files_ui_test.cpp
     ui/grid_pair_ui_test.cpp
@@ -212,6 +213,7 @@ set(viewport_tests
     PanelPickPairTest.*
     PreviewPairTest.*
     ShellCavityTest.*
+    ExtrudeGhostTest.*
     VertexMarkTest.*
     ScreenTest.LongSelectionKeepsPanelButtonsInView
     FilesTest.SavesReopensExportsAndImports

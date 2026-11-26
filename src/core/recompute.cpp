@@ -165,7 +165,10 @@ private:
             break;
         }
         }
-        const TopoDS_Shape tool = geometry::extrude(faces, from, to, data.taperDegrees * std::numbers::pi / 180.0);
+        std::vector<TopoDS_Shape> caps;
+        const TopoDS_Shape tool =
+            geometry::extrude(faces, from, to, data.taperDegrees * std::numbers::pi / 180.0, &caps);
+        m_model.tool = {.feature = feature.id, .shape = tool, .caps = std::move(caps)};
         applyOperation(feature.id, data.bodyName, data.operation, tool,
                        nameExtrusion(tool, feature.id, state, faces, from, to));
     }
@@ -755,6 +758,7 @@ private:
 
 bool buildOne(Builder& builder, Model& model, const Feature& feature)
 {
+    model.tool = {};
     if (feature.suppressed) {
         model.status[feature.id] = {FeatureHealth::Suppressed, {}};
         return false;
@@ -773,6 +777,7 @@ bool buildOne(Builder& builder, Model& model, const Feature& feature)
     const bool failed = !failure.empty();
     if (failed) {
         model.bodies = std::move(bodiesBefore);
+        model.tool = {};
         model.sketches.erase(feature.id);
         model.planes.erase(feature.id);
         model.axes.erase(feature.id);
