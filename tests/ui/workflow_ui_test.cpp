@@ -12,14 +12,15 @@
 #include <QImage>
 #include <QPoint>
 #include <QPointF>
+#include <QRect>
 
 #include <gp_Pnt.hxx>
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
-#include <limits>
 #include <memory>
 #include <vector>
 
@@ -153,7 +154,9 @@ TEST_F(WorkflowTest, CutFromAFaceSketchGoesIntoTheBody)
 
 constexpr int kZoomSteps = 6;
 constexpr int kLineSamples = 200;
+constexpr int kLineBackgroundRows = 4;
 constexpr int kLineTolerance = 64;
+constexpr double kLineSplitCoverage = 0.7;
 
 std::vector<QPointF> viewMarks(const UiDriver& ui)
 {
@@ -197,6 +200,28 @@ void zoomOnGridLine(UiDriver& ui)
     ui.settle();
 }
 
+int distance(const QColor& a, const QColor& b)
+{
+    return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
+}
+
+double coverage(const QColor& pixel, const QColor& background, const QColor& line)
+{
+    const std::array<double, 3> toLine{static_cast<double>(line.red() - background.red()),
+                                       static_cast<double>(line.green() - background.green()),
+                                       static_cast<double>(line.blue() - background.blue())};
+    const std::array<double, 3> toPixel{static_cast<double>(pixel.red() - background.red()),
+                                        static_cast<double>(pixel.green() - background.green()),
+                                        static_cast<double>(pixel.blue() - background.blue())};
+    double along = 0.0;
+    double length = 0.0;
+    for (std::size_t i = 0; i < toLine.size(); ++i) {
+        along += toPixel.at(i) * toLine.at(i);
+        length += toLine.at(i) * toLine.at(i);
+    }
+    return length > 0.0 ? along / length : 0.0;
+}
+
 void expectSolidAlongGridLine(UiDriver& ui, const QColor& line)
 {
     const QImage frame = ui.canvasImage();
@@ -206,17 +231,29 @@ void expectSolidAlongGridLine(UiDriver& ui, const QColor& line)
     for (int i = 0; i <= kLineSamples; ++i) {
         const QPointF at = ui.at(gp_Pnt(30.0 + 30.0 * i / kLineSamples, 20, 0)) * ratio;
         const QPoint pixel = at.toPoint();
-        if (!frame.rect().contains(pixel)) {
+        const QRect around(pixel - QPoint(0, kLineBackgroundRows), pixel + QPoint(0, kLineBackgroundRows));
+        if (!frame.rect().contains(around)) {
             continue;
         }
         ++sampled;
-        int best = std::numeric_limits<int>::max();
-        for (int dy = -1; dy <= 1; ++dy) {
+        QColor background = line;
+        for (const int dy :
+             {-kLineBackgroundRows, 1 - kLineBackgroundRows, kLineBackgroundRows - 1, kLineBackgroundRows}) {
             const QColor c = frame.pixelColor(pixel + QPoint(0, dy));
-            best = std::min(best, std::abs(c.red() - line.red()) + std::abs(c.green() - line.green()) +
-                                      std::abs(c.blue() - line.blue()));
+            if (distance(c, line) > distance(background, line)) {
+                background = c;
+            }
         }
-        solid += best <= kLineTolerance ? 1 : 0;
+        bool full = false;
+        std::array<double, 3> rows{};
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            const QColor c = frame.pixelColor(pixel + QPoint(0, static_cast<int>(row) - 1));
+            full = full || distance(c, line) <= kLineTolerance;
+            rows.at(row) = coverage(c, background, line);
+        }
+        const bool split = std::min(rows.at(0), rows.at(1)) >= kLineSplitCoverage ||
+                           std::min(rows.at(1), rows.at(2)) >= kLineSplitCoverage;
+        solid += full || split ? 1 : 0;
     }
     ASSERT_GT(sampled, kLineSamples / 2);
     EXPECT_GE(solid, sampled * 9 / 10) << solid << " of " << sampled << " samples show the line";
