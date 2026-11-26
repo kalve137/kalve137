@@ -10,8 +10,8 @@ workflows = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 checkout = re.compile(r"^\s*- uses: actions/checkout@")
 pinned_ref = re.compile(r"^\s+ref: \$\{\{ inputs\.ref \}\}\s*$")
 caller_context = re.compile(r"github\.(sha|ref|event_name)")
-vcpkg_cache_step = re.compile(r"^\s*- name: .*vcpkg binary cache")
-vcpkg_env = re.compile(r"^\s*VCPKG_\w+: ")
+vcpkg_cache_step = re.compile(r"^\s*- name: (.*vcpkg binary cache|Install LLVM)")
+vcpkg_env = re.compile(r"^\s*(VCPKG|LLVM)_\w+: ")
 
 
 def read_lines(path):
@@ -76,12 +76,12 @@ for job in ("windows", "linux", "macos"):
     if not ci_steps:
         failures.append(f"ci.yml: {job} has no vcpkg binary cache steps")
     if ci_env != nightly_env:
-        failures.append(f"packages.yml: {job} VCPKG_ env differs from ci.yml")
+        failures.append(f"packages.yml: {job} VCPKG_ or LLVM_ env differs from ci.yml")
     if ci_steps != nightly_steps:
-        failures.append(f"packages.yml: {job} vcpkg binary cache steps differ from ci.yml")
+        failures.append(f"packages.yml: {job} vcpkg binary cache or LLVM steps differ from ci.yml")
 
 for failure in failures:
     print(failure, file=sys.stderr)
 if failures:
     sys.exit(1)
-print("Workflows check out the planned commit and share the vcpkg cache with CI")
+print("Workflows check out the planned commit and share the vcpkg cache and LLVM with CI")
