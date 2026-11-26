@@ -198,6 +198,7 @@ set_tests_properties(Viewport.Harness PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
+    TIMEOUT 600
 )
 set(viewport_sketch
     ConstraintTest.*
@@ -219,6 +220,7 @@ set_tests_properties(Viewport.Sketch PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
+    TIMEOUT 600
 )
 add_test(NAME Viewport.Features
     COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*:MeasureTest.*:PanelPickPairTest.*:PreviewPairTest.*:ShellCavityTest.*:VertexMarkTest.*:ScreenTest.LongSelectionKeepsPanelButtonsInView)
@@ -226,6 +228,7 @@ set_tests_properties(Viewport.Features PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
+    TIMEOUT 600
 )
 set(viewport_pairs
     FilesTest.SavesReopensExportsAndImports
@@ -255,4 +258,5 @@ set_tests_properties(Viewport.Pairs PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui
     RUN_SERIAL TRUE
+    TIMEOUT 600
 )

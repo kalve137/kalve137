@@ -31,7 +31,6 @@
 #include <cmath>
 #include <format>
 #include <fstream>
-#include <iostream>
 #include <limits>
 #include <map>
 #include <string>
@@ -185,8 +184,6 @@ TEST_F(SketchInputTest, HitsThroughTheCameraMatchTheView)
     for (const auto& [name, counts] : results) {
         RecordProperty(name, std::format("{} pixels, {} geometry and {} constraint mismatches", counts.pixels,
                                          counts.geometry, counts.constraint));
-        std::cout << name << ": " << counts.pixels << " pixels, " << counts.geometry << " geometry, "
-                  << counts.constraint << " constraint mismatches\n";
         EXPECT_GT(counts.pixels, 0) << name;
         EXPECT_EQ(counts.geometry, 0) << name;
         if (oldView) {

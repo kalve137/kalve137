@@ -43,7 +43,7 @@ jobs:
     name: Windows
     needs: version
     runs-on: windows-2025
-    timeout-minutes: 300
+    timeout-minutes: 120
     env:
       VCPKG_ROOT: C:\vcpkg-kalve137
       VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
@@ -100,9 +100,9 @@ jobs:
         id: build
         run: |
           . ./scripts/dev-shell.ps1
-          cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
+          python scripts/ci-no-cmake-warnings.py cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset windows-release
+          python scripts/ci-no-cmake-warnings.py cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Stop the vcpkg build log tail
@@ -142,10 +142,16 @@ jobs:
           Copy-Item "$env:SOFTWARE_GL_DIR\opengl32.dll" build\windows-release
 
       - name: Test
+        id: test
+        timeout-minutes: 40
         run: |
           . ./scripts/dev-shell.ps1
-          ctest --preset windows-release
+          ctest --preset windows-release --timeout 180 --output-junit test-results.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Summarize the tests
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python scripts/ci-test-report.py "Windows tests" build/windows-release/test-results.xml
 
       - name: Upload UI screenshots
         if: failure()
@@ -156,7 +162,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package
-        run: ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
+        timeout-minutes: 10
+        run: python scripts/ci-no-cmake-warnings.py pwsh ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
 
       - name: Upload the package
         uses: actions/upload-artifact@v7
@@ -169,7 +176,7 @@ jobs:
     name: Linux
     needs: version
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    timeout-minutes: 90
     env:
       VCPKG_ROOT: /home/runner/vcpkg-kalve137
       VCPKG_BINARY_SOURCES: clear;files,/home/runner/vcpkg-cache,readwrite
@@ -216,8 +223,8 @@ jobs:
       - name: Build
         id: build
         run: |
-          cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
-          cmake --build --preset linux-release
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
+          python3 scripts/ci-no-cmake-warnings.py cmake --build --preset linux-release
 
       - name: Stop the vcpkg build log tail
         if: always()
@@ -250,12 +257,26 @@ jobs:
           key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
       - name: Test without a window
+        id: test
+        timeout-minutes: 10
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset linux-release -LE ui
+        run: ctest --preset linux-release -LE ui --timeout 180 --output-junit test-results.xml
+
+      - name: Summarize the tests without a window
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python3 scripts/ci-test-report.py "Linux tests without a window" build/linux-release/test-results.xml
 
       - name: Test the viewport on OpenGL
+        id: opengl
+        timeout-minutes: 15
         run: bash scripts/linux-opengl-tests.sh
+
+      - name: Summarize the viewport tests on OpenGL
+        if: ${{ !cancelled() && steps.opengl.outcome != 'skipped' }}
+        run: >-
+          python3 scripts/ci-test-report.py "Linux viewport on OpenGL" build/linux-release/opengl-results
+          --extra build/linux-release/opengl-report.json
 
       - name: Upload UI screenshots
         if: failure()
@@ -266,7 +287,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package
-        run: bash scripts/package-linux.sh --skip-build
+        timeout-minutes: 10
+        run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-linux.sh --skip-build
 
       - name: Upload the package
         uses: actions/upload-artifact@v7
@@ -279,7 +301,7 @@ jobs:
     name: macOS
     needs: version
     runs-on: macos-15
-    timeout-minutes: 300
+    timeout-minutes: 90
     env:
       VCPKG_ROOT: /Users/runner/vcpkg-kalve137
       VCPKG_BINARY_SOURCES: clear;files,/Users/runner/vcpkg-cache,readwrite
@@ -326,8 +348,8 @@ jobs:
       - name: Build
         id: build
         run: |
-          cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
-          cmake --build --preset macos-release
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
+          python3 scripts/ci-no-cmake-warnings.py cmake --build --preset macos-release
 
       - name: Stop the vcpkg build log tail
         if: always()
@@ -360,12 +382,19 @@ jobs:
           key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
       - name: Test without a window
+        id: test
+        timeout-minutes: 10
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset macos-release -LE ui
+        run: ctest --preset macos-release -LE ui --timeout 180 --output-junit test-results.xml
+
+      - name: Summarize the tests without a window
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python3 scripts/ci-test-report.py "macOS tests without a window" build/macos-release/test-results.xml
 
       - name: Package
-        run: bash scripts/package-macos.sh --skip-build
+        timeout-minutes: 10
+        run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-macos.sh --skip-build
 
       - name: Upload the package
         uses: actions/upload-artifact@v7
