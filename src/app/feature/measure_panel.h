@@ -6,9 +6,12 @@
 #include "app/view/scene.h"
 
 #include <AIS_InteractiveObject.hxx>
+#include <gp_Pnt.hxx>
 
 #include <QWidget>
 
+#include <optional>
+#include <utility>
 #include <vector>
 
 class QLabel;
@@ -36,12 +39,18 @@ signals:
 
 private:
     void onSelectionChanged();
+    using Span = std::optional<std::pair<gp_Pnt, gp_Pnt>>;
+
     void refresh();
     void clearOverlay();
+    void showPicks(const Span& span);
+    void showOldOverlay(const Span& span);
     void showOverlay(const Handle(AIS_InteractiveObject)& object);
+    void publish(const Span& span);
 
     Scene& m_scene;
     PickSource& m_source;
+    const ViewProjection& m_projection;
     viewer::OcctViewWidget* m_view;
     bool m_active = false;
     std::vector<Pick> m_picks;

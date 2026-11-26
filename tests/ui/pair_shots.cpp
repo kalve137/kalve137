@@ -7,6 +7,7 @@
 #include "app/view/camera_commands.h"
 #include "render/graphics_api.h"
 #include "render/rhi/viewport.h"
+#include "render/style.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QAction>
@@ -14,6 +15,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QMouseEvent>
+#include <QPoint>
 #include <QSize>
 #include <QTest>
 #include <QWidget>
@@ -26,6 +28,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <format>
 
@@ -38,6 +41,8 @@ constexpr QSize kCanvasSize{515, 441};
 constexpr int kPinTries = 4;
 constexpr int kReadyMs = 10000;
 constexpr int kSettleMs = 300;
+constexpr int kMarkerChange = 10;
+constexpr int kMarkerWindowMargin = 2;
 
 void pinCanvas(app::MainWindow& window, const QWidget& canvas)
 {
@@ -132,6 +137,23 @@ void showOnlyBodies(app::MainWindow& window, const QString& style)
 int gapOf(QRgb a, QRgb b)
 {
     return std::max({std::abs(qRed(a) - qRed(b)), std::abs(qGreen(a) - qGreen(b)), std::abs(qBlue(a) - qBlue(b))});
+}
+
+int markerChangeAround(const QImage& before, const QImage& after, QPointF at)
+{
+    const double ratio = before.devicePixelRatio();
+    const int half = static_cast<int>(std::ceil(((render::kMarkerSmallRing + kMarkerWindowMargin) * ratio) / 2.0));
+    const QPoint center((at * ratio).toPoint());
+    int changed = 0;
+    for (int dy = -half; dy <= half; ++dy) {
+        for (int dx = -half; dx <= half; ++dx) {
+            const QPoint pixel = center + QPoint(dx, dy);
+            if (before.rect().contains(pixel) && gapOf(before.pixel(pixel), after.pixel(pixel)) >= kMarkerChange) {
+                ++changed;
+            }
+        }
+    }
+    return changed;
 }
 
 QRgb median(const std::vector<QRgb>& colors)

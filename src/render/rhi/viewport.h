@@ -10,6 +10,7 @@
 #include "render/graphics_api.h"
 #include "render/grid_overlay.h"
 #include "render/handles.h"
+#include "render/measure.h"
 #include "render/pick_id.h"
 #include "render/sketches.h"
 #include "render/style.h"
@@ -109,6 +110,8 @@ public:
     void setHandles(std::vector<HandleItem> handles);
     const std::vector<HandleItem>& handles() const { return m_handles; }
     HandleDraw handleDraw() const;
+    void setMeasure(MeasureItems measure);
+    const MeasureItems& measure() const { return m_measure; }
     void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
@@ -217,6 +220,7 @@ private:
     std::vector<HandleItem> m_handles;
     HandleGeometry m_handleGeometry;
     std::uint64_t m_handleRevision = 0;
+    MeasureItems m_measure;
     QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
     std::optional<snapshot::Scene> m_pickScene;

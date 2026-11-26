@@ -20,6 +20,7 @@ add_library(kalve137_app STATIC
     feature/feature_panel_view.cpp
     feature/measure_panel.cpp
     feature/measure_panel.h
+    feature/measure_panel_view.cpp
     feature/recent_values.cpp
     feature/recent_values.h
     feature/field_names.cpp
