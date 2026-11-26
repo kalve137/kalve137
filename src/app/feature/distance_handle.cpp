@@ -5,16 +5,18 @@
 
 #include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
+#include "app/sketch/sketch_view_items.h"
 #include "app/theme/theme.h"
 #include "app/view/view_projection.h"
 
+#include "render/style.h"
 #include "viewer/grid.h"
-#include "viewer/style.h"
 
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPolygonF>
+#include <QSignalBlocker>
 #include <QWidget>
 
 #include <algorithm>
@@ -25,22 +27,15 @@
 
 namespace kalve137::app {
 
-namespace style = viewer::style;
-
 namespace {
 
-constexpr double kShaftPixels = 22.0;
-constexpr double kShaftHalfWidth = 3.5;
-constexpr double kHeadPixels = 15.0;
-constexpr double kHeadHalfWidth = 9.0;
-constexpr double kOutlineWidth = style::kStrokeThin;
-constexpr double kGlowWidth = 7.0;
-constexpr int kGlowAlpha = 90;
-constexpr int kGuideAlpha = 170;
+constexpr double kShaftPixels = render::kHandleShaftPixels;
+constexpr double kShaftHalfWidth = render::kHandleShaftWidth / 2.0;
+constexpr double kHeadPixels = render::kHandleHeadPixels;
+constexpr double kHeadHalfWidth = render::kHandleHeadWidth / 2.0;
 constexpr double kHitPixels = 10.0;
 constexpr double kBoxGapPixels = 18.0;
 constexpr int kBoxWidth = 96;
-constexpr int kHoverLighterPercent = 125;
 constexpr double kArcSearchDegrees = 180.0;
 constexpr double kArcCoarseStep = 1.0;
 constexpr double kArcFineStep = 0.05;
@@ -124,8 +119,10 @@ private:
 DistanceHandle::DistanceHandle(const ViewProjection& projection, QObject* parent)
     : QObject(parent), m_projection(projection), m_canvas(projection.canvas())
 {
-    m_overlay = new Overlay(m_canvas, [this](QPainter& painter) { paint(painter); });
-    m_overlay->hide();
+    if (projection.viewport() == nullptr) {
+        m_overlay = new Overlay(m_canvas, [this](QPainter& painter) { paint(painter); });
+        m_overlay->hide();
+    }
     m_box = new ValueEdit(core::Quantity::Length, 0.0, m_canvas);
     m_box->setObjectName("canvasInput");
     m_box->setFixedWidth(kBoxWidth);
@@ -143,6 +140,7 @@ DistanceHandle::DistanceHandle(const ViewProjection& projection, QObject* parent
 
 DistanceHandle::~DistanceHandle()
 {
+    const QSignalBlocker blocker(this);
     hide();
 }
 
@@ -176,7 +174,7 @@ void DistanceHandle::showCommon(double value)
     if (!m_box->hasFocus()) {
         m_box->setValue(value);
     }
-    if (!m_overlay->isVisible()) {
+    if (m_overlay != nullptr && !m_overlay->isVisible()) {
         m_overlay->setGeometry(m_canvas->rect());
         m_overlay->show();
     }
@@ -195,13 +193,16 @@ void DistanceHandle::hide()
     m_shown = false;
     m_dragOffset.reset();
     setHover(false);
-    m_overlay->hide();
+    if (m_overlay != nullptr) {
+        m_overlay->hide();
+    }
     m_recentValues->reset();
     const bool hadFocus = m_box->hasFocus();
     m_box->hide();
     if (hadFocus) {
         m_canvas->setFocus();
     }
+    emit itemChanged();
 }
 
 void DistanceHandle::setValue(double value)
@@ -251,6 +252,13 @@ gp_Pnt DistanceHandle::tip() const
     return m_origin.Translated(gp_Vec(m_direction) * (m_value * m_scale));
 }
 
+gp_Pnt DistanceHandle::toward() const
+{
+    const gp_Pnt at = tip();
+    const gp_Vec step = m_arcAxis ? gp_Vec(at, arcPoint(m_value + 1.0)) : gp_Vec(m_direction) * m_scale;
+    return at.Translated(step * (m_value < 0.0 ? -1.0 : 1.0));
+}
+
 gp_Pnt DistanceHandle::arcPoint(double degrees) const
 {
     return m_origin.Rotated(*m_arcAxis, degrees * std::numbers::pi / 180.0);
@@ -268,12 +276,39 @@ QPointF DistanceHandle::screenAxis() const
 
 std::optional<QPointF> DistanceHandle::screenDirection() const
 {
-    const QPointF axis = screenAxis();
+    const QPointF axis = m_projection.toScreen(toward()) - m_projection.toScreen(tip());
     const double pixels = std::hypot(axis.x(), axis.y());
     if (pixels < 1e-6) {
         return std::nullopt;
     }
-    return axis / pixels * (m_value < 0.0 ? -1.0 : 1.0);
+    return axis / pixels;
+}
+
+std::optional<render::HandleItem> DistanceHandle::item() const
+{
+    if (!m_shown) {
+        return std::nullopt;
+    }
+    const auto vec = [](const gp_Pnt& point) { return camera::Vec3{point.X(), point.Y(), point.Z()}; };
+    const theme::Palette& palette = theme::palette();
+    render::HandleItem item{.anchor = vec(tip()),
+                            .toward = vec(toward()),
+                            .active = m_active,
+                            .hovered = m_hover,
+                            .dragged = m_dragOffset.has_value(),
+                            .colors = {.fill = colorOf(palette.viewport.handle),
+                                       .outline = colorOf(palette.viewport.handleOutline),
+                                       .halo = colorOf(palette.viewport.halo)},
+                            .guide = {}};
+    if (m_dragOffset && m_arcAxis) {
+        const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(m_value) / kArcCoarseStep)));
+        for (int i = 0; i <= steps; ++i) {
+            item.guide.push_back(vec(arcPoint(m_value * i / steps)));
+        }
+    } else if (m_dragOffset) {
+        item.guide = {vec(m_origin), item.anchor};
+    }
+    return item;
 }
 
 bool DistanceHandle::hits(QPointF pos) const
@@ -332,8 +367,8 @@ void DistanceHandle::paint(QPainter& painter) const
     const QPointF base = m_projection.toScreen(tip());
     if (m_dragOffset) {
         QColor guide = theme::palette().viewport.handleOutline;
-        guide.setAlpha(kGuideAlpha);
-        QPen pen(guide, 1.5, Qt::DotLine, Qt::RoundCap);
+        guide.setAlpha(render::kHandleGuideAlpha);
+        QPen pen(guide, render::kHandleGuideWidth, Qt::DotLine, Qt::RoundCap);
         painter.setPen(pen);
         if (m_arcAxis) {
             const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(m_value) / kArcCoarseStep)));
@@ -356,11 +391,11 @@ void DistanceHandle::paint(QPainter& painter) const
     const bool lit = m_hover || m_dragOffset;
     if (lit) {
         QColor glow = fill;
-        glow.setAlpha(kGlowAlpha);
-        painter.strokePath(arrow, QPen(glow, kGlowWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        glow.setAlpha(render::kHandleGlowAlpha);
+        painter.strokePath(arrow, QPen(glow, render::kHandleGlowWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     }
-    painter.setPen(QPen(outline, kOutlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.setBrush(lit ? fill.lighter(kHoverLighterPercent) : fill);
+    painter.setPen(QPen(outline, render::kHandleOutlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(lit ? fill.lighter(render::kHandleLitPercent) : fill);
     painter.drawPath(arrow);
     painter.restore();
 }
@@ -370,11 +405,14 @@ void DistanceHandle::refresh()
     if (!m_shown) {
         return;
     }
-    if (m_overlay->size() != m_canvas->size()) {
-        m_overlay->setGeometry(m_canvas->rect());
+    if (m_overlay != nullptr) {
+        if (m_overlay->size() != m_canvas->size()) {
+            m_overlay->setGeometry(m_canvas->rect());
+        }
+        m_overlay->update();
     }
-    m_overlay->update();
     placeBox();
+    emit itemChanged();
 }
 
 void DistanceHandle::placeBox()

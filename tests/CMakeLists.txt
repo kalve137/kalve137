@@ -123,6 +123,7 @@ add_executable(kalve137_uitests
     ui/viewport_api_ui_test.cpp
     ui/viewport_camera_ui_test.cpp
     ui/viewport_draw_ui_test.cpp
+    ui/viewport_handle_ui_test.cpp
     ui/viewport_pick_ui_test.cpp
     ui/viewport_scene_ui_test.cpp
     ui/viewport_ui_support.cpp
@@ -211,7 +212,7 @@ set_tests_properties(Viewport.Sketch PROPERTIES
     RUN_SERIAL TRUE
 )
 add_test(NAME Viewport.Features
-    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:-FeatureTest.UndoesToEmptyAndRedoesToTheEnd)
+    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*)
 set_tests_properties(Viewport.Features PROPERTIES
     ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
     LABELS ui

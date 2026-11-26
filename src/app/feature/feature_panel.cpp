@@ -172,6 +172,7 @@ FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& pic
     connect(m_thirdHandle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
     const std::array<DistanceHandle*, 3> handles{m_handle, m_secondHandle, m_thirdHandle};
     for (DistanceHandle* handle : handles) {
+        connect(handle, &DistanceHandle::itemChanged, this, &FeaturePanel::publishHandles);
         connect(handle, &DistanceHandle::activated, this, [handles, handle] {
             for (DistanceHandle* other : handles) {
                 if (other != handle) {

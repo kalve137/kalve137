@@ -106,6 +106,7 @@ private:
     void onSecondHandleValue(double value);
     void onThirdHandleValue(double value);
     void updateHandles(const Resolved& resolved);
+    void publishHandles();
     void onSelectionChanged();
     void togglePick(const Pick& pick);
     bool handOffPressPull(const Pick& pick);

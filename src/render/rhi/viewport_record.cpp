@@ -54,6 +54,7 @@ void Viewport::record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target)
         list.sketches = sketchDraw();
         list.activeSketch = activeSketchDraw();
         list.annotations = annotationDraw();
+        list.handles = handleDraw();
         if (!m_bodies->prepare(list, updates)) {
             fail();
         }

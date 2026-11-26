@@ -9,10 +9,12 @@ add_library(kalve137_render_rhi STATIC
     rhi_backend.h
     rhi_backend_detail.h
     rhi_datums.cpp
+    rhi_handles.cpp
     rhi_ids.cpp
     rhi_pipelines.cpp
     viewport.cpp
     viewport.h
+    viewport_handles.cpp
     viewport_input.cpp
     viewport_record.cpp
 )
@@ -67,6 +69,8 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
         shaders/id_marker.vert
         shaders/annotation.vert
         shaders/annotation.frag
+        shaders/handle.vert
+        shaders/handle.frag
 )
 kalve137_set_warnings(kalve137_render_rhi)
 kalve137_forbid(kalve137_render_rhi OCCT MODULES app core geometry sketch viewer)
