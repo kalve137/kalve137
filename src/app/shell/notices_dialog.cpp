@@ -25,6 +25,13 @@ constexpr int kDialogHeight = 640;
 constexpr const char* kNoticesResource = ":/kalve137/THIRD-PARTY-NOTICES.md";
 constexpr const char* kNoticesFolder = "notices";
 
+QDir noticesFolder()
+{
+    const QString appDir = QApplication::applicationDirPath();
+    const QDir bundled(appDir + QLatin1String("/../Resources/") + QLatin1String(kNoticesFolder));
+    return bundled.exists() ? bundled : QDir(appDir + QLatin1Char('/') + QLatin1String(kNoticesFolder));
+}
+
 } // namespace
 
 void showThirdPartyNotices(QWidget* window)
@@ -49,7 +56,7 @@ void showThirdPartyNotices(QWidget* window)
     layout->addWidget(text);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    const QDir folder(QApplication::applicationDirPath() + QLatin1Char('/') + QLatin1String(kNoticesFolder));
+    const QDir folder = noticesFolder();
     if (folder.exists()) {
         QPushButton* open = buttons->addButton(QDialog::tr("Open License Texts"), QDialogButtonBox::ActionRole);
         QObject::connect(open, &QPushButton::clicked, &dialog,
