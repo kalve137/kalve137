@@ -107,6 +107,9 @@ function(kalve137_install_notices target)
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/tinybvh/LICENSE" DESTINATION ${notices} RENAME "tinybvh.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/roboto/OFL.txt" DESTINATION ${notices} RENAME "Roboto.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/qt/LGPL-3.0-only.txt" DESTINATION ${notices} RENAME "Qt.txt")
+    if(UNIX AND NOT APPLE)
+        install(FILES "${PROJECT_SOURCE_DIR}/third_party/icu/Unicode-DFS-2016.txt" DESTINATION ${notices} RENAME "ICU.txt")
+    endif()
 
     set(share "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share")
     set(ports

@@ -70,11 +70,13 @@ try {
         return $name -match '^(vcruntime|msvcp|concrt)\d'
     }
 
-    function NoticeForDll([string]$name) {
-        $base = [IO.Path]::GetFileNameWithoutExtension($name)
+    function NoticeForDll([string]$relative) {
+        if ($relative -match '^plugins[\\/]') {
+            return 'Qt'
+        }
+        $base = [IO.Path]::GetFileNameWithoutExtension($relative)
         switch -Regex ($base) {
             '^Qt6' { return 'Qt' }
-            '^q(windows|svg|gif|ico|jpeg|modernwindows|svgicon)' { return 'Qt' }
             '^TK' { return 'OpenCASCADE' }
             '^planegcs$' { return 'PlaneGCS' }
             '^freetype' { return 'FreeType' }
@@ -93,15 +95,15 @@ try {
     $requiredNotices = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $unmapped = @()
     foreach ($dll in Get-ChildItem -Path $top -Recurse -Filter '*.dll') {
-        $name = $dll.Name
-        if (SkipPackagedDll $name) {
+        if (SkipPackagedDll $dll.Name) {
             continue
         }
-        $notice = NoticeForDll $name
+        $relative = $dll.FullName.Substring($top.Length + 1)
+        $notice = NoticeForDll $relative
         if ($notice) {
             [void]$requiredNotices.Add($notice)
         } else {
-            $unmapped += $dll.FullName.Substring($top.Length + 1)
+            $unmapped += $relative
         }
     }
     foreach ($name in @(

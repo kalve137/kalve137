@@ -52,7 +52,8 @@ fi
 
 notice_for_name() {
     case "$1" in
-        libQt* | Qt* | libq*) echo Qt ;;
+        libQt* | Qt*) echo Qt ;;
+        libicu*) echo ICU ;;
         libTK* | TK*) echo OpenCASCADE ;;
         libplanegcs* | planegcs*) echo PlaneGCS ;;
         libfreetype* | freetype*) echo FreeType ;;
@@ -87,6 +88,7 @@ lib_base() {
 
 bin="$top/bin"
 notices_dir="$bin/notices"
+plugins="$top/plugins"
 missing=0
 for file in bin/THIRD-PARTY-NOTICES.md bin/samples/dodecahedron.k137; do
     if [[ ! -f "$top/$file" ]]; then
@@ -96,6 +98,9 @@ for file in bin/THIRD-PARTY-NOTICES.md bin/samples/dodecahedron.k137; do
 done
 
 required=()
+if [[ -d "$plugins" ]]; then
+    required+=(Qt)
+fi
 while IFS= read -r base; do
     [[ -z "$base" ]] && continue
     if notice="$(notice_for_name "$base")"; then
@@ -105,7 +110,7 @@ while IFS= read -r base; do
         missing=1
     fi
 done < <(
-    find "$top" -name '*.so*' -type f | while IFS= read -r path; do
+    find "$top" -path "$plugins" -prune -o -name '*.so*' -type f -print | while IFS= read -r path; do
         base="$(lib_base "$path")"
         if should_skip_lib "$(basename "$path")"; then
             continue
