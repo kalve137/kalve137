@@ -4,6 +4,7 @@
 #pragma once
 
 #include "render/draw_list.h"
+#include "render/style.h"
 #include "snapshot/color.h"
 #include "snapshot/mesh.h"
 
@@ -15,6 +16,7 @@ namespace kalve137::render {
 struct OutlineItem {
     snapshot::Polyline points;
     snapshot::Color color;
+    double width = kHighlightEdgeWidth;
 
     bool operator==(const OutlineItem&) const = default;
 };

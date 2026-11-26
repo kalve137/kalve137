@@ -5,8 +5,10 @@
 
 #include "geometry/meshing.h"
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepLib_ToolTriangulatedShape.hxx>
 #include <BRep_Tool.hxx>
+#include <GCPnts_TangentialDeflection.hxx>
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <NCollection_List.hxx>
@@ -25,6 +27,7 @@
 #include <cstddef>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace kalve137::geometry {
 
@@ -168,6 +171,34 @@ snapshot::Mesh meshBody(const TopoDS_Shape& shape)
     snapshot::setBounds(mesh);
     mesh.closed = complete && isClosed(shape);
     return mesh;
+}
+
+std::vector<snapshot::Polyline> edgeLines(const TopoDS_Shape& shape)
+{
+    std::vector<snapshot::Polyline> lines;
+    const double deflection = shape.IsNull() ? 0.0 : displayDeflection(shape);
+    if (deflection <= 0.0) {
+        return lines;
+    }
+    ShapeMap edges;
+    TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+    for (int index = 1; index <= edges.Extent(); ++index) {
+        const TopoDS_Edge& edge = TopoDS::Edge(edges(index));
+        if (BRep_Tool::Degenerated(edge)) {
+            continue;
+        }
+        const BRepAdaptor_Curve curve(edge);
+        const GCPnts_TangentialDeflection points(curve, kDisplayDeviationAngle, deflection);
+        snapshot::Polyline line;
+        line.reserve(static_cast<std::size_t>(points.NbPoints()));
+        for (int i = 1; i <= points.NbPoints(); ++i) {
+            line.push_back(point(points.Value(i).XYZ()));
+        }
+        if (line.size() > 1) {
+            lines.push_back(std::move(line));
+        }
+    }
+    return lines;
 }
 
 } // namespace kalve137::geometry

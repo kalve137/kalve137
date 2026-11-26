@@ -13,6 +13,8 @@
 #include <BRep_Tool.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <gp.hxx>
+#include <gp_Ax3.hxx>
 
 #include <nlohmann/json.hpp>
 
@@ -511,4 +513,50 @@ TEST(Serialization, VersionThreeOffsetPlaneLoads)
     const auto& plane = std::get<PlaneFeature>(doc.features().front().data);
     EXPECT_EQ(plane.kind, PlaneKind::Offset);
     EXPECT_NEAR(recompute(doc).planes.at(1).frame.Location().Z(), 12.5, 1e-12);
+}
+
+TEST(ExtrudeTool, KeepsThePrismAndItsEndCapFromTheSameBuild)
+{
+    Document doc;
+    addBlock(doc);
+    SketchFeature sketch;
+    sketch.plane = gp_Ax3(gp::Origin(), gp::DZ(), gp::DX());
+    sketch.planeName = "XY";
+    const sketch::Id a = sketch.sketch.addPoint({30, 5});
+    const sketch::Id b = sketch.sketch.addPoint({50, 5});
+    const sketch::Id c = sketch.sketch.addPoint({50, 15});
+    const sketch::Id d = sketch.sketch.addPoint({30, 15});
+    sketch.sketch.addLine(a, b);
+    sketch.sketch.addLine(b, c);
+    sketch.sketch.addLine(c, d);
+    sketch.sketch.addLine(d, a);
+    const FeatureId sketchId = doc.add(std::move(sketch));
+    const Model base = recompute(doc);
+
+    for (const double taper : {0.0, 5.0}) {
+        ExtrudeFeature cut;
+        cut.profiles = {sketchId, {{40, 10}}};
+        cut.distance = 5.0;
+        cut.taperDegrees = taper;
+        cut.operation = Operation::Cut;
+        Feature feature{.id = 99, .name = "Extrude1", .data = cut};
+        const Model model = extend(base, feature);
+        ASSERT_EQ(model.status.at(99).health, FeatureHealth::Ok) << model.status.at(99).message;
+        EXPECT_EQ(model.tool.feature, 99);
+        ASSERT_FALSE(model.tool.shape.IsNull());
+        EXPECT_NEAR(geometry::volume(model.tool.shape), 1000.0, taper == 0.0 ? 1e-6 : 200.0);
+        ASSERT_EQ(model.tool.caps.size(), 1u);
+        int corners = 0;
+        for (TopExp_Explorer it(model.tool.caps.front(), TopAbs_VERTEX); it.More(); it.Next()) {
+            EXPECT_NEAR(BRep_Tool::Pnt(TopoDS::Vertex(it.Current())).Z(), 5.0, 1e-6) << taper;
+            ++corners;
+        }
+        EXPECT_GE(corners, 4) << taper;
+        EXPECT_EQ(hasVertexAt(model.tool.caps.front(), gp_Pnt(30, 5, 5)), taper == 0.0) << "the taper moves the cap in";
+
+        std::get<ExtrudeFeature>(feature.data).distance = -5.0;
+        const Model missed = extend(base, feature);
+        EXPECT_EQ(missed.status.at(99).health, FeatureHealth::Failed);
+        EXPECT_EQ(missed.tool.feature, 0) << "a failed build keeps no tool";
+    }
 }

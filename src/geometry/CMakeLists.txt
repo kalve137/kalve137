@@ -36,6 +36,7 @@ target_link_libraries(kalve137_geometry
         TKDESTL
         TKFillet
         TKG3d
+        TKGeomBase
         TKLCAF
         TKMesh
         TKOffset
