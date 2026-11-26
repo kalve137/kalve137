@@ -19,9 +19,10 @@
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
+#include <NCollection_IndexedMap.hxx>
 #include <TopExp.hxx>
 #include <TopLoc_Location.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Edge.hxx>
@@ -49,6 +50,8 @@ using kalve137::geometry::displayDeflection;
 using kalve137::geometry::meshBody;
 using kalve137::snapshot::Mesh;
 using kalve137::snapshot::Point;
+
+using ShapeMap = NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>;
 
 Point minus(const Point& a, const Point& b)
 {
@@ -108,7 +111,7 @@ double distance(const Point& a, const gp_Pnt& b)
 void expectIdsFollowTheShape(const TopoDS_Shape& shape)
 {
     const Mesh mesh = meshBody(shape);
-    TopTools_IndexedMapOfShape edges;
+    ShapeMap edges;
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
     ASSERT_EQ(mesh.edgeCount, static_cast<std::uint32_t>(edges.Extent()));
     std::set<std::uint32_t> seen;
@@ -131,7 +134,7 @@ void expectIdsFollowTheShape(const TopoDS_Shape& shape)
         }
     }
 
-    TopTools_IndexedMapOfShape vertices;
+    ShapeMap vertices;
     TopExp::MapShapes(shape, TopAbs_VERTEX, vertices);
     ASSERT_EQ(mesh.pointCount, static_cast<std::uint32_t>(vertices.Extent()));
     ASSERT_EQ(mesh.points.size(), mesh.pointCount);
@@ -143,7 +146,7 @@ void expectIdsFollowTheShape(const TopoDS_Shape& shape)
 
 int degenerateEdges(const TopoDS_Shape& shape)
 {
-    TopTools_IndexedMapOfShape edges;
+    ShapeMap edges;
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
     int count = 0;
     for (int index = 1; index <= edges.Extent(); ++index) {
@@ -210,7 +213,7 @@ TEST(BodyMesh, OnlySolidsWithClosedShellsAreClosed)
     EXPECT_TRUE(meshBody(pocketedBox()).closed);
 
     const TopoDS_Shape box = BRepPrimAPI_MakeBox(10.0, 20.0, 30.0).Shape();
-    TopTools_IndexedMapOfShape faces;
+    ShapeMap faces;
     TopExp::MapShapes(box, TopAbs_FACE, faces);
     EXPECT_FALSE(meshBody(faces(1)).closed) << "a loose face";
 

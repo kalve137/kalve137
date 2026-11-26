@@ -7,15 +7,18 @@
 
 #include <BRepLib_ToolTriangulatedShape.hxx>
 #include <BRep_Tool.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_IndexedMap.hxx>
+#include <NCollection_List.hxx>
 #include <Poly_PolygonOnTriangulation.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
-#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Shape.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <gp_Trsf.hxx>
 
@@ -27,13 +30,15 @@ namespace kalve137::geometry {
 
 namespace {
 
+using ShapeMap = NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>;
+using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
+
 snapshot::Point point(const gp_XYZ& xyz)
 {
     return {xyz.X(), xyz.Y(), xyz.Z()};
 }
 
-bool addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
-              std::unordered_map<int, std::uint32_t>& baseOf)
+bool addFaces(const ShapeMap& faces, snapshot::Mesh& mesh, std::unordered_map<int, std::uint32_t>& baseOf)
 {
     bool complete = true;
     for (int index = 1; index <= faces.Extent(); ++index) {
@@ -80,13 +85,13 @@ bool addFaces(const TopTools_IndexedMapOfShape& faces, snapshot::Mesh& mesh,
     return complete;
 }
 
-void addEdges(const TopoDS_Shape& shape, const TopTools_IndexedMapOfShape& faces,
-              const std::unordered_map<int, std::uint32_t>& baseOf, snapshot::Mesh& mesh)
+void addEdges(const TopoDS_Shape& shape, const ShapeMap& faces, const std::unordered_map<int, std::uint32_t>& baseOf,
+              snapshot::Mesh& mesh)
 {
-    TopTools_IndexedMapOfShape edges;
+    ShapeMap edges;
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
     mesh.edgeCount = static_cast<std::uint32_t>(edges.Extent());
-    TopTools_IndexedDataMapOfShapeListOfShape facesOf;
+    AncestorMap facesOf;
     TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, facesOf);
     for (int i = 1; i <= facesOf.Extent(); ++i) {
         const TopoDS_Edge& edge = TopoDS::Edge(facesOf.FindKey(i));
@@ -120,7 +125,7 @@ void addEdges(const TopoDS_Shape& shape, const TopTools_IndexedMapOfShape& faces
 
 void addPoints(const TopoDS_Shape& shape, snapshot::Mesh& mesh)
 {
-    TopTools_IndexedMapOfShape vertices;
+    ShapeMap vertices;
     TopExp::MapShapes(shape, TopAbs_VERTEX, vertices);
     mesh.pointCount = static_cast<std::uint32_t>(vertices.Extent());
     mesh.points.reserve(static_cast<std::size_t>(vertices.Extent()));
@@ -154,7 +159,7 @@ snapshot::Mesh meshBody(const TopoDS_Shape& shape)
         return mesh;
     }
     ensureMesh(shape);
-    TopTools_IndexedMapOfShape faces;
+    ShapeMap faces;
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
     std::unordered_map<int, std::uint32_t> baseOf;
     const bool complete = addFaces(faces, mesh, baseOf);

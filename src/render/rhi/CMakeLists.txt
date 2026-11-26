@@ -75,4 +75,8 @@ qt_add_shaders(kalve137_render_rhi "kalve137_body_shaders"
         shaders/handle.frag
 )
 kalve137_set_warnings(kalve137_render_rhi)
+if(MSVC)
+    # C4702 comes from Qt's qnumeric.h at code generation, where /external:W0 doesn't reach.
+    set_source_files_properties(rhi_pipelines.cpp PROPERTIES COMPILE_OPTIONS /wd4702)
+endif()
 kalve137_forbid(kalve137_render_rhi OCCT MODULES app core geometry sketch viewer)

@@ -599,7 +599,7 @@ bool Scene::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visibl
 
 void Scene::rebuild()
 {
-    const auto start = std::chrono::steady_clock::now();
+    [[maybe_unused]] const auto start = std::chrono::steady_clock::now();
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
     for (const Handle(AIS_InteractiveObject)& object : m_objects) {
         context->Remove(object, false);

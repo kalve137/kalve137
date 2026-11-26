@@ -41,7 +41,6 @@ namespace {
 
 using Api = QRhiWidget::Api;
 
-constexpr double kWheelNotch = 120.0;
 constexpr int kSamples = 4;
 
 Api widgetApi(GraphicsApi api)

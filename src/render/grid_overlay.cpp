@@ -135,10 +135,10 @@ void GridOverlay::rebuild()
     std::ranges::stable_sort(lines, {}, &GridLine::kind);
     m_lines.reserve(lines.size() * static_cast<std::size_t>(kGridPiecesPerLine));
     for (const GridLine& line : lines) {
-        const snapshot::Color& shown = line.kind == GridLineKind::Minor ? colors.minor
-                                       : line.kind == GridLineKind::Major
-                                           ? colors.major
-                                           : axisColor(colors, gridAxisDirection(plane, line));
+        const snapshot::Color shown = line.kind == GridLineKind::Minor ? colors.minor
+                                      : line.kind == GridLineKind::Major
+                                          ? colors.major
+                                          : axisColor(colors, gridAxisDirection(plane, line));
         const LinearColor color = linearColor(shown);
         const auto width = static_cast<float>(line.kind == GridLineKind::Axis ? kGridAxisWidth : kGridLineWidth);
         const double piece = (line.end - line.start) / kGridPiecesPerLine;

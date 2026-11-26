@@ -26,6 +26,8 @@ if(WIN32)
     endforeach()
 endif()
 find_package(OpenGL REQUIRED)
+# The viewport needs QRhi from GuiPrivate, which ties the build to this Qt version.
+set(QT_NO_PRIVATE_MODULE_WARNING ON)
 find_package(Qt6 6.12 REQUIRED COMPONENTS Widgets OpenGLWidgets Svg GuiPrivate ShaderTools)
 qt_standard_project_setup()
 

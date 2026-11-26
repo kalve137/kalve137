@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+cmake_policy(VERSION 3.25)
+
 include("${CONFIG}")
 
 set(failures)

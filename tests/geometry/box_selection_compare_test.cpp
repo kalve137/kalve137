@@ -9,12 +9,13 @@
 
 #include <BRepBuilderAPI_Copy.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <NCollection_IndexedMap.hxx>
 #include <OSD_Parallel.hxx>
 #include <Prs3d_Drawer.hxx>
 #include <StdPrs_ToolTriangulatedShape.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
@@ -58,7 +59,7 @@ struct Counts {
 int countVisible(const std::vector<TopoDS_Shape>& shapes, TopAbs_ShapeEnum kind, const ViewBlockers& blockers,
                  const gp_Dir& towardViewer)
 {
-    TopTools_IndexedMapOfShape items;
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> items;
     for (const TopoDS_Shape& shape : shapes) {
         TopExp::MapShapes(shape, kind, items);
     }
