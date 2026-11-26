@@ -194,6 +194,27 @@ struct MarkerDraw {
     bool empty() const { return markers.empty(); }
 };
 
+struct Handle {
+    Position anchor{};
+    Position toward{};
+    VertexColor fill{};
+    VertexColor outline{};
+    VertexColor glow{};
+    std::array<float, 4> arrow{};
+    std::array<float, 2> stroke{};
+
+    bool operator==(const Handle&) const = default;
+};
+static_assert(sizeof(Handle) == 60);
+
+struct HandleDraw {
+    std::uint64_t revision = 0;
+    std::span<const Handle> arrows;
+    std::span<const DatumLine> guides;
+
+    bool empty() const { return arrows.empty() && guides.empty(); }
+};
+
 struct SketchDraw {
     std::uint64_t revision = 0;
     std::span<const DatumLine> curves;
@@ -236,6 +257,7 @@ struct DrawList {
     SketchDraw sketches;
     ActiveSketchDraw activeSketch;
     AnnotationDraw annotations;
+    HandleDraw handles;
 };
 
 using Encoded = std::array<float, 3>;

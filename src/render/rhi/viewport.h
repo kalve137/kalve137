@@ -9,6 +9,7 @@
 #include "render/datums.h"
 #include "render/graphics_api.h"
 #include "render/grid_overlay.h"
+#include "render/handles.h"
 #include "render/pick_id.h"
 #include "render/sketches.h"
 #include "render/style.h"
@@ -99,6 +100,9 @@ public:
     void setAnnotations(Annotations annotations);
     const Annotations& annotations() const { return m_annotations; }
     AnnotationDraw annotationDraw() const;
+    void setHandles(std::vector<HandleItem> handles);
+    const std::vector<HandleItem>& handles() const { return m_handles; }
+    HandleDraw handleDraw() const;
     void setTextFamily(const QString& family);
     void setHighlight(Highlight highlight);
     void setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline);
@@ -163,6 +167,7 @@ private:
     std::optional<camera::Box> activeBounds() const;
     void refreshSketches();
     void refreshAnnotations();
+    void refreshHandles();
     void refreshActiveSketch();
     void record(QRhiCommandBuffer* buffer, QRhiRenderTarget* target);
     bool ensureIdTargets(QSize size);
@@ -200,6 +205,9 @@ private:
     Annotations m_annotations;
     PlacedAnnotations m_placedAnnotations;
     std::uint64_t m_annotationRevision = 0;
+    std::vector<HandleItem> m_handles;
+    HandleGeometry m_handleGeometry;
+    std::uint64_t m_handleRevision = 0;
     QString m_textFamily = QStringLiteral("Roboto");
     ChunkSet m_chunks;
     std::unique_ptr<RhiBackend> m_bodies;

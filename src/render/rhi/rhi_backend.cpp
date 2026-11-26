@@ -119,7 +119,7 @@ bool RhiBackend::createShared()
         return false;
     }
     m_markers.idBindings = idBindingsFor(m_layoutTexture.get(), m_markers.pick.get());
-    const bool complete = createSketchShared() && m_markers.depthBindings != nullptr &&
+    const bool complete = createSketchShared() && createHandleShared() && m_markers.depthBindings != nullptr &&
                           m_markers.topBindings != nullptr && m_markers.idBindings != nullptr && layout != nullptr &&
                           m_idLayout != nullptr && m_grid.washBindings != nullptr && m_grid.lineBindings != nullptr &&
                           m_haloBindings != nullptr && m_maskBindings != nullptr && m_goldBindings != nullptr &&
@@ -213,6 +213,8 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_activeFills.reset();
     m_activeLines.reset();
     m_annotationQuads.reset();
+    m_handleArrows.reset();
+    m_handleGuides.reset();
     if (!createShared()) {
         K137_ERROR(Viewer, "The viewport could not create its shared GPU resources");
         return false;
@@ -260,9 +262,9 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
                                 pass, samples, m_active.lineBindings.get());
     m_annotationQuads =
         make({"annotation.vert", "annotation.frag", Input::Annotations, Depth::Off, 0, 0.0F, Blend::Alpha});
-    return m_annotationQuads != nullptr && m_activeFills != nullptr && m_activeLines != nullptr &&
-           m_sketchCurves != nullptr && m_sketchProfiles != nullptr && m_edges != nullptr && m_halo != nullptr &&
-           m_maskFill != nullptr && m_goldFill != nullptr && m_hiddenFaces.at(0) != nullptr &&
+    return createHandlePipelines(pass, samples) && m_annotationQuads != nullptr && m_activeFills != nullptr &&
+           m_activeLines != nullptr && m_sketchCurves != nullptr && m_sketchProfiles != nullptr && m_edges != nullptr &&
+           m_halo != nullptr && m_maskFill != nullptr && m_goldFill != nullptr && m_hiddenFaces.at(0) != nullptr &&
            m_hiddenFaces.at(1) != nullptr && m_hiddenEdges != nullptr && m_gridWash != nullptr &&
            m_gridLines != nullptr && m_datumFill != nullptr && m_datumLines != nullptr && m_originFill != nullptr &&
            m_originLines != nullptr && m_depthReset != nullptr && m_markerDepth != nullptr && m_markerTop != nullptr;
@@ -627,6 +629,10 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
         K137_ERROR(Viewer, "The viewport could not create the GPU resources for the sketch being edited");
         return false;
     }
+    if (!refreshHandles(list.handles, updates)) {
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its drag handles");
+        return false;
+    }
     if (m_annotationsFailed) {
         m_annotations.quads.count = 0;
     } else if (!refreshAnnotations(list.annotations, list.frame.pixelRatio, updates)) {
@@ -724,6 +730,7 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
     drawActiveSketch(buffer, viewport);
     drawLines(buffer, m_markerTop.get(), m_markers.topBindings.get(), m_markers.top, viewport);
     drawLines(buffer, m_annotationQuads.get(), m_annotations.bindings.get(), m_annotations.quads, viewport);
+    drawHandles(buffer, viewport);
 }
 
 void RhiBackend::drawGrid(QRhiCommandBuffer* buffer, const QRhiViewport& viewport) const

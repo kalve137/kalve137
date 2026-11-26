@@ -7,6 +7,8 @@
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 
+#include "render/handles.h"
+
 #include <QObject>
 #include <QPointF>
 
@@ -40,8 +42,10 @@ public:
     bool isActive() const { return m_active; }
     void focusBox();
     bool hits(QPointF pos) const;
+    std::optional<render::HandleItem> item() const;
 
 signals:
+    void itemChanged();
     void activated();
     void dragged(double value);
     void edited(double value);
@@ -53,6 +57,7 @@ protected:
 private:
     void showCommon(double value);
     gp_Pnt tip() const;
+    gp_Pnt toward() const;
     gp_Pnt arcPoint(double degrees) const;
     QPointF screenAxis() const;
     std::optional<QPointF> screenDirection() const;

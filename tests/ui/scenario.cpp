@@ -70,11 +70,6 @@ void extrude(UiDriver& ui, const QString& distance)
 
 void block(UiDriver& ui)
 {
-    if (ui.viewport() != nullptr) {
-        ui.session().reset(blockDocument(), {});
-        homeView(ui);
-        return;
-    }
     sketchRectangle(ui, core::OriginPlane::XY, gp_Pnt(-kBlockWidth / 2, -kBlockDepth / 2, 0),
                     gp_Pnt(kBlockWidth / 2, kBlockDepth / 2, 0));
     extrude(ui, QString::number(kBlockHeight));
