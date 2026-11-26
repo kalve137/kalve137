@@ -32,8 +32,6 @@ EXCLUDED = {
         "old view differs on Linux, viewport same on both",
     "BadgePairTest.EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor":
         "old view differs on Linux, viewport same on both",
-    "PlanePairTest.PlaneAndAxisPicksFollowTheOldViewsRecord":
-        "8 of 149 hovers differ on the 510x443 canvas, 4 allowed, Direct3D 11 at 510x443 gives the same 8",
     "WorkflowTest.FinishedSketchLinesStaySolidOnTheGrid":
         "167 of 201 samples show the line, 180 needed, same on Windows OpenGL, depth bias changes nothing",
     "ScreenTest.FloorFitsTheWindowAndBothToolbars":

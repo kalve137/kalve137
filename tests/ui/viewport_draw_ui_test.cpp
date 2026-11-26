@@ -22,11 +22,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <utility>
@@ -399,6 +401,142 @@ TEST_F(ViewportTest, CullingClosedBodiesChangesNoPixel)
             EXPECT_LE(gap->first, gap->second) << render::graphicsApiName(api);
         }
     }
+}
+
+constexpr double kDashReach = 400.0;
+constexpr double kDashScale = 200.0;
+constexpr int kDashSeen = 48;
+constexpr int kDashPeriod = 16;
+constexpr int kDashSlack = 1;
+constexpr double kDashProbe = 36.0;
+constexpr double kDashVisibleAtLeast = 2.0 * kDashPeriod;
+constexpr int kDashFromOrigin = 2;
+constexpr int kDashMissShare = 8;
+
+struct DashStep {
+    std::string name;
+    double inside = 0.0;
+    double elevation = 90.0;
+};
+
+struct DashPhase {
+    int shift = 0;
+    int misses = 0;
+    int columns = 0;
+    bool probe = false;
+};
+
+camera::Camera lookingAlongX(double x, double elevation, double scale)
+{
+    camera::Camera camera;
+    camera.setProjectionType(camera::Projection::Perspective);
+    const double lift = elevation * std::numbers::pi / 180.0;
+    EXPECT_TRUE(camera.setEyeAndCenter({x, -kDashReach * std::cos(lift), kDashReach * std::sin(lift)}, {x, 0.0, 0.0}));
+    EXPECT_TRUE(camera.setUp(elevation > 80.0 ? camera::Vec3{0.0, 1.0, 0.0} : camera::Vec3{0.0, 0.0, 1.0}));
+    EXPECT_TRUE(camera.setScale(scale));
+    return camera;
+}
+
+bool dashOn(double fromEnd)
+{
+    const auto bit = 15U - (static_cast<std::uint32_t>(std::floor(fromEnd)) & 15U);
+    return ((render::kDotDashPattern >> bit) & 1U) != 0U;
+}
+
+DashPhase dashPhase(const QImage& plain, const QImage& shown, double origin, double end, int row)
+{
+    std::vector<std::pair<double, bool>> seen;
+    const auto first = static_cast<int>(std::ceil(origin)) + kDashFromOrigin;
+    DashPhase phase;
+    const int last = std::min(shown.width(), static_cast<int>(std::floor(end)));
+    for (int x = first; x < last; ++x) {
+        int gap = 0;
+        for (int y = row - 2; y <= row + 1; ++y) {
+            const QRgb a = plain.pixel(x, y);
+            const QRgb b = shown.pixel(x, y);
+            gap = std::max(
+                {gap, std::abs(qRed(a) - qRed(b)), std::abs(qGreen(a) - qGreen(b)), std::abs(qBlue(a) - qBlue(b))});
+        }
+        seen.emplace_back(end - (x + 0.5), gap > kDashSeen);
+        if (x == static_cast<int>(std::floor(origin + kDashProbe))) {
+            phase.probe = gap > kDashSeen;
+        }
+    }
+    phase.columns = static_cast<int>(seen.size());
+    phase.misses = phase.columns + 1;
+    for (int shift = -kDashPeriod / 2; shift < kDashPeriod / 2; ++shift) {
+        const auto misses = static_cast<int>(std::ranges::count_if(
+            seen, [shift](const auto& sample) { return dashOn(sample.first + shift) != sample.second; }));
+        if (misses < phase.misses || (misses == phase.misses && std::abs(shift) < std::abs(phase.shift))) {
+            phase.misses = misses;
+            phase.shift = shift;
+        }
+    }
+    return phase;
+}
+
+TEST_F(ViewportTest, OriginAxisDashesStayPutWhileItsEndIsOffScreen)
+{
+    render::Viewport* canvas = ui->viewport();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const GridHidden gridOff(*canvas);
+    canvas->setScene(snapshot::Scene{.bodies = {}, .origin = {}, .hidden = {}});
+    canvas->setCamera(lookingAlongX(-1.0, 90.0, kDashScale));
+    const double ratio = canvas->viewport().pixelRatio;
+    const auto shownCamera = [&] {
+        camera::Camera shown = canvas->camera();
+        shown.setAspect(canvas->viewport().aspect());
+        return shown;
+    };
+    const auto screenX = [&](const camera::Vec3& point) {
+        return shownCamera().project(point, canvas->viewport()).x * ratio;
+    };
+    const double perUnit = screenX({}) - screenX({-1.0, 0.0, 0.0});
+    const double width = canvas->viewport().width * ratio;
+    const double axis = render::kOriginAxisPixels * ratio;
+    const std::vector<DashStep> steps{{.name = "end on screen", .inside = 16.0},
+                                      {.name = "zoomed 24 px off", .inside = -24.0},
+                                      {.name = "zoomed 48 px off", .inside = -48.0},
+                                      {.name = "zoomed 64 px off", .inside = -64.0},
+                                      {.name = "orbited to 70 degrees", .inside = -64.0, .elevation = 70.0},
+                                      {.name = "orbited to 45 degrees", .inside = -64.0, .elevation = 45.0}};
+    const double firstOffset = (width / 2.0) - axis - steps.front().inside;
+    const double center = -firstOffset / perUnit;
+    const render::Datums datums{
+        .originAxes = {{.id = 0, .anchor = {}, .direction = {1.0, 0.0, 0.0}, .color = {0.85F, 0.3F, 0.3F}}}};
+    std::optional<DashPhase> reference;
+    for (const DashStep& step : steps) {
+        const double offset = (width / 2.0) - axis - step.inside;
+        canvas->setDatums({});
+        canvas->setCamera(lookingAlongX(center, step.elevation, kDashScale * firstOffset / offset));
+        const QImage plain = grabbed(*canvas);
+        canvas->setDatums(datums);
+        const QImage shown = grabbed(*canvas);
+        const camera::Camera camera = shownCamera();
+        const camera::Viewport viewport = canvas->viewport();
+        const double reach = render::kOriginAxisPixels * render::anchorScale(camera, viewport, {});
+        const double origin = screenX({});
+        const double end = screenX({reach, 0.0, 0.0});
+        const auto row = static_cast<int>(std::lround(camera.project({}, viewport).y * ratio));
+        ASSERT_NEAR(end - origin, axis, 1.0) << step.name;
+        ASSERT_EQ(end < width, step.inside > 0.0) << step.name << ": the end sits at " << end << " of " << width;
+        ASSERT_GE(width - origin, kDashVisibleAtLeast) << step.name;
+        const DashPhase phase = dashPhase(plain, shown, origin, end, row);
+        EXPECT_LE(phase.misses, phase.columns / kDashMissShare)
+            << step.name << ": " << phase.misses << " of " << phase.columns << " columns miss the pattern";
+        if (!reference) {
+            EXPECT_LE(std::abs(phase.shift), kDashSlack) << step.name << ": the dashes count from the axis end";
+            EXPECT_TRUE(phase.probe) << step.name << ": a dash covers the probe point";
+            reference = phase;
+            continue;
+        }
+        EXPECT_LE(std::abs(phase.shift - reference->shift), kDashSlack)
+            << step.name << ": the dashes moved by " << phase.shift - reference->shift << " px";
+        EXPECT_EQ(phase.probe, reference->probe) << step.name << ": the probe point keeps its dash";
+    }
+    canvas->setDatums({});
 }
 
 } // namespace
