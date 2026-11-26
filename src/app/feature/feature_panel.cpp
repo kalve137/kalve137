@@ -749,10 +749,7 @@ void FeaturePanel::finish()
     m_handle->hide();
     m_secondHandle->hide();
     m_thirdHandle->hide();
-    m_scene.setHighlightedProfiles({});
-    m_scene.setHighlightedEdges({});
-    m_scene.setHighlightedFaces({});
-    m_scene.setHighlightedBodies({});
+    showPicks({}, {});
     m_scene.setPreviewBodies({});
     m_scene.setPickMode(PickMode::None);
     emit selectionSummary({});
@@ -788,10 +785,7 @@ void FeaturePanel::updatePreview()
     emit selectionSummary(summaryOf(resolved));
     updateHandles(resolved);
     refreshItems(resolved.items);
-    m_scene.setHighlightedProfiles(std::move(resolved.profiles));
-    m_scene.setHighlightedEdges(std::move(resolved.edges));
-    m_scene.setHighlightedFaces(std::move(resolved.faces));
-    m_scene.setHighlightedBodies(highlightedBodies(model, feature.id));
+    showPicks(resolved, highlightedBodies(model, feature.id));
     m_scene.setPreviewBodies(previewBodies(model));
     m_scene.show(document, model, m_session);
 
@@ -856,29 +850,30 @@ std::set<core::BodyKey> FeaturePanel::previewBodies(const core::Model& model) co
     return keys;
 }
 
-std::vector<TopoDS_Shape> FeaturePanel::highlightedBodies(const core::Model& model, core::FeatureId featureId) const
+std::vector<const core::Body*> FeaturePanel::highlightedBodies(const core::Model& model,
+                                                               core::FeatureId featureId) const
 {
-    std::vector<TopoDS_Shape> shapes;
+    std::vector<const core::Body*> bodies;
     if (const auto* pattern = std::get_if<core::PatternFeature>(&*m_data)) {
         if (const core::Body* body = m_baseModel.body(pattern->body)) {
-            shapes.push_back(body->shape);
+            bodies.push_back(body);
         }
     } else if (const auto* move = std::get_if<core::MoveFeature>(&*m_data)) {
         if (move->copy) {
             for (const core::Body& body : model.bodies) {
                 if (body.id == featureId) {
-                    shapes.push_back(body.shape);
+                    bodies.push_back(&body);
                 }
             }
         } else {
             for (const core::BodyKey& key : move->bodies) {
                 if (const core::Body* body = model.body(key)) {
-                    shapes.push_back(body->shape);
+                    bodies.push_back(body);
                 }
             }
         }
     }
-    return shapes;
+    return bodies;
 }
 
 } // namespace kalve137::app

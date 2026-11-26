@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/view/panel_picks.h"
 #include "app/view/pick_source.h"
 #include "core/document.h"
 #include "core/recompute.h"
@@ -13,12 +14,6 @@
 
 #include <QPointF>
 
-#include <NCollection_IndexedMap.hxx>
-#include <TopTools_ShapeMapHasher.hxx>
-#include <TopoDS_Shape.hxx>
-
-#include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -57,6 +52,8 @@ public:
     bool selectedByBox() const override { return m_selectedByBox; }
     void showModel(core::Model model);
     void setHighlightedBodies(std::vector<core::BodyKey> keys);
+    void setPanelPicks(PanelPicks picks);
+    const PanelItems& panelItems() const { return m_panelItems; }
 
     void hoverAt(QPointF position);
     void clickAt(QPointF position, Qt::KeyboardModifiers modifiers);
@@ -80,23 +77,15 @@ private:
             return item == other.item && datum == other.datum && sketch == other.sketch;
         }
     };
-    using ShapeMap = NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>;
-    struct Items {
-        TopoDS_Shape shape;
-        ShapeMap faces;
-        ShapeMap edges;
-        ShapeMap vertices;
-        mutable std::map<int, std::vector<std::uint32_t>> outlines;
-    };
-
     std::optional<Found> pickAt(QPointF position) const;
-    const Items& itemsOf(const core::Body& body) const;
     void addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const;
     std::optional<Pick> pickOf(const Found& found) const;
     std::optional<Pick> datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const;
     static Pick sketchPick(const render::SketchKey& key, const std::optional<gp_Pnt>& point);
     void showMarks();
     const core::Body* bodyOf(const render::PickedItem& item) const;
+    const core::Body* bodyOf(core::BodyKey key) const;
+    bool mapPanelPicks();
     std::shared_ptr<const snapshot::Mesh> meshOf(const render::PickedItem& item) const;
     void press(QPointF position, Qt::MouseButton button, Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
     void release(QPointF position, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
@@ -115,6 +104,8 @@ private:
     BandOverlay* m_band;
     core::Model m_shown;
     std::vector<core::BodyKey> m_highlightedBodies;
+    PanelPicks m_panelPicks;
+    PanelItems m_panelItems;
     std::optional<Found> m_hovered;
     std::vector<Found> m_selected;
     std::optional<QPointF> m_pressed;
@@ -122,7 +113,7 @@ private:
     bool m_boxFromPress = false;
     bool m_boxing = false;
     bool m_selectedByBox = false;
-    mutable std::map<core::BodyKey, Items> m_items;
+    mutable BodyShapeCache m_shapes;
 };
 
 } // namespace kalve137::app

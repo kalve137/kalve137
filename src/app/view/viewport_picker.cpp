@@ -25,8 +25,6 @@
 #include <OSD_Parallel.hxx>
 #include <Precision.hxx>
 #include <Standard_Failure.hxx>
-#include <TopExp.hxx>
-#include <TopExp_Explorer.hxx>
 #include <gp.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Dir.hxx>
@@ -35,8 +33,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace kalve137::app {
 
@@ -250,22 +248,13 @@ std::optional<ViewportPicker::Found> ViewportPicker::pickAt(QPointF position) co
 
 const core::Body* ViewportPicker::bodyOf(const render::PickedItem& item) const
 {
-    const core::BodyKey key{static_cast<core::FeatureId>(item.feature), item.part};
-    const core::Body* body = m_shown.body(key);
-    return body != nullptr ? body : m_session->model().body(key);
+    return bodyOf(core::BodyKey{.feature = item.feature, .part = item.part});
 }
 
-const ViewportPicker::Items& ViewportPicker::itemsOf(const core::Body& body) const
+const core::Body* ViewportPicker::bodyOf(core::BodyKey key) const
 {
-    Items& items = m_items[body.key()];
-    if (!items.shape.IsEqual(body.shape)) {
-        items = {};
-        items.shape = body.shape;
-        TopExp::MapShapes(body.shape, TopAbs_FACE, items.faces);
-        TopExp::MapShapes(body.shape, TopAbs_EDGE, items.edges);
-        TopExp::MapShapes(body.shape, TopAbs_VERTEX, items.vertices);
-    }
-    return items;
+    const core::Body* body = m_shown.body(key);
+    return body != nullptr ? body : m_session->model().body(key);
 }
 
 void ViewportPicker::addOutline(const render::PickedItem& face, std::set<render::PickedItem>& outline) const
@@ -274,22 +263,7 @@ void ViewportPicker::addOutline(const render::PickedItem& face, std::set<render:
     if (face.kind != render::PickKind::Face || body == nullptr || body->shape.IsNull()) {
         return;
     }
-    const Items& items = itemsOf(*body);
-    const auto index = static_cast<int>(face.index) + 1;
-    if (index > items.faces.Extent()) {
-        return;
-    }
-    const auto [edges, added] = items.outlines.try_emplace(index);
-    if (added) {
-        for (TopExp_Explorer edge(items.faces.FindKey(index), TopAbs_EDGE); edge.More(); edge.Next()) {
-            if (const int found = items.edges.FindIndex(edge.Current()); found > 0) {
-                edges->second.push_back(static_cast<std::uint32_t>(found - 1));
-            }
-        }
-    }
-    for (const std::uint32_t edge : edges->second) {
-        outline.insert({.feature = face.feature, .part = face.part, .kind = render::PickKind::Edge, .index = edge});
-    }
+    app::addOutline(*body, face.index, m_shapes, outline);
 }
 
 std::optional<Pick> ViewportPicker::datumPick(const render::DatumKey& key, const std::optional<gp_Pnt>& point) const
@@ -377,8 +351,8 @@ std::optional<Pick> ViewportPicker::pickOf(const Found& found) const
     if (body == nullptr || body->shape.IsNull()) {
         return std::nullopt;
     }
-    const Items& items = itemsOf(*body);
-    const ShapeMap* map = nullptr;
+    const BodyShapes& items = m_shapes.of(*body);
+    const ShapeIndex* map = nullptr;
     Pick pick;
     switch (found.item.kind) {
     case render::PickKind::None:
@@ -563,7 +537,8 @@ void ViewportPicker::dropStale()
     if (hoverGone) {
         m_hovered.reset();
     }
-    if (hoverGone || m_selected.size() != before) {
+    const bool remapped = mapPanelPicks();
+    if (remapped || hoverGone || m_selected.size() != before) {
         showHighlight();
     }
     if (hoverGone) {
@@ -588,6 +563,31 @@ void ViewportPicker::setHighlightedBodies(std::vector<core::BodyKey> keys)
     showHover();
 }
 
+void ViewportPicker::setPanelPicks(PanelPicks picks)
+{
+    m_panelPicks = std::move(picks);
+    if (mapPanelPicks()) {
+        showHighlight();
+    }
+}
+
+bool ViewportPicker::mapPanelPicks()
+{
+    std::vector<const core::Body*> shown;
+    if (!m_panelPicks.empty()) {
+        shown.reserve(m_view->scene().bodies.size());
+        for (const auto& body : m_view->scene().bodies) {
+            shown.push_back(bodyOf(core::BodyKey{.feature = body->feature, .part = body->part}));
+        }
+    }
+    PanelItems items = app::panelItems(m_panelPicks, shown, m_shapes);
+    if (items == m_panelItems) {
+        return false;
+    }
+    m_panelItems = std::move(items);
+    return true;
+}
+
 void ViewportPicker::showHighlight()
 {
     render::Highlight highlight;
@@ -599,6 +599,8 @@ void ViewportPicker::showHighlight()
         highlight.selected.insert(found.item);
         addOutline(found.item, highlight.selectedOutline);
     }
+    highlight.selected.insert(m_panelItems.selected.begin(), m_panelItems.selected.end());
+    highlight.selectedOutline.insert(m_panelItems.selectedOutline.begin(), m_panelItems.selectedOutline.end());
     m_view->setHighlight(std::move(highlight));
     showMarks();
 }
@@ -642,18 +644,10 @@ void ViewportPicker::addHover(render::Highlight& highlight) const
         if (body == nullptr || body->shape.IsNull()) {
             continue;
         }
-        const Items& items = itemsOf(*body);
-        const auto add = [&](std::set<render::PickedItem>& into, render::PickKind kind, int count) {
-            for (int index = 0; index < count; ++index) {
-                into.insert({.feature = static_cast<int>(key.feature),
-                             .part = key.part,
-                             .kind = kind,
-                             .index = static_cast<std::uint32_t>(index)});
-            }
-        };
-        add(highlight.hovered, render::PickKind::Face, items.faces.Extent());
-        add(highlight.hoveredOutline, render::PickKind::Edge, items.edges.Extent());
+        addWholeBody(*body, m_shapes, highlight.hovered, highlight.hoveredOutline);
     }
+    highlight.hovered.insert(m_panelItems.bodies.begin(), m_panelItems.bodies.end());
+    highlight.hoveredOutline.insert(m_panelItems.bodyOutline.begin(), m_panelItems.bodyOutline.end());
 }
 
 void ViewportPicker::announce(void (PickSource::*signal)())
