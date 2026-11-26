@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when dev matches the nightly release
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  nightly:
+    name: Nightly
+    uses: kalve137/kalve137/.github/workflows/nightly-build.yml@dev
+    with:
+      force: ${{ inputs.force || false }}
+    secrets: inherit
