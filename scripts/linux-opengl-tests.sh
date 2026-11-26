@@ -30,10 +30,6 @@ import xml.etree.ElementTree as ET
 EXCLUDED = {
     "MarkerPairTest.ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView":
         "old view differs on Linux, viewport same on both",
-    "BadgePairTest.EveryBadgeAndLabelKeepsTheOldViewsSizeCornerTextAndColor":
-        "old view differs on Linux, viewport same on both",
-    "ScreenTest.FloorFitsTheWindowAndBothToolbars":
-        "sketch bar drops its labels at full width with the Linux fonts",
     "SelectTest.WindowOverThousandsOfFacesStaysFast":
         "window selection takes 1165 ms on the CPU rasterizer, budget 1000 ms",
     "FeatureTest.IdleHoverAndSelectStayFast":

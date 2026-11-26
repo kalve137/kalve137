@@ -123,6 +123,8 @@ void recordLog(std::string_view line)
         while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
             text.pop_back();
         }
+        std::fprintf(stderr, "%s\n", text.c_str());
+        std::fflush(stderr);
         record(std::move(text));
     }
 }
