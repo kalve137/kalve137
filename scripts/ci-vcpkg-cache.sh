@@ -62,11 +62,9 @@ case "$command" in
         run_id="${RUN_ID:-}"
         save=false
         key="$primary"
-        if [ "$count_after" -gt 0 ] && [ -n "$primary" ]; then
-            if [ "$cache_hit" != true ]; then
-                save=true
-            elif [ "$count_after" -gt "$count_before" ]; then
-                save=true
+        if [ "$count_after" -gt "$count_before" ] && [ -n "$primary" ]; then
+            save=true
+            if [ "$cache_hit" = true ]; then
                 key="${primary}-${run_id}"
             fi
         fi
