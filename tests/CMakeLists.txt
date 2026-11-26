@@ -177,30 +177,22 @@ target_link_libraries(kalve137_uitests PRIVATE
 kalve137_set_warnings(kalve137_uitests)
 kalve137_copy_runtime_dlls(kalve137_uitests)
 kalve137_stage_fonts(kalve137_uitests FONT_DIRS ${font_dir})
-gtest_discover_tests(kalve137_uitests
-    DISCOVERY_MODE PRE_TEST
-    DISCOVERY_TIMEOUT 60
-    PROPERTIES LABELS ui RUN_SERIAL TRUE
+set(ui_timed
+    FeatureTest.IdleHoverAndSelectStayFast
+    SelectTest.WindowOverThousandsOfFacesStaysFast
 )
-foreach(scale 125 150 175)
-    math(EXPR whole "${scale} / 100")
-    math(EXPR part "${scale} % 100")
-    add_test(NAME ScreenTest.AtScale${scale} COMMAND kalve137_uitests --gtest_filter=ScreenTest.*)
-    set_tests_properties(ScreenTest.AtScale${scale} PROPERTIES
-        ENVIRONMENT "QT_SCALE_FACTOR=${whole}.${part};KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/scale-${scale}"
-        LABELS ui
-        RUN_SERIAL TRUE
-    )
-endforeach()
-add_test(NAME Viewport.Harness
-    COMMAND kalve137_uitests --gtest_filter=HarnessTest.RendersTheWindowOffScreen:ViewportTest.*:ShadingPairTest.*:EdgePairTest.*:HighlightPairTest.*:GridPairTest.*:MarkerPairTest.*)
-set_tests_properties(Viewport.Harness PROPERTIES
-    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
-    LABELS ui
-    RUN_SERIAL TRUE
-    TIMEOUT 600
+set(ui_serial
+    ${ui_timed}
+    HarnessTest.AboutOpensTheThirdPartyNotices
 )
-set(viewport_sketch
+set(viewport_tests
+    HarnessTest.RendersTheWindowOffScreen
+    ViewportTest.*
+    ShadingPairTest.*
+    EdgePairTest.*
+    HighlightPairTest.*
+    GridPairTest.*
+    MarkerPairTest.*
     ConstraintTest.*
     DimensionTest.*
     LineTest.*
@@ -213,24 +205,15 @@ set(viewport_sketch
     SlotTest.*
     ValueNamesTest.*
     WorkflowTest.*
-)
-list(JOIN viewport_sketch ":" viewport_sketch_filter)
-add_test(NAME Viewport.Sketch COMMAND kalve137_uitests --gtest_filter=${viewport_sketch_filter})
-set_tests_properties(Viewport.Sketch PROPERTIES
-    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
-    LABELS ui
-    RUN_SERIAL TRUE
-    TIMEOUT 600
-)
-add_test(NAME Viewport.Features
-    COMMAND kalve137_uitests --gtest_filter=FeatureTest.*:RecentValuesTest.*:HandlePairTest.*:MeasureTest.*:PanelPickPairTest.*:PreviewPairTest.*:ShellCavityTest.*:VertexMarkTest.*:ScreenTest.LongSelectionKeepsPanelButtonsInView)
-set_tests_properties(Viewport.Features PROPERTIES
-    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
-    LABELS ui
-    RUN_SERIAL TRUE
-    TIMEOUT 600
-)
-set(viewport_pairs
+    FeatureTest.*
+    RecentValuesTest.*
+    HandlePairTest.*
+    MeasureTest.*
+    PanelPickPairTest.*
+    PreviewPairTest.*
+    ShellCavityTest.*
+    VertexMarkTest.*
+    ScreenTest.LongSelectionKeepsPanelButtonsInView
     FilesTest.SavesReopensExportsAndImports
     FilesTest.OpenSampleOpensAnUntitledCopyOfTheDodecahedron
     MenuTest.TimelineSuppressesAndUnsuppresses
@@ -252,11 +235,54 @@ set(viewport_pairs
     BadgePairTest.*
     ProjectPairTest.*
 )
-list(JOIN viewport_pairs ":" viewport_filter)
-add_test(NAME Viewport.Pairs COMMAND kalve137_uitests --gtest_filter=${viewport_filter})
-set_tests_properties(Viewport.Pairs PROPERTIES
-    ENVIRONMENT "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new"
-    LABELS ui
-    RUN_SERIAL TRUE
-    TIMEOUT 600
+list(JOIN ui_serial ":" ui_serial_filter)
+list(JOIN viewport_tests ":" viewport_filter)
+set(viewport_env "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new")
+string(REPLACE ";" "\\;" viewport_env_escaped "${viewport_env}")
+gtest_discover_tests(kalve137_uitests
+    TEST_FILTER -${ui_serial_filter}
+    DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS ui
 )
+gtest_discover_tests(kalve137_uitests
+    TEST_PREFIX Viewport.
+    TEST_FILTER ${viewport_filter}-${ui_serial_filter}
+    DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS ui ENVIRONMENT "${viewport_env_escaped}"
+)
+foreach(test IN LISTS ui_serial)
+    set(names ${test})
+    foreach(pattern IN LISTS viewport_tests)
+        string(REPLACE "." "\\." regex "${pattern}")
+        string(REPLACE "*" ".*" regex "${regex}")
+        if(test MATCHES "^${regex}$")
+            list(APPEND names Viewport.${test})
+            break()
+        endif()
+    endforeach()
+    foreach(name IN LISTS names)
+        add_test(NAME ${name} COMMAND kalve137_uitests --gtest_filter=${test})
+        set_tests_properties(${name} PROPERTIES
+            LABELS ui
+            RESOURCE_LOCK ui_serial
+            SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]"
+        )
+        if(name MATCHES "^Viewport\\.")
+            set_tests_properties(${name} PROPERTIES ENVIRONMENT "${viewport_env}")
+        endif()
+        if(test IN_LIST ui_timed)
+            set_tests_properties(${name} PROPERTIES RUN_SERIAL TRUE)
+        endif()
+    endforeach()
+endforeach()
+foreach(scale 125 150 175)
+    math(EXPR whole "${scale} / 100")
+    math(EXPR part "${scale} % 100")
+    add_test(NAME ScreenTest.AtScale${scale} COMMAND kalve137_uitests --gtest_filter=ScreenTest.*)
+    set_tests_properties(ScreenTest.AtScale${scale} PROPERTIES
+        ENVIRONMENT "QT_SCALE_FACTOR=${whole}.${part};KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/scale-${scale}"
+        LABELS ui
+    )
+endforeach()

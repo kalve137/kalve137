@@ -247,7 +247,7 @@ protected:
                 grid->trigger();
             }
         }
-        m_folder = pairFolder("PlanePairTest");
+        m_folder = shotFolder();
         std::filesystem::create_directories(m_folder);
         return true;
     }

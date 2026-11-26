@@ -146,7 +146,7 @@ jobs:
         timeout-minutes: 40
         run: |
           . ./scripts/dev-shell.ps1
-          ctest --preset windows-release --timeout 180 --output-junit test-results.xml
+          ctest --preset windows-release -j $env:NUMBER_OF_PROCESSORS --timeout 180 --output-junit test-results.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Summarize the tests
@@ -158,7 +158,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ui-shots
-          path: build/windows-release/tests/ui-shots
+          path: build/windows-release/ui-shots
           if-no-files-found: ignore
 
       - name: Package

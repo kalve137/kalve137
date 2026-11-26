@@ -425,7 +425,7 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
     if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
-    const std::filesystem::path folder = pairFolder("HighlightPairTest");
+    const std::filesystem::path folder = shotFolder();
     std::filesystem::create_directories(folder);
     std::ofstream table(folder / "highlight-pairs.tsv");
     table << "theme\tstate\told\tnew\tgap\told lift\tnew lift\tshown\tbody share\n";

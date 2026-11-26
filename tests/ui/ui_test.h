@@ -44,9 +44,7 @@ protected:
     std::filesystem::path scratch()
     {
         if (m_scratch.empty()) {
-            const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info();
-            m_scratch = std::filesystem::temp_directory_path() / "kalve137-uitests" /
-                        (std::string(test->test_suite_name()) + "." + test->name());
+            m_scratch = scratchFolder();
             std::error_code ignored;
             std::filesystem::remove_all(m_scratch, ignored);
             std::filesystem::create_directories(m_scratch);
