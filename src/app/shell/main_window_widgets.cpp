@@ -31,6 +31,7 @@
 #include "app/view/view_controls.h"
 #include "app/view/view_cube_arrows.h"
 #include "app/view/view_overlay.h"
+#include "app/view/view_projection.h"
 #include "app/view/viewport_picker.h"
 #include "core/naming.h"
 #include "core/recompute.h"
@@ -581,12 +582,12 @@ void MainWindow::createDocks()
 
 void MainWindow::createOverlays()
 {
-    auto* overlay = new ViewOverlay(m_viewport != nullptr ? static_cast<QWidget*>(m_viewport) : m_view);
+    auto* overlay = new ViewOverlay(m_viewProjection->canvas());
 
     m_featureFrame = new QFrame;
     m_featureFrame->setObjectName("floatingPanel");
     m_featureFrame->setFixedWidth(kFeaturePanelWidth);
-    m_featurePanel = new FeaturePanel(*m_session, *m_scene, *m_picks, m_view, m_featureFrame);
+    m_featurePanel = new FeaturePanel(*m_session, *m_scene, *m_picks, *m_viewProjection, m_featureFrame);
     auto* layout = new QVBoxLayout(m_featureFrame);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_featurePanel);
@@ -596,7 +597,7 @@ void MainWindow::createOverlays()
     m_measureFrame = new QFrame;
     m_measureFrame->setObjectName("floatingPanel");
     m_measureFrame->setFixedWidth(kFeaturePanelWidth);
-    m_measurePanel = new MeasurePanel(*m_scene, *m_picks, m_view, m_measureFrame);
+    m_measurePanel = new MeasurePanel(*m_scene, *m_picks, *m_viewProjection, m_measureFrame);
     auto* measureLayout = new QVBoxLayout(m_measureFrame);
     measureLayout->setContentsMargins(0, 0, 0, 0);
     measureLayout->addWidget(m_measurePanel);

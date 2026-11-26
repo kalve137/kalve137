@@ -4,6 +4,7 @@
 #include "app/feature/measure_panel.h"
 
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
 
 #include "geometry/measure.h"
 #include "viewer/occt_view_widget.h"
@@ -77,8 +78,8 @@ QString nameOf(const Pick& pick)
 
 } // namespace
 
-MeasurePanel::MeasurePanel(Scene& scene, PickSource& picks, viewer::OcctViewWidget* view, QWidget* parent)
-    : QWidget(parent), m_scene(scene), m_source(picks), m_view(view)
+MeasurePanel::MeasurePanel(Scene& scene, PickSource& picks, const ViewProjection& projection, QWidget* parent)
+    : QWidget(parent), m_scene(scene), m_source(picks), m_view(&projection.view())
 {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(theme::kPanelMargins);

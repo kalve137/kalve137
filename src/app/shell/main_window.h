@@ -54,6 +54,7 @@ class Scene;
 class SketchPalette;
 class TimelineWidget;
 class ViewControls;
+class ViewProjection;
 struct ImportedStep;
 
 class MainWindow : public QMainWindow {
@@ -156,6 +157,7 @@ private:
     std::unique_ptr<Scene> m_scene;
     PickSource* m_picks = nullptr;
     ViewportPicker* m_viewportPicker = nullptr;
+    ViewProjection* m_viewProjection = nullptr;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
     TimelineWidget* m_timeline = nullptr;

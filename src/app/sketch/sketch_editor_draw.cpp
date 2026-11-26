@@ -351,7 +351,7 @@ void SketchEditor::drawConstraints(const sketch::Sketch& s, const sketch::SolveR
                                                         m_selection.contains(id), kDimensionTextPixels, textScale);
         if (id == m_editingLabel) {
             const std::optional<sketch::DimensionLayout> layout =
-                m_cameraInput ? sketch::layoutDimension(s, constraint, wpp, middle) : std::nullopt;
+                m_projection.hasCameraInput() ? sketch::layoutDimension(s, constraint, wpp, middle) : std::nullopt;
             if (layout) {
                 m_editedLabel = labelRect(*layout);
             } else {

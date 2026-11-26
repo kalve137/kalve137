@@ -28,21 +28,18 @@ class QScrollArea;
 class QTimer;
 class QVBoxLayout;
 
-namespace kalve137::viewer {
-class OcctViewWidget;
-}
-
 namespace kalve137::app {
 
 class DesignSession;
 class DistanceHandle;
 class ValueEdit;
+class ViewProjection;
 
 class FeaturePanel : public QWidget {
     Q_OBJECT
 
 public:
-    FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, viewer::OcctViewWidget* view,
+    FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, const ViewProjection& projection,
                  QWidget* parent = nullptr);
 
     void startExtrude();
@@ -148,7 +145,7 @@ private:
     DesignSession& m_session;
     Scene& m_scene;
     PickSource& m_source;
-    viewer::OcctViewWidget* m_view;
+    const ViewProjection& m_projection;
 
     std::optional<core::FeatureData> m_data;
     std::map<std::string, std::string> m_expressions;

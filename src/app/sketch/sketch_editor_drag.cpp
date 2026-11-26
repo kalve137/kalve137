@@ -28,7 +28,7 @@ using namespace sketch_editor_detail;
 
 std::optional<QPointF> SketchEditor::labelOnScreen(Id constraint) const
 {
-    if (m_cameraInput) {
+    if (m_projection.hasCameraInput()) {
         const sketch::Sketch& s = shownSketch();
         const sketch::Constraint* c = s.constraint(constraint);
         const std::optional<sketch::DimensionLayout> layout =
