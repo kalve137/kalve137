@@ -6,10 +6,12 @@
 #include "core/feature.h"
 #include "core/recompute.h"
 #include "render/chunk_set.h"
+#include "render/draw_list.h"
 
 #include <gtest/gtest.h>
 
 #include <BRepPrimAPI_MakeBox.hxx>
+#include <BRep_Tool.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
@@ -25,12 +27,18 @@
 
 namespace {
 
+using kalve137::app::addVertexMark;
 using kalve137::app::BodyShapeCache;
 using kalve137::app::PanelItems;
 using kalve137::app::panelItems;
 using kalve137::app::PanelPicks;
 using kalve137::app::ShapeIndex;
+using kalve137::app::VertexColors;
 using kalve137::core::Body;
+using kalve137::render::kMarkerTopmost;
+using kalve137::render::MarkerItem;
+using kalve137::render::MarkerScale;
+using kalve137::render::MarkerShape;
 using kalve137::render::PickedItem;
 using kalve137::render::PickKind;
 
@@ -131,6 +139,46 @@ TEST_F(PanelPicksTest, RemapsABodyWhoseShapeChanged)
     const TopoDS_Edge after = TopoDS::Edge(indexOf(m_second.shape, TopAbs_EDGE).FindKey(1));
     EXPECT_EQ(panelItems({.edges = {after}, .faces = {}, .bodies = {}}, m_shown, m_shapes).selected,
               std::set{itemOf(m_second, PickKind::Edge, 0)});
+}
+
+TEST_F(PanelPicksTest, MapsAPickedVertexToItsPointOnTheBodyThatHoldsIt)
+{
+    const ShapeIndex secondVertices = indexOf(m_second.shape, TopAbs_VERTEX);
+    constexpr int kVertex = 6;
+    const PanelPicks picks{.vertices = {TopoDS::Vertex(secondVertices.FindKey(kVertex + 1))}};
+
+    const PanelItems items = panelItems(picks, m_shown, m_shapes);
+
+    EXPECT_EQ(items.selected, std::set{itemOf(m_second, PickKind::Point, kVertex)});
+    EXPECT_TRUE(items.selectedOutline.empty()) << "a vertex has no outline";
+    EXPECT_TRUE(items.bodies.empty());
+}
+
+TEST_F(PanelPicksTest, MarksAHoveredVertexAsARingAndAPickedOneAsABallAtItsPlace)
+{
+    const ShapeIndex vertices = indexOf(m_second.shape, TopAbs_VERTEX);
+    constexpr std::uint32_t kVertex = 3;
+    const gp_Pnt expected = BRep_Tool::Pnt(TopoDS::Vertex(vertices.FindKey(static_cast<int>(kVertex) + 1)));
+    const VertexColors colors{.hovered = {0.2F, 0.6F, 1.0F, 1.0F}, .selected = {1.0F, 0.7F, 0.0F, 1.0F}};
+
+    std::vector<MarkerItem> marks;
+    addVertexMark(m_second, kVertex, false, colors, m_shapes, marks);
+    addVertexMark(m_second, kVertex, true, colors, m_shapes, marks);
+    addVertexMark(m_second, static_cast<std::uint32_t>(vertices.Extent()), true, colors, m_shapes, marks);
+
+    ASSERT_EQ(marks.size(), 2U) << "an index past the body's vertices marks nothing";
+    for (const MarkerItem& mark : marks) {
+        EXPECT_DOUBLE_EQ(mark.anchor.x, expected.X());
+        EXPECT_DOUBLE_EQ(mark.anchor.y, expected.Y());
+        EXPECT_DOUBLE_EQ(mark.anchor.z, expected.Z());
+        EXPECT_EQ(mark.scale, MarkerScale::Small);
+        EXPECT_EQ(mark.flags, kMarkerTopmost);
+        EXPECT_EQ(mark.pick, 0U) << "marks never pick, the vertex under them does";
+    }
+    EXPECT_EQ(marks[0].shape, MarkerShape::Ring);
+    EXPECT_EQ(marks[0].color, colors.hovered);
+    EXPECT_EQ(marks[1].shape, MarkerShape::Ball);
+    EXPECT_EQ(marks[1].color, colors.selected);
 }
 
 TEST_F(PanelPicksTest, MapsNothingWithoutPicks)

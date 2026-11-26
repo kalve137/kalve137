@@ -330,6 +330,16 @@ void Viewport::setMarkers(std::vector<MarkerItem> markers)
     update();
 }
 
+void Viewport::setVertexMarks(std::vector<MarkerItem> marks)
+{
+    if (marks == m_vertexMarks) {
+        return;
+    }
+    m_vertexMarks = std::move(marks);
+    refreshMarkers();
+    update();
+}
+
 MarkerDraw Viewport::markerDraw() const
 {
     return {.revision = m_markerRevision, .markers = m_markerGeometry};
@@ -512,9 +522,9 @@ void Viewport::refreshMarkers()
 {
     std::vector<Marker> markers;
     markers.reserve(m_datumGeometry.markers.size() + m_sketchGeometry.markers.size() + m_markers.size() +
-                    m_sketchPreview.markers.size());
+                    m_sketchPreview.markers.size() + m_vertexMarks.size());
     for (const std::vector<MarkerItem>* items :
-         {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers, &m_sketchPreview.markers}) {
+         {&m_datumGeometry.markers, &m_sketchGeometry.markers, &m_markers, &m_sketchPreview.markers, &m_vertexMarks}) {
         for (const MarkerItem& item : *items) {
             markers.push_back(placeMarker(item, m_scene.origin));
         }
