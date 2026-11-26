@@ -198,10 +198,12 @@ TEST_F(SelectTest, WindowOverThousandsOfFacesStaysFast)
     const int selected = text.section(' ', 0, 0).toInt();
     EXPECT_GT(selected, 0) << text.toStdString();
     EXPECT_LT(selected, kTotalFaces) << text.toStdString();
+    const qint64 budget = timeBudgetMs(kBudgetMs);
     RecordProperty("window_ms", static_cast<int>(window));
-    std::printf("window over %d faces %lld ms\n", kTotalFaces, window);
+    RecordProperty("budget_ms", static_cast<int>(budget));
+    std::printf("window over %d faces %lld ms, budget %lld ms\n", kTotalFaces, window, budget);
 #ifdef NDEBUG
-    EXPECT_LT(window, kBudgetMs);
+    EXPECT_LT(window, budget);
 #endif
 }
 

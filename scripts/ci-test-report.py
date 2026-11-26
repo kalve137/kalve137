@@ -15,6 +15,7 @@ SLOWEST = 20
 LISTED = 10
 SKIP_LINE = re.compile(r"[:)] Skipped$")
 LOCATION = re.compile(r"^\S.*[:(]\d+\)?:?$")
+TIMED_LINE = re.compile(r"^(?P<measured>.*\d+ ms), budget (?P<budget>\d+) ms$")
 
 
 def escape(text):
@@ -51,6 +52,13 @@ def gtest_skip_reason(message):
     return " ".join(lines)
 
 
+def timed_lines(output):
+    for line in output.splitlines():
+        found = TIMED_LINE.match(line.strip())
+        if found:
+            yield found["measured"], int(found["budget"])
+
+
 def cases_in(paths):
     for path in paths:
         files = sorted(path.glob("*.xml")) if path.is_dir() else [path] if path.is_file() else []
@@ -82,8 +90,10 @@ failed = []
 skipped = []
 disabled = []
 times = []
+timed = []
 for case in cases_in(args.results):
     name = name_of(case)
+    timed += [(name, measured, budget) for measured, budget in timed_lines(case.findtext("system-out") or "")]
     status = case.get("status", "run")
     gtest = case.get("result") is not None
     failure = case.find("failure")
@@ -122,6 +132,8 @@ for note in notes:
 print(f"Slowest {len(slowest)} of {len(times)}:")
 for time, name in slowest:
     print(f"{time:9.2f} s  {name}")
+for name, measured, budget in timed:
+    print(f"timed {name}: {measured}, budget {budget} ms")
 for label, entries in (("failed", failed), ("skipped", skipped), ("disabled", disabled), ("excluded", excluded)):
     for name, reason in entries:
         print(f"{label} {name}: {reason}")
@@ -146,6 +158,10 @@ if summary_path:
     if not_run:
         lines += ["| Result | Test | Reason |", "| --- | --- | --- |"]
         lines += [f"| {label} | `{name}` | {cell(reason)} |" for label, name, reason in not_run]
+        lines.append("")
+    if timed:
+        lines += ["Timed tests", "", "| Test | Measured | Budget |", "| --- | --- | ---: |"]
+        lines += [f"| `{name}` | {cell(measured)} | {budget} ms |" for name, measured, budget in timed]
         lines.append("")
     lines += [f"Slowest {len(slowest)} of {len(times)}", "", "| Seconds | Test |", "| ---: | --- |"]
     lines += [f"| {time:.2f} | `{name}` |" for time, name in slowest]
