@@ -226,6 +226,7 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_annotationQuads.reset();
     m_handleArrows.reset();
     m_handleGuides.reset();
+    m_handleOutlines.reset();
     if (!createShared()) {
         K137_ERROR(Viewer, "The viewport could not create its shared GPU resources");
         return false;
@@ -757,6 +758,7 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
     drawTriangles(buffer, m_overlayHoverFill.get(), m_overlayHoverBindings.get(), m_highlight.overlayHoverFaces,
                   viewport, kHoverStep);
     drawLines(buffer, m_overlayLines.get(), m_overlayLineBindings.get(), m_highlight.overlayEdges, viewport);
+    drawOutlines(buffer, viewport);
     drawGrid(buffer, viewport);
     drawFill(buffer, m_sketchProfiles.get(), m_sketches.profileBindings.get(), m_sketches.profiles, viewport);
     drawTransparent(buffer, viewport);

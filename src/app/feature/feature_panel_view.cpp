@@ -19,6 +19,7 @@
 #include <optional>
 #include <set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace kalve137::app {
@@ -86,7 +87,10 @@ void FeaturePanel::showPicks(const Resolved& resolved, const std::vector<const c
         keys.push_back(body->key());
     }
     if (auto* picker = qobject_cast<ViewportPicker*>(&m_source)) {
-        picker->setPanelPicks({.edges = resolved.edges, .faces = resolved.faces, .bodies = std::move(keys)});
+        picker->setPanelPicks({.edges = resolved.edges,
+                               .faces = resolved.faces,
+                               .bodies = std::move(keys),
+                               .openFaces = std::holds_alternative<core::ShellFeature>(*m_data)});
     }
     m_scene.setHighlightedProfiles(resolved.profiles);
     m_scene.setHighlightedEdges(resolved.edges);

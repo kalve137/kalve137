@@ -116,7 +116,9 @@ PanelItems panelItems(const PanelPicks& picks, std::span<const core::Body* const
             }
         }
         for (const TopoDS_Face& face : picks.faces) {
-            if (const int index = indexed.faces.FindIndex(face); index > 0) {
+            if (const int index = indexed.faces.FindIndex(face); index > 0 && picks.openFaces) {
+                items.opened.insert(itemOf(*body, render::PickKind::Face, index));
+            } else if (index > 0) {
                 items.selected.insert(itemOf(*body, render::PickKind::Face, index));
                 addOutline(*body, static_cast<std::uint32_t>(index - 1), shapes, items.selectedOutline);
             }

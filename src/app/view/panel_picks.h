@@ -63,6 +63,7 @@ struct PanelPicks {
     std::vector<TopoDS_Face> faces;
     std::vector<core::BodyKey> bodies;
     std::vector<TopoDS_Vertex> vertices;
+    bool openFaces = false;
 
     bool empty() const { return edges.empty() && faces.empty() && bodies.empty() && vertices.empty(); }
 };
@@ -70,6 +71,7 @@ struct PanelPicks {
 struct PanelItems {
     std::set<render::PickedItem> selected;
     std::set<render::PickedItem> selectedOutline;
+    std::set<render::PickedItem> opened;
     std::set<std::pair<int, int>> tinted;
 
     bool operator==(const PanelItems&) const = default;
