@@ -28,9 +28,10 @@ TEST(Version, MacroIsNonEmpty)
     EXPECT_GT(std::strlen(KALVE137_VERSION), 0u);
 }
 
-TEST(Version, DefaultIsProjectVersion)
+TEST(Version, MacroMatchesConfigure)
 {
-    EXPECT_STREQ(KALVE137_VERSION, "0.1.0");
+    EXPECT_EQ(KALVE137_VERSION,
+              composeVersion(KALVE137_TEST_PROJECT_VERSION, KALVE137_TEST_VERSION_BASE, KALVE137_TEST_VERSION_SUFFIX));
 }
 
 TEST(Version, NightlyLabel)
