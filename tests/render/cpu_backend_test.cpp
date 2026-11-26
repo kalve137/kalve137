@@ -123,7 +123,7 @@ TEST(CpuBackend, AFarBodyMovesTheOriginButNotThePixels)
                                   makeFrame(camera, viewport, moved, kCanvas), kShaded, 2);
 
     const std::uint32_t background = backgroundOf(backend, makeFrame(camera, viewport, near, kCanvas));
-    EXPECT_GT(before.pixels.size() - countOf(before, background), 4000U) << "the torus fills part of the view";
+    EXPECT_GT(before.pixels.size() - countOf(before, background), 4000U) << "torus fills part of the view";
     EXPECT_LE(differences(before, after), before.pixels.size() / 200)
         << "at most half a percent of the pixels may round differently";
 }
@@ -172,7 +172,7 @@ TEST(CpuBackend, AnOpenBoxShowsItsInside)
     const Frame frame = makeFrame(camera, {120, 120, 1.0}, {}, kCanvas);
     CpuBackend backend(2);
     const Image image = drawnWith(backend, scene, frame);
-    EXPECT_NE(image.at(60, 60), backgroundOf(backend, frame)) << "the floor shows through the missing top";
+    EXPECT_NE(image.at(60, 60), backgroundOf(backend, frame)) << "floor shows through the missing top";
 }
 
 TEST(CpuBackend, SkipsHiddenBodies)
@@ -208,8 +208,8 @@ TEST(CpuBackend, ShadesWithTheLookFormula)
     const camera::ScreenPoint outer =
         camera.project({-(test::kTorusMajor + test::kTorusMinor) + 2.0, 0.0, 0.0}, viewport);
     const std::uint32_t shadow = image.at(static_cast<int>(outer.x), static_cast<int>(outer.y));
-    EXPECT_LT(channelOf(shadow, 16), channelOf(pixel, 16)) << "the side away from the light is darker";
-    EXPECT_EQ(image.at(130, 130), backgroundOf(backend, frame)) << "the hole shows the canvas";
+    EXPECT_LT(channelOf(shadow, 16), channelOf(pixel, 16)) << "side away from the light is darker";
+    EXPECT_EQ(image.at(130, 130), backgroundOf(backend, frame)) << "hole shows the canvas";
 }
 
 constexpr snapshot::Color kEdge{1.0F, 0.0F, 1.0F};
@@ -319,7 +319,7 @@ TEST(CpuBackend, EachStyleDrawsItsEdgesOverItsFaces)
         const std::uint32_t face = at(image, faceCenter);
         switch (expected.visual) {
         case VisualStyle::ShadedWithEdges:
-            EXPECT_EQ(face, at(shaded, faceCenter)) << "the bias moves depth, not color";
+            EXPECT_EQ(face, at(shaded, faceCenter)) << "bias moves depth, not color";
             break;
         case VisualStyle::Wireframe:
             EXPECT_EQ(face, background);
@@ -467,7 +467,7 @@ TEST(CpuBackend, AHighlightedEdgeTakesItsStateColor)
         const Image selected =
             drawnHighlighted(backend, scene, frame, edgedStyle(VisualStyle::ShadedWithEdges),
                              {.hovered = {}, .selected = {item}, .hoveredOutline = {}, .selectedOutline = {}});
-        EXPECT_GT(countOf(selected, pixelOf(kEdge)), 100U) << "the other edges stay";
+        EXPECT_GT(countOf(selected, pixelOf(kEdge)), 100U) << "other edges stay";
         selectedPixels += countOf(selected, gold);
         const Image both =
             drawnHighlighted(backend, scene, frame, edgedStyle(VisualStyle::ShadedWithEdges),
@@ -476,7 +476,7 @@ TEST(CpuBackend, AHighlightedEdgeTakesItsStateColor)
         bothPixels += countOf(both, liftedGold);
     }
     EXPECT_LT(bothGold, selectedPixels / 2) << "hovering a selected edge lifts its gold, but not where it's hidden";
-    EXPECT_GT(hoveredPixels, 200U) << "a hovered edge lifts the color shaded draws it in";
+    EXPECT_GT(hoveredPixels, 200U) << "hovered edge lifts the color shaded draws it in";
     EXPECT_GT(selectedPixels, 200U);
     EXPECT_GT(bothPixels, 200U);
 }
@@ -500,9 +500,9 @@ TEST(CpuBackend, AHaloLightensOverDarkAndDarkensOverLight)
         const int before = sumOf(pixelAt(plain, frame, {}, edge, 0.0, -1.5));
         const int after = sumOf(pixelAt(haloed, frame, {}, edge, 0.0, -1.5));
         if (luminanceOf(encodedOf(fill)) < kNearWhite) {
-            EXPECT_GT(after, before + 20) << "the halo lightens a dark face";
+            EXPECT_GT(after, before + 20) << "halo lightens a dark face";
         } else {
-            EXPECT_LT(after, before - 20) << "the halo darkens a light face";
+            EXPECT_LT(after, before - 20) << "halo darkens a light face";
         }
         expectNear(plain.at(60, 60), encodedOfPixel(haloed.at(60, 60)), "the face's middle stays clear");
     }
@@ -529,7 +529,7 @@ TEST(CpuBackend, AHiddenSelectedFaceShowsFaintlyAndAHiddenEdgeDashed)
         const Image hovered =
             drawnHighlighted(backend, scene, frame, style,
                              {.hovered = {bottom}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
-        EXPECT_EQ(differences(plain, hovered), 0U) << "a hidden hovered face doesn't show";
+        EXPECT_EQ(differences(plain, hovered), 0U) << "hidden hovered face doesn't show";
     }
 
     Highlight all;
@@ -555,11 +555,11 @@ TEST(CpuBackend, AHiddenSelectedFaceShowsFaintlyAndAHiddenEdgeDashed)
         return static_cast<double>(shown) / kSteps;
     };
     for (const auto& [from, to] : kFrontEdges) {
-        EXPECT_GT(shownFraction(from, to), 0.9) << "a shown selected edge is solid";
+        EXPECT_GT(shownFraction(from, to), 0.9) << "shown selected edge is solid";
     }
     for (const auto& [from, to] : kHiddenEdges) {
         const double fraction = shownFraction(from, to);
-        EXPECT_GT(fraction, 0.3) << "a hidden selected edge shows";
+        EXPECT_GT(fraction, 0.3) << "hidden selected edge shows";
         EXPECT_LT(fraction, 0.85) << "in dashes";
     }
 }
@@ -605,8 +605,8 @@ TEST(CpuBackend, AThinWallHidesTheEdgeOnItsFarSide)
         near += pixelAt(image, frame, {}, {x, kSide, kThickness}) == pixelOf(kEdge) ? 1 : 0;
         far += pixelAt(image, frame, {}, {x, kSide, 0.0}) == pixelOf(kEdge) ? 1 : 0;
     }
-    EXPECT_EQ(near, static_cast<std::size_t>(kSamples - 1)) << "the near edge shows";
-    EXPECT_EQ(far, 0U) << "the edge behind the top face stays hidden";
+    EXPECT_EQ(near, static_cast<std::size_t>(kSamples - 1)) << "near edge shows";
+    EXPECT_EQ(far, 0U) << "edge behind the top face stays hidden";
 }
 
 TEST(CpuBackend, EdgesStayWholeOnFaceBordersOneKilometerOut)
@@ -703,7 +703,7 @@ TEST(CpuBackend, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
             ASSERT_TRUE(x >= 0 && y >= 0 && x < viewport.width && y < viewport.height);
 
             const Image cut = drawnWith(backend, change.scene, makeFrame(stale, viewport, {}, kCanvas));
-            EXPECT_EQ(cut.at(x, y), background) << "the depth range of the old scene cuts the nearest corner";
+            EXPECT_EQ(cut.at(x, y), background) << "depth range of the old scene cuts the nearest corner";
 
             const Frame frame = makeFrame(fitToScene(stale, change.scene), viewport, {}, kCanvas);
             EXPECT_NE(drawnWith(backend, change.scene, frame).at(x, y), background);

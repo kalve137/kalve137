@@ -68,11 +68,11 @@ TEST_F(VertexMarkTest, AHoveredVertexShowsARingAndAPickedOneABall)
     EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ring);
     const int ring = markerChangeAround(away, hovered, ui->at(kBottomCorner));
     std::printf("hovered vertex: %d pixels changed by %d or more\n", ring, kChange);
-    EXPECT_GE(ring, kChangedPixels) << "the hovered vertex shows";
+    EXPECT_GE(ring, kChangedPixels) << "hovered vertex shows";
 
     ui->pressButton("Close");
     ui->move(kAwayFromBlock);
-    EXPECT_TRUE(canvas->vertexMarks().empty()) << "the ring goes with the hover";
+    EXPECT_TRUE(canvas->vertexMarks().empty()) << "ring goes with the hover";
     picker->setPanelPicks({.vertices = {TopoDS::Vertex(pick->shape)}});
     ui->frame();
     const QImage picked = ui->canvasImage();
@@ -81,7 +81,7 @@ TEST_F(VertexMarkTest, AHoveredVertexShowsARingAndAPickedOneABall)
     EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ball);
     const int ball = markerChangeAround(away, picked, ui->at(kBottomCorner));
     std::printf("picked vertex: %d pixels changed by %d or more\n", ball, kChange);
-    EXPECT_GE(ball, kChangedPixels) << "the picked vertex shows";
+    EXPECT_GE(ball, kChangedPixels) << "picked vertex shows";
 
     picker->setPanelPicks({});
     EXPECT_TRUE(canvas->vertexMarks().empty());

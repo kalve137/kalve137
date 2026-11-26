@@ -277,7 +277,7 @@ protected:
         table << stem << '\t' << old << '\t' << fresh << '\n';
         ASSERT_GT(old, 0U) << stem;
         EXPECT_NEAR(static_cast<double>(fresh), static_cast<double>(old), static_cast<double>(old) * kAreaShare)
-            << stem << ": the viewport covers as many pixels as the old view";
+            << stem << ": viewport covers as many pixels as the old view";
     }
 
     void expectPicksLikeTheOldView(app::PickMode mode, const std::string& name, const Aim& aim, std::ofstream& misses,
@@ -382,13 +382,12 @@ TEST_F(PlanePairTest, TheOriginGroupKeepsTheOldViewsPixelSizeAtTwoZooms)
             const double origin = screenOf(shots.camera, shots.viewport, {}).x() * ratio;
             EXPECT_NEAR(fresh->right() + 1.0 - origin, render::kOriginAxisPixels * ratio, kSpanTolerance * ratio)
                 << stem;
-            EXPECT_NEAR(fresh->left(), old->left(), kEndTolerance) << stem << ": the origin point reaches where it did";
-            EXPECT_GE(fresh->right(), old->right() - kEndTolerance) << stem << ": the X axis ends where it did";
+            EXPECT_NEAR(fresh->left(), old->left(), kEndTolerance) << stem << ": origin point reaches where it did";
+            EXPECT_GE(fresh->right(), old->right() - kEndTolerance) << stem << ": X axis ends where it did";
             EXPECT_LE(fresh->right(), old->right() + kEndTolerance + kOldDashGap)
-                << stem << ": the X axis ends where it did";
-            EXPECT_LE(fresh->top(), old->top() + kEndTolerance) << stem << ": the Y axis ends where it did";
-            EXPECT_GE(fresh->top(), old->top() - kEndTolerance - kOldDashGap)
-                << stem << ": the Y axis ends where it did";
+                << stem << ": X axis ends where it did";
+            EXPECT_LE(fresh->top(), old->top() + kEndTolerance) << stem << ": Y axis ends where it did";
+            EXPECT_GE(fresh->top(), old->top() - kEndTolerance - kOldDashGap) << stem << ": Y axis ends where it did";
         }
     }
     for (const double scale : {60.0, 240.0}) {
@@ -545,7 +544,7 @@ TEST_F(PlanePairTest, PlanePicksLandOnThePlaneInFrontOfInsideAndBehindTheBody)
                 ++landed;
             }
         }
-        EXPECT_GT(landed, 0) << name << ": the plane takes hovers";
+        EXPECT_GT(landed, 0) << name << ": plane takes hovers";
     }
 }
 
@@ -568,7 +567,7 @@ TEST_F(PlanePairTest, ALowOrbitWithTheGridAndPlanesOnKeepsTheBodyWhole)
         const std::optional<QRect> old = drawnBox(shots.old, shots.background.rgb());
         const std::optional<QRect> fresh = drawnBox(shots.fresh, shots.background.rgb());
         ASSERT_TRUE(old.has_value() && fresh.has_value()) << stem;
-        EXPECT_GT(fresh->height(), shots.fresh.height() / 3) << stem << ": the grid reaches toward the horizon";
+        EXPECT_GT(fresh->height(), shots.fresh.height() / 3) << stem << ": grid reaches toward the horizon";
     }
 }
 
@@ -595,7 +594,7 @@ TEST_F(PlanePairTest, FitFramesConstructionGeometryAndAnEmptyDesign)
     const Shots empty = grabPair(*m_old, *m_new, [](app::MainWindow&) {});
     savePair(empty, m_folder, "fit on an empty design");
     const std::optional<QRect> box = drawnBox(empty.fresh, empty.background.rgb());
-    ASSERT_TRUE(box.has_value()) << "the origin group shows after Fit on an empty design";
+    ASSERT_TRUE(box.has_value()) << "origin group shows after Fit on an empty design";
     EXPECT_TRUE(QRect(QPoint(0, 0), empty.fresh.size()).contains(*box));
 }
 

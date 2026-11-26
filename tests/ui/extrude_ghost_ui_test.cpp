@@ -164,7 +164,7 @@ TEST_F(ExtrudeGhostTest, ACutShowsItsToolInThePreviewCutColor)
         app::theme::setScheme(scheme);
         const app::theme::Palette& palette = app::theme::palette();
         ui->frame();
-        ASSERT_EQ(canvas->scene().bodies.size(), 2U) << theme << ": the result and the tool";
+        ASSERT_EQ(canvas->scene().bodies.size(), 2U) << theme << ": result and the tool";
         const auto tool = std::ranges::find_if(canvas->scene().bodies, [&](const auto& body) {
             return body->appearance.color && rgbOf(*body->appearance.color) == rgbOf(palette.viewport.previewCut);
         });
@@ -178,7 +178,7 @@ TEST_F(ExtrudeGhostTest, ACutShowsItsToolInThePreviewCutColor)
         ui->save(std::string(theme) + " cut tool ghost");
         const QRgb seen = medianAt(shot, ui->at(kToolTop));
         std::printf("%s tool ghost %s, red margin %d\n", theme, hex(seen).c_str(), redMargin(seen));
-        EXPECT_GE(redMargin(seen), kRedMargin) << theme << ": the tool ghost reads red";
+        EXPECT_GE(redMargin(seen), kRedMargin) << theme << ": tool ghost reads red";
     }
 
     ui->pressButton("Cancel");
@@ -198,7 +198,7 @@ TEST_F(ExtrudeGhostTest, TheCapEdgeStandsOutFromTheSideInBothThemes)
     ui->trigger("Extrude");
     ASSERT_TRUE(ui->state()["featurePanel"]);
     canvas->setCamera(offAxis(canvas->camera(), 0.0, kSideDegrees));
-    ASSERT_EQ(canvas->scene().bodies.size(), 1U) << "a new body draws no tool ghost";
+    ASSERT_EQ(canvas->scene().bodies.size(), 1U) << "new body draws no tool ghost";
 
     const SchemeReset reset;
     for (const auto& [scheme, theme] :
@@ -220,7 +220,7 @@ TEST_F(ExtrudeGhostTest, TheCapEdgeStandsOutFromTheSideInBothThemes)
         const auto [edge, gap] = edgePixel(shot, at, ghost);
         std::printf("%s cap edge %s, ghost below %s, gap %d, gap to the same pixels without cap edges %d\n", theme,
                     hex(edge).c_str(), hex(ghost).c_str(), gap, columnGap(shot, bare, at));
-        EXPECT_GE(gap, kCapEdgeGap) << theme << ": the cap edge stands out from the ghost";
+        EXPECT_GE(gap, kCapEdgeGap) << theme << ": cap edge stands out from the ghost";
     }
 }
 

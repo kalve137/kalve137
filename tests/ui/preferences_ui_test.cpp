@@ -133,7 +133,7 @@ void chooseTheme(QWidget& dialog, const QString& name, bool keep)
     ASSERT_NE(combo, nullptr);
     combo->setCurrentIndex(combo->findText(name));
     EXPECT_EQ(QApplication::palette().color(QPalette::Window), app::theme::kLightPalette.chrome.surface)
-        << "the theme switches while the dialog is open";
+        << "theme switches while the dialog is open";
     auto* box = qobject_cast<QDialog*>(&dialog);
     ASSERT_NE(box, nullptr);
     if (keep) {

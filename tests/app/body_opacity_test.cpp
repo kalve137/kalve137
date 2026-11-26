@@ -41,7 +41,7 @@ TEST(BodyOpacity, OtherModesShowBodiesOpaqueAndKeepUnchangedBodies)
 {
     const auto shown = bodyWith(0);
     const snapshot::Scene same = withBodyOpacity({.bodies = {shown}, .origin = {}, .hidden = {}}, PickMode::Faces);
-    EXPECT_EQ(same.bodies[0], shown) << "a body that already has the opacity is not copied";
+    EXPECT_EQ(same.bodies[0], shown) << "body that already has the opacity is not copied";
 
     const snapshot::Scene faded = withBodyOpacity(same, PickMode::Planes);
     const snapshot::Scene again = withBodyOpacity(faded, PickMode::Planes);

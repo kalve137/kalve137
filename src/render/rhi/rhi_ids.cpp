@@ -29,7 +29,7 @@ using namespace rhi_backend_detail;
 bool RhiBackend::setIdTarget(QRhiRenderPassDescriptor* pass)
 {
     if (!createShared()) {
-        K137_ERROR(Viewer, "The viewport could not create its shared GPU resources");
+        K137_ERROR(Viewer, "Viewport could not create its shared GPU resources");
         return false;
     }
     m_idPipelines.at(0) = idPipeline(pass, PickKind::Face, false);
@@ -106,7 +106,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
     std::vector<IdCall> points;
     const std::size_t places = std::min<std::size_t>(list.chunks.size(), kBodyChunks);
     if (places < list.chunks.size() && !std::exchange(m_toldPickLimit, true)) {
-        K137_WARN(Viewer, "The viewport picks in its first {} chunks only and the scene has {}", kBodyChunks,
+        K137_WARN(Viewer, "Viewport picks in its first {} chunks only and the scene has {}", kBodyChunks,
                   list.chunks.size());
     }
     for (std::size_t place = 0; place < places; ++place) {
@@ -139,7 +139,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
             m_idAxes = style.axes;
             m_idDatumsThroughBodies = style.datumsThroughBodies;
         } else {
-            K137_ERROR(Viewer, "The viewport could not create the id pass resources for its planes and axes");
+            K137_ERROR(Viewer, "Viewport could not create id pass resources for its planes and axes");
             complete = false;
         }
         PickUniforms construction;
@@ -154,7 +154,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
             m_idSketchLines = style.sketchLines && m_sketches.idCurves.count > 0;
             m_idProfiles = style.profiles && m_sketches.idProfiles.count > 0;
         } else {
-            K137_ERROR(Viewer, "The viewport could not create the id pass resources for its sketches");
+            K137_ERROR(Viewer, "Viewport could not create id pass resources for its sketches");
             complete = false;
         }
         PickUniforms sketches;
@@ -166,7 +166,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
             m_idMarkersShown = style.markers && m_markers.ids.count > 0;
             m_idSketchPoints = style.sketchPoints && m_markers.sketchIds.count > 0;
         } else {
-            K137_ERROR(Viewer, "The viewport could not create the id pass resources for its points");
+            K137_ERROR(Viewer, "Viewport could not create id pass resources for its points");
             complete = false;
         }
         PickUniforms markers;
@@ -175,7 +175,7 @@ bool RhiBackend::prepareIds(const DrawList& list, const IdStyle& style, QRhiReso
         updates->updateDynamicBuffer(m_markers.pick.get(), 0, sizeof(PickUniforms), &markers);
     }
     if (!complete) {
-        K137_ERROR(Viewer, "The viewport could not create the id pass resources for every chunk");
+        K137_ERROR(Viewer, "Viewport could not create id pass resources for every chunk");
     }
     return complete;
 }

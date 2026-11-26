@@ -209,9 +209,9 @@ TEST(Solver, DragTargetsGiveWayToConstraints)
     const SolveResult result = solve(s, {{r.corners[2], {14, 8}}, {r.corners[3], {4, 8}}});
     ASSERT_TRUE(result.solved);
     EXPECT_TRUE(result.conflicting.empty());
-    EXPECT_NEAR(s.point(r.corners[3])->pos.x, 0.0, 1e-6) << "The fixed corner and the width hold the sides";
+    EXPECT_NEAR(s.point(r.corners[3])->pos.x, 0.0, 1e-6) << "Fixed corner and the width hold the sides";
     EXPECT_NEAR(s.point(r.corners[2])->pos.x, 10.0, 1e-6);
-    EXPECT_NEAR(s.point(r.corners[2])->pos.y, 8.0, 1e-6) << "The free height follows the drag";
+    EXPECT_NEAR(s.point(r.corners[2])->pos.y, 8.0, 1e-6) << "Free height follows the drag";
     EXPECT_NEAR(s.point(r.corners[3])->pos.y, 8.0, 1e-6);
     EXPECT_NEAR(s.point(r.corners[0])->pos.x, 0.0, 1e-12);
 }

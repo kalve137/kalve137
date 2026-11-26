@@ -87,7 +87,7 @@ bool fillets(const core::Model& model, core::FeatureId id, const core::FilletSet
     const core::Feature trial{.id = id, .name = "Bench fillet", .data = core::FilletFeature{.sets = {top}}};
     const core::FeatureStatus status = core::extend(model, trial).status.at(id);
     if (status.health != core::FeatureHealth::Ok) {
-        K137_DEBUG(App, "The drag bench skips an edge: {}", status.message);
+        K137_DEBUG(App, "Drag bench skips an edge: {}", status.message);
     }
     return status.health == core::FeatureHealth::Ok;
 }
@@ -131,7 +131,7 @@ std::optional<FilletPlan> filletPlan(const core::Model& model, core::FeatureId t
             return plan;
         }
     }
-    K137_ERROR(App, "The drag bench found no {} edges to fillet in {} tries", kFilletEdges, tries);
+    K137_ERROR(App, "Drag bench found no {} edges to fillet in {} tries", kFilletEdges, tries);
     return std::nullopt;
 }
 
@@ -163,7 +163,7 @@ std::optional<DragTimes> timeDrag(MainWindow& window, FeaturePanel& panel, Dista
 {
     const std::optional<render::HandleItem> item = handle.item();
     if (!item) {
-        K137_ERROR(App, "The drag bench found no arrow on the Fillet panel");
+        K137_ERROR(App, "Drag bench found no arrow on the Fillet panel");
         return std::nullopt;
     }
     const gp_Pnt anchor(item->anchor.x, item->anchor.y, item->anchor.z);
@@ -172,7 +172,7 @@ std::optional<DragTimes> timeDrag(MainWindow& window, FeaturePanel& panel, Dista
     const QPointF axis = projection.toScreen(toward) - base;
     const double pixels = std::hypot(axis.x(), axis.y());
     if (!std::isfinite(pixels) || pixels < 1e-6 || anchor.Distance(toward) < 1e-9) {
-        K137_ERROR(App, "The drag bench arrow has no direction on screen");
+        K137_ERROR(App, "Drag bench arrow has no direction on screen");
         return std::nullopt;
     }
     const QPointF along = axis / pixels;
@@ -200,7 +200,7 @@ std::optional<DragTimes> timeDrag(MainWindow& window, FeaturePanel& panel, Dista
     sendMouse(canvas, QEvent::MouseButtonPress, grab, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     const std::optional<render::HandleItem> grabbed = handle.item();
     if (!grabbed || !grabbed->dragged) {
-        K137_ERROR(App, "The drag bench press missed the arrow");
+        K137_ERROR(App, "Drag bench press missed the arrow");
         disconnect();
         return std::nullopt;
     }
@@ -274,7 +274,7 @@ bool openGhostExtrude(MainWindow& window)
     auto* session = window.findChild<DesignSession*>();
     auto* panel = window.findChild<FeaturePanel*>();
     if (session == nullptr || panel == nullptr || session->model().bodies.empty()) {
-        K137_ERROR(App, "The bench could not open an extrude ghost");
+        K137_ERROR(App, "Bench could not open an extrude ghost");
         return false;
     }
     Bnd_Box box;
@@ -282,7 +282,7 @@ bool openGhostExtrude(MainWindow& window)
         BRepBndLib::Add(body.shape, box);
     }
     if (box.IsVoid()) {
-        K137_ERROR(App, "The bench design has no extent for an extrude ghost");
+        K137_ERROR(App, "Bench design has no extent for an extrude ghost");
         return false;
     }
     double xmin = 0.0;
@@ -316,7 +316,7 @@ bool openGhostExtrude(MainWindow& window)
         extrude = document.add(std::move(data));
     });
     if (extrude == 0 || session->model().status.at(extrude).health != core::FeatureHealth::Ok) {
-        K137_ERROR(App, "The bench extrude ghost did not build");
+        K137_ERROR(App, "Bench extrude ghost did not build");
         return false;
     }
     panel->edit(extrude);
@@ -342,7 +342,7 @@ int runBenchDrag(const StartupOptions& options, const std::filesystem::path& des
     auto* panel = window.findChild<FeaturePanel*>();
     const auto* projection = window.findChild<ViewProjection*>();
     if (session == nullptr || panel == nullptr || projection == nullptr) {
-        K137_ERROR(App, "The drag bench could not find the feature panel");
+        K137_ERROR(App, "Drag bench could not find the feature panel");
         return 1;
     }
 
@@ -357,7 +357,7 @@ int runBenchDrag(const StartupOptions& options, const std::filesystem::path& des
     session->edit(QStringLiteral("Bench fillet"),
                   [&](core::Document& document) { id = document.add(core::FilletFeature{.sets = {plan->set}}); });
     if (id == 0 || session->model().status.at(id).health != core::FeatureHealth::Ok) {
-        K137_ERROR(App, "The drag bench fillet did not build");
+        K137_ERROR(App, "Drag bench fillet did not build");
         return 1;
     }
     timer.restart();
@@ -367,7 +367,7 @@ int runBenchDrag(const StartupOptions& options, const std::filesystem::path& des
     const double openMs = elapsedMs(timer);
     DistanceHandle* handle = activeHandle(*panel);
     if (handle == nullptr) {
-        K137_ERROR(App, "The drag bench Fillet panel shows no arrow");
+        K137_ERROR(App, "Drag bench Fillet panel shows no arrow");
         return 1;
     }
 

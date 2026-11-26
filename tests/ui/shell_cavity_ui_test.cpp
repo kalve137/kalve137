@@ -134,7 +134,7 @@ TEST_F(ShellCavityTest, ThePreviewShowsTheCavityWithTheOpeningOutlined)
         const QImage preview = ui->canvasImage();
         ui->save(std::string(theme) + " shell preview");
         EXPECT_EQ(picker->panelItems().opened.size(), 1U) << theme;
-        EXPECT_TRUE(picker->panelItems().selected.empty()) << theme << ": the opening has no fill";
+        EXPECT_TRUE(picker->panelItems().selected.empty()) << theme << ": opening has no fill";
         EXPECT_FALSE(canvas->outlines().empty()) << theme;
         EXPECT_TRUE(allColored(canvas->outlines(), accent)) << theme;
         const int accentPixels = edgePixels(*ui, preview, accent);
@@ -161,9 +161,9 @@ TEST_F(ShellCavityTest, ThePreviewShowsTheCavityWithTheOpeningOutlined)
         std::printf("%s: floor %s preview, %s finished, gap %d, hovered gap %d, accent pixels %d, hover pixels %d\n",
                     theme, hex(pixelAt(preview, floor)).c_str(), hex(pixelAt(finished, floor)).c_str(), floorGap,
                     hoveredGap, accentPixels, hoverPixels);
-        EXPECT_LE(floorGap, kFloorTolerance) << theme << ": the preview floor looks like the finished one";
+        EXPECT_LE(floorGap, kFloorTolerance) << theme << ": preview floor looks like the finished one";
         EXPECT_LE(hoveredGap, kFloorTolerance) << theme;
-        EXPECT_GE(accentPixels, kMinEdgePixels) << theme << ": the opening edge draws in accent";
+        EXPECT_GE(accentPixels, kMinEdgePixels) << theme << ": opening edge draws in accent";
         EXPECT_GE(hoverPixels, kMinEdgePixels) << theme << ": and in the hover color when hovered";
 
         ui->trigger("Undo");
@@ -190,13 +190,13 @@ TEST_F(ShellCavityTest, ClickingTheOpeningTogglesTheFaceOff)
         ui->click(kTopFace);
         ASSERT_EQ(picker->panelItems().opened.size(), 1U) << theme;
         ASSERT_FALSE(canvas->outlines().empty()) << theme;
-        ASSERT_FALSE(canvas->chunks().overlaid().empty()) << theme << ": the preview shows the cavity";
+        ASSERT_FALSE(canvas->chunks().overlaid().empty()) << theme << ": preview shows the cavity";
 
         ui->click(kTopFace);
         ui->move(kAway);
         ui->frame();
         ui->save(std::string(theme) + " opening clicked again");
-        EXPECT_TRUE(picker->panelItems().opened.empty()) << theme << ": the second click drops the face";
+        EXPECT_TRUE(picker->panelItems().opened.empty()) << theme << ": second click drops the face";
         EXPECT_TRUE(canvas->outlines().empty()) << theme;
         EXPECT_TRUE(canvas->chunks().highlight().selected.empty()) << theme;
         ui->key(Qt::Key_Escape);

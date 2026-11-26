@@ -98,7 +98,7 @@ bool selectForBench(MainWindow& window)
     picker->hoverAt({0.0, 0.0});
     QApplication::processEvents();
     if (!face || !edge) {
-        K137_WARN(App, "The bench selection found {} face and {} edge", face ? 1 : 0, edge ? 1 : 0);
+        K137_WARN(App, "Bench selection found {} face and {} edge", face ? 1 : 0, edge ? 1 : 0);
     }
     return face && edge;
 }
@@ -241,7 +241,7 @@ std::optional<QJsonObject> timeSketchMoves(MainWindow& window, SketchEditor& edi
         sizeCanvas(window, requested);
         const std::optional<SketchSpots> found = findSketchSpots(*view, editor);
         if (!found) {
-            K137_WARN(App, "The bench found no empty and curve spots on the dense sketch");
+            K137_WARN(App, "Bench found no empty and curve spots on the dense sketch");
         }
         return found;
     };
@@ -362,7 +362,7 @@ std::optional<QJsonObject> timeSketchPicks(MainWindow& window, QSize requested)
     QApplication::processEvents();
     const std::optional<std::pair<QPointF, QPointF>> spots = findProfileSpots(*view, *picker);
     if (!spots) {
-        K137_WARN(App, "The bench found no profile and empty spots on the finished dense sketch");
+        K137_WARN(App, "Bench found no profile and empty spots on the finished dense sketch");
         return std::nullopt;
     }
     std::vector<double> pickMs;

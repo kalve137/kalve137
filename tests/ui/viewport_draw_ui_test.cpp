@@ -56,13 +56,13 @@ TEST_F(ViewportTest, DrawsTheTorusLikeTheCpuBackend)
     canvas->setCamera(camera);
     const QImage gpu = canvas->grabFramebuffer().convertToFormat(QImage::Format_ARGB32);
     ASSERT_FALSE(gpu.isNull());
-    EXPECT_TRUE(canvas->benchFrame()) << "the bench times multisampled frames";
+    EXPECT_TRUE(canvas->benchFrame()) << "bench times multisampled frames";
 
     const render::Image cpu = cpuOf(*canvas);
     const Comparison comparison = compare(gpu, cpu);
     ASSERT_TRUE(comparison.sameSize);
     const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-    EXPECT_GT(comparison.body, pixels / 20) << "the torus fills part of the view";
+    EXPECT_GT(comparison.body, pixels / 20) << "torus fills part of the view";
     EXPECT_LT(comparison.different, pixels / 100)
         << comparison.different << " of " << pixels << " pixels differ by more than " << kBackendTolerance;
     const std::filesystem::path shot = ui->save("gpu");
@@ -148,7 +148,7 @@ void expectHighlightsLikeTheCpuBackend(render::Viewport& canvas, const std::stri
             const Comparison comparison = compare(gpu, cpu);
             ASSERT_TRUE(comparison.sameSize) << where;
             const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-            EXPECT_GT(differing(plain, gpu), comparison.body / 3) << where << ": the highlight shows";
+            EXPECT_GT(differing(plain, gpu), comparison.body / 3) << where << ": highlight shows";
             EXPECT_LT(comparison.different, pixels / 200)
                 << where << ": " << comparison.different << " of " << comparison.body
                 << " drawn pixels differ by more than " << kBackendTolerance;
@@ -249,11 +249,11 @@ void expectGridLikeTheCpuBackend(render::Viewport& canvas, const render::GridSet
             const Comparison comparison = compare(gpu, cpu);
             ASSERT_TRUE(comparison.sameSize) << where;
             const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-            EXPECT_GT(differing(plain, gpu), pixels / 50) << where << ": the grid shows";
+            EXPECT_GT(differing(plain, gpu), pixels / 50) << where << ": grid shows";
             EXPECT_LT(comparison.different, pixels / 100)
                 << where << ": " << comparison.different << " pixels differ by more than " << kBackendTolerance;
             if (name != "below") {
-                EXPECT_EQ(insideChanges(plain, gpu), 0U) << where << ": the grid never shows inside a body";
+                EXPECT_EQ(insideChanges(plain, gpu), 0U) << where << ": grid never shows inside a body";
             }
             ui.save("grid " + where);
         }
@@ -394,7 +394,7 @@ TEST_F(ViewportTest, CullingClosedBodiesChangesNoPixel)
     const QImage all = grabbed(*canvas);
     canvas->setViewportStyle(original);
     EXPECT_LE(differing(culled, all), backFaceLeakAllowed(*canvas, culled))
-        << "the GPU winds front faces counterclockwise like the CPU backend";
+        << "GPU winds front faces counterclockwise like the CPU backend";
 
     for (const render::GraphicsApi api : kOtherApis) {
         if (const auto gap = cullingGap(api, canvas->size(), style, scene, camera)) {
@@ -521,20 +521,20 @@ TEST_F(ViewportTest, OriginAxisDashesStayPutWhileItsEndIsOffScreen)
         const double end = screenX({reach, 0.0, 0.0});
         const auto row = static_cast<int>(std::lround(camera.project({}, viewport).y * ratio));
         ASSERT_NEAR(end - origin, axis, 1.0) << step.name;
-        ASSERT_EQ(end < width, step.inside > 0.0) << step.name << ": the end sits at " << end << " of " << width;
+        ASSERT_EQ(end < width, step.inside > 0.0) << step.name << ": end sits at " << end << " of " << width;
         ASSERT_GE(width - origin, kDashVisibleAtLeast) << step.name;
         const DashPhase phase = dashPhase(plain, shown, origin, end, row);
         EXPECT_LE(phase.misses, phase.columns / kDashMissShare)
             << step.name << ": " << phase.misses << " of " << phase.columns << " columns miss the pattern";
         if (!reference) {
-            EXPECT_LE(std::abs(phase.shift), kDashSlack) << step.name << ": the dashes count from the axis end";
-            EXPECT_TRUE(phase.probe) << step.name << ": a dash covers the probe point";
+            EXPECT_LE(std::abs(phase.shift), kDashSlack) << step.name << ": dashes count from the axis end";
+            EXPECT_TRUE(phase.probe) << step.name << ": dash covers the probe point";
             reference = phase;
             continue;
         }
         EXPECT_LE(std::abs(phase.shift - reference->shift), kDashSlack)
-            << step.name << ": the dashes moved by " << phase.shift - reference->shift << " px";
-        EXPECT_EQ(phase.probe, reference->probe) << step.name << ": the probe point keeps its dash";
+            << step.name << ": dashes moved by " << phase.shift - reference->shift << " px";
+        EXPECT_EQ(phase.probe, reference->probe) << step.name << ": probe point keeps its dash";
     }
     canvas->setDatums({});
 }

@@ -91,7 +91,7 @@ TEST(DrawList, PacksNormalsAndEntriesIntoSixteenBytes)
             EXPECT_EQ(entryOf(vertex), 0xBEEFU);
         }
     }
-    EXPECT_GT(worst, std::cos(1.5 * std::numbers::pi / 180.0)) << "a packed normal turns by less than 1.5 degrees";
+    EXPECT_GT(worst, std::cos(1.5 * std::numbers::pi / 180.0)) << "packed normal turns by less than 1.5 degrees";
 }
 
 TEST(DrawList, SceneBoundsHoldTheDrawnBodiesOnly)
@@ -184,7 +184,7 @@ TEST(ChunkSet, WireframeDrawsNoFaces)
     const auto body = boxBody(0);
     EXPECT_TRUE(
         drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Wireframe)).chunks.empty())
-        << "a body without edges draws nothing in wireframe";
+        << "body without edges draws nothing in wireframe";
     const auto edged = test::shared(test::bodyOf(test::edgedBox({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0})));
     const DrawList list =
         drawn(chunks, {.bodies = {edged}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Wireframe));
@@ -226,7 +226,7 @@ TEST(ChunkSet, EachStyleDrawsItsEdgesInItsColorAndWidth)
             EXPECT_EQ(list.edgeWidth, expected.width) << static_cast<int>(expected.visual);
         }
     }
-    EXPECT_EQ(chunks.meshBuilds(), 1U) << "a style change rebuilds no mesh";
+    EXPECT_EQ(chunks.meshBuilds(), 1U) << "style change rebuilds no mesh";
 }
 
 TEST(ChunkSet, EdgesBecomeSegmentsWithOneEntryPerEdge)
@@ -247,7 +247,7 @@ TEST(ChunkSet, EdgesBecomeSegmentsWithOneEntryPerEdge)
         entries.insert(entryOf(segment));
     }
     EXPECT_EQ(entries.size(), 13U);
-    EXPECT_EQ(entryOf(chunk.segments[12]), entryOf(chunk.segments[13])) << "a polyline keeps its edge entry";
+    EXPECT_EQ(entryOf(chunk.segments[12]), entryOf(chunk.segments[13])) << "polyline keeps its edge entry";
     EXPECT_EQ(chunk.segments[13].end, relativePosition({1.0, 1.0, 2.0}, origin));
     for (const Entry& entry : chunk.edgePalette) {
         EXPECT_EQ(entry[0], static_cast<std::uint8_t>(EdgeState::Normal));
@@ -300,7 +300,7 @@ TEST(ChunkSet, ABodyAboveTheEdgeLimitSplitsIntoPieces)
         triangles += chunk.indices.size() / 3;
     }
     EXPECT_EQ(segments, edges);
-    EXPECT_EQ(triangles, kBoxTriangles) << "the faces stay whole";
+    EXPECT_EQ(triangles, kBoxTriangles) << "faces stay whole";
 }
 
 TEST(ChunkSet, PositionsAreRelativeToTheSceneOrigin)
@@ -335,7 +335,7 @@ TEST(ChunkSet, AColorEditOrAThemeChangeRewritesOnlyThePalette)
     EXPECT_NE(second.paletteRevision, first.paletteRevision);
     EXPECT_EQ(colorsOf(second), std::set{vertexColor(kRed)});
     const Chunk again = drawn(chunks, {.bodies = {recolored}, .origin = {}, .hidden = {}}, style).chunks.at(0);
-    EXPECT_EQ(again.paletteRevision, second.paletteRevision) << "the same scene changes nothing";
+    EXPECT_EQ(again.paletteRevision, second.paletteRevision) << "same scene changes nothing";
 
     ViewportStyle light = style;
     light.body = {0.9F, 0.9F, 0.9F};
@@ -362,7 +362,7 @@ TEST(ChunkSet, HidingABodyClearsItsEntriesAndKeepsTheMesh)
         EXPECT_EQ(visible, i >= 3 * kBoxTriangles) << "index " << i;
     }
     EXPECT_TRUE(drawn(chunks, {.bodies = {}, .origin = {}, .hidden = {shown, other}}, style).chunks.empty())
-        << "a chunk with nothing visible is not drawn";
+        << "chunk with nothing visible is not drawn";
     EXPECT_EQ(chunks.chunkCount(), 1U);
     EXPECT_EQ(chunks.meshBuilds(), 1U);
 }
@@ -390,7 +390,7 @@ TEST(ChunkSet, MovingOneBodyRebuildsOnlyItsChunk)
 
     bodies.erase(bodies.begin() + 2, bodies.begin() + 4);
     const DrawList removed = drawn(chunks, {.bodies = bodies, .origin = {}, .hidden = {}}, style);
-    EXPECT_EQ(removed.chunks.size(), 2U) << "an empty chunk goes away";
+    EXPECT_EQ(removed.chunks.size(), 2U) << "empty chunk goes away";
     EXPECT_EQ(chunks.triangleCount(), 4 * kBoxTriangles);
 }
 
@@ -436,7 +436,7 @@ TEST(ChunkSet, AVertexSharedByTwoFacesIsSplit)
     ChunkSet chunks;
     const Chunk chunk =
         drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Shaded)).chunks.at(0);
-    EXPECT_EQ(chunk.vertices.size(), 6U) << "the diagonal's two vertices belong to both faces";
+    EXPECT_EQ(chunk.vertices.size(), 6U) << "diagonal's two vertices belong to both faces";
     EXPECT_EQ(colorAt(chunk, 0), vertexColor(kRed));
     EXPECT_EQ(colorAt(chunk, 3), vertexColor(kGreen));
 }
@@ -458,7 +458,7 @@ TEST(ChunkSet, ABodyAboveThePaletteLimitKeepsEveryFaceColor)
     const auto body = test::shared(test::bodyOf(mesh, std::move(appearance)));
     ChunkSet chunks;
     const DrawList list = drawn(chunks, {.bodies = {body}, .origin = {}, .hidden = {}}, styleOf(VisualStyle::Shaded));
-    ASSERT_EQ(list.chunks.size(), 2U) << "the body splits into two pieces";
+    ASSERT_EQ(list.chunks.size(), 2U) << "body splits into two pieces";
     std::size_t triangle = 0;
     for (const Chunk& chunk : list.chunks) {
         EXPECT_LE(chunk.palette.size(), kPaletteEntries);
@@ -520,12 +520,12 @@ TEST(ChunkSet, AHighlightPatchesThePaletteEntriesAndRebuildsNothing)
     const Chunk lit = chunks.draw(frameAt({})).chunks.at(0);
     EXPECT_EQ(lit.meshRevision, first.meshRevision);
     EXPECT_NE(lit.paletteRevision, first.paletteRevision);
-    EXPECT_EQ(chunks.paletteBuilds(), palettes) << "a highlight patches entries instead of building the palette";
+    EXPECT_EQ(chunks.paletteBuilds(), palettes) << "highlight patches entries instead of building the palette";
     EXPECT_EQ(chunks.highlightWrites(), 1U);
     for (std::uint32_t entry = 0; entry < lit.palette.size(); ++entry) {
         const int flags = entry == face ? kEntryVisible | kEntryHovered : kEntryVisible;
         EXPECT_EQ(lit.palette[entry][3], flags) << "face entry " << entry;
-        EXPECT_EQ(lit.palette[entry][0], palette[entry][0]) << "the color stays";
+        EXPECT_EQ(lit.palette[entry][0], palette[entry][0]) << "color stays";
     }
     for (std::uint32_t edge = 0; edge < lit.edgePalette.size(); ++edge) {
         const EdgeState state = edge == 3 ? EdgeState::Hovered : edge == 5 ? EdgeState::Selected : EdgeState::Normal;
@@ -538,13 +538,13 @@ TEST(ChunkSet, AHighlightPatchesThePaletteEntriesAndRebuildsNothing)
                          .hoveredOutline = {},
                          .selectedOutline = {}});
     EXPECT_EQ(chunks.draw(frameAt({})).chunks.at(0).palette[face][3], kEntryVisible | kEntrySelected | kEntryHovered)
-        << "a face can be both";
+        << "face can be both";
     chunks.setHighlight({});
     const Chunk cleared = chunks.draw(frameAt({})).chunks.at(0);
     EXPECT_TRUE(std::ranges::equal(cleared.palette, palette));
     EXPECT_TRUE(std::ranges::equal(cleared.edgePalette, edgePalette));
     chunks.setHighlight({});
-    EXPECT_EQ(chunks.highlightWrites(), 3U) << "the same highlight writes nothing";
+    EXPECT_EQ(chunks.highlightWrites(), 3U) << "same highlight writes nothing";
     EXPECT_EQ(chunks.meshBuilds(), 1U);
 }
 
@@ -560,7 +560,7 @@ TEST(ChunkSet, AnEdgeIsSelectedAndHoveredByItselfOrByAnOutline)
                          .selectedOutline = {itemOf(PickKind::Edge, 2), itemOf(PickKind::Edge, 3)}});
     const Chunk chunk = chunks.draw(frameAt({})).chunks.at(0);
     EXPECT_EQ(chunk.palette[chunks.entryOf(1, 0, 2)->entry][3], kEntryVisible | kEntrySelected | kEntryHovered)
-        << "a hovered selected face is both";
+        << "hovered selected face is both";
     const std::array expected{EdgeState::Normal,   EdgeState::SelectedHovered, EdgeState::SelectedHovered,
                               EdgeState::Selected, EdgeState::Hovered,         EdgeState::Normal};
     for (std::uint32_t edge = 0; edge < expected.size(); ++edge) {
@@ -615,16 +615,16 @@ TEST(ChunkSet, ShadedDrawsOnlyTheHighlightedEdges)
     EXPECT_FALSE(drawn(chunks, scene, style).edges);
     chunks.setHighlight(
         {.hovered = {itemOf(PickKind::Face, 0)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
-    EXPECT_FALSE(chunks.draw(frameAt({})).edges) << "a face highlight draws no edges";
+    EXPECT_FALSE(chunks.draw(frameAt({})).edges) << "face highlight draws no edges";
     chunks.setHighlight(
         {.hovered = {itemOf(PickKind::Edge, 0)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
     const DrawList list = chunks.draw(frameAt({}));
     EXPECT_TRUE(list.edges);
     EXPECT_TRUE(list.highlightedEdgesOnly);
     EXPECT_EQ(list.edgeWidth, kBodyEdgeWidth);
-    EXPECT_FALSE(list.highlight.lines.empty()) << "the hovered edge gets a halo";
+    EXPECT_FALSE(list.highlight.lines.empty()) << "hovered edge gets a halo";
     const DrawList picks = chunks.pickList(frameAt({}));
-    EXPECT_FALSE(picks.highlightedEdgesOnly) << "the id pass keeps every edge";
+    EXPECT_FALSE(picks.highlightedEdgesOnly) << "id pass keeps every edge";
     EXPECT_TRUE(picks.highlight.empty()) << "and draws no highlight";
     EXPECT_FALSE(drawn(chunks, scene, styleOf(VisualStyle::ShadedWithEdges)).highlightedEdgesOnly);
 }
@@ -653,12 +653,12 @@ TEST(ChunkSet, AHighlightCarriesItsHaloAndHiddenGeometry)
                          .selected = {itemOf(PickKind::Face, 4), itemOf(PickKind::Edge, 5)},
                          .hoveredOutline = {itemOf(PickKind::Edge, 6)},
                          .selectedOutline = {itemOf(PickKind::Edge, 7), itemOf(PickKind::Edge, 8)}});
-    EXPECT_EQ(chunks.draw(frameAt({})).highlight.revision, revision) << "the same highlight uploads nothing";
+    EXPECT_EQ(chunks.draw(frameAt({})).highlight.revision, revision) << "same highlight uploads nothing";
 
     const HighlightDraw wire = drawn(chunks, scene, styleOf(VisualStyle::Wireframe)).highlight;
     EXPECT_FALSE(wire.hidden) << "nothing hides in Wireframe";
     EXPECT_TRUE(wire.wireFill);
-    EXPECT_EQ(wire.selectedFaces.size(), 6U) << "the highlight outlives a style change";
+    EXPECT_EQ(wire.selectedFaces.size(), 6U) << "highlight outlives a style change";
 }
 
 TEST(ChunkSet, AnOverlaidBodyDrawsItsHighlightFromTheModelMesh)
@@ -674,17 +674,17 @@ TEST(ChunkSet, AnOverlaidBodyDrawsItsHighlightFromTheModelMesh)
                          .selectedOutline = {}});
     const std::uint64_t paletteBuilds = chunks.paletteBuilds();
     const std::uint64_t highlightWrites = chunks.highlightWrites();
-    EXPECT_TRUE(chunks.draw(frameAt({})).highlight.overlayEdges.empty()) << "the drawn body takes the palette";
+    EXPECT_TRUE(chunks.draw(frameAt({})).highlight.overlayEdges.empty()) << "drawn body takes the palette";
 
     chunks.setOverlaid({{{1, 0}, model}});
     const DrawList list = chunks.draw(frameAt({}));
     const HighlightDraw& highlight = list.highlight;
     EXPECT_EQ(chunks.paletteBuilds(), paletteBuilds);
-    EXPECT_GT(chunks.highlightWrites(), highlightWrites) << "the preview's palette drops the model's picks";
-    EXPECT_EQ(highlight.overlayEdges.size(), 1U) << "the picked edge draws in gold from the model mesh";
+    EXPECT_GT(chunks.highlightWrites(), highlightWrites) << "preview's palette drops the model's picks";
+    EXPECT_EQ(highlight.overlayEdges.size(), 1U) << "picked edge draws in gold from the model mesh";
     ASSERT_EQ(highlight.overlayFaces.size(), 6U) << "and the picked face, two triangles";
     EXPECT_GE(highlight.overlayFaces.front()[0], 4.0F) << "where the model's face is";
-    EXPECT_EQ(highlight.lines.size(), 2U) << "the hovered and picked edges keep their halo";
+    EXPECT_EQ(highlight.lines.size(), 2U) << "hovered and picked edges keep their halo";
     ASSERT_EQ(highlight.selectedFaces.size(), 6U);
     EXPECT_GE(highlight.selectedFaces.front()[0], 4.0F);
     EXPECT_TRUE(highlight.overlayHoverFaces.empty());
@@ -692,7 +692,7 @@ TEST(ChunkSet, AnOverlaidBodyDrawsItsHighlightFromTheModelMesh)
     chunks.setHighlight(
         {.hovered = {itemOf(PickKind::Face, 2)}, .selected = {}, .hoveredOutline = {}, .selectedOutline = {}});
     const DrawList hovered = chunks.draw(frameAt({}));
-    ASSERT_EQ(hovered.highlight.overlayHoverFaces.size(), 6U) << "a hovered face tints the model mesh";
+    ASSERT_EQ(hovered.highlight.overlayHoverFaces.size(), 6U) << "hovered face tints the model mesh";
     EXPECT_GE(hovered.highlight.overlayHoverFaces.front()[0], 4.0F);
 
     chunks.setHighlight({.hovered = {itemOf(PickKind::Edge, 7)},
@@ -726,9 +726,9 @@ TEST(ChunkSet, ATintedBodyFollowsTheDrawnMeshWhileItsPicksStayOnTheModel)
     }
     const auto onPreview =
         std::ranges::count_if(list.highlight.hoveredFaces, [](const Position& at) { return at[0] <= 1.0F; });
-    EXPECT_EQ(onPreview, 6 * 2 * 3) << "the tint draws every face of the drawn mesh";
+    EXPECT_EQ(onPreview, 6 * 2 * 3) << "tint draws every face of the drawn mesh";
     ASSERT_EQ(list.highlight.lines.size(), preview->mesh->edges.size()) << "with its outline";
-    ASSERT_EQ(list.highlight.overlayHoverFaces.size(), 6U) << "a hovered face still tints the model mesh";
+    ASSERT_EQ(list.highlight.overlayHoverFaces.size(), 6U) << "hovered face still tints the model mesh";
     EXPECT_GE(list.highlight.overlayHoverFaces.front()[0], 4.0F);
 
     chunks.setHover({}, {}, {});
@@ -774,17 +774,17 @@ TEST(ChunkSet, AHoverAloneMatchesTheWholeHighlightAndKeepsTheSelection)
                                          reinterpret_cast<const std::uint8_t*>(span.data() + span.size()));
     };
     EXPECT_EQ(bytesOf(a.highlight.lines), bytesOf(b.highlight.lines));
-    EXPECT_EQ(a.highlight.lines.size(), 5U) << "an edge both selected and hovered gets one halo";
+    EXPECT_EQ(a.highlight.lines.size(), 5U) << "edge both selected and hovered gets one halo";
     EXPECT_EQ(bytesOf(a.highlight.selectedEdges), bytesOf(b.highlight.selectedEdges));
     EXPECT_EQ(bytesOf(a.highlight.selectedFaces), bytesOf(b.highlight.selectedFaces));
     EXPECT_EQ(bytesOf(a.highlight.hoveredFaces), bytesOf(b.highlight.hoveredFaces));
 
     const std::uint64_t writes = hover.highlightWrites();
     hover.setHover(hovered, hoveredOutline);
-    EXPECT_EQ(hover.highlightWrites(), writes) << "the same hover writes nothing";
+    EXPECT_EQ(hover.highlightWrites(), writes) << "same hover writes nothing";
     hover.setHover({}, {});
     const DrawList cleared = hover.draw(frameAt({}));
-    EXPECT_EQ(cleared.highlight.lines.size(), 3U) << "the selection keeps its halo";
+    EXPECT_EQ(cleared.highlight.lines.size(), 3U) << "selection keeps its halo";
     EXPECT_EQ(cleared.highlight.selectedFaces.size(), 6U);
     EXPECT_TRUE(cleared.highlight.hoveredFaces.empty());
 }
@@ -805,10 +805,10 @@ TEST(Highlighted, LiftsTowardWhiteAndGildsHalfway)
     EXPECT_EQ(both, pushAway(selected, kHoverStep)) << "hovering a selected item lifts its gold";
     EXPECT_EQ(highlighted(gray, false, false), gray);
 
-    EXPECT_EQ(highlighted(gold, false, true), gold) << "a painted gold face stays gold";
+    EXPECT_EQ(highlighted(gold, false, true), gold) << "painted gold face stays gold";
     const Encoded white{0.95F, 0.95F, 0.95F};
     const Encoded paled = highlighted(white, false, true);
-    EXPECT_LT(paled[2], 0.5F) << "a near-white face turns clearly gold";
+    EXPECT_LT(paled[2], 0.5F) << "near-white face turns clearly gold";
     const Encoded dimmed = highlighted(white, true, false);
     EXPECT_FLOAT_EQ(dimmed[0], 0.95F * (1.0F - kHoverStep)) << "hover darkens a near-white face";
 }
@@ -837,7 +837,7 @@ TEST(HaloBounds, ReachesTheHaloAroundTheHighlightOnly)
 
     const std::vector<Segment> outside{packSegment({5.0F, 0.0F, 0.0F}, {6.0F, 0.0F, 0.0F}, 0)};
     list.highlight.lines = outside;
-    EXPECT_FALSE(haloBounds(list)) << "a highlight right of the frame";
+    EXPECT_FALSE(haloBounds(list)) << "highlight right of the frame";
 
     list.frame.viewProjection[11] = 1.0F;
     const std::vector<Segment> behind{packSegment({0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -2.0F}, 0)};
@@ -847,7 +847,7 @@ TEST(HaloBounds, ReachesTheHaloAroundTheHighlightOnly)
     list.highlight.lines = {};
     const std::vector<Position> faces{{0.0F, 0.0F, 0.0F}, {0.125F, 0.0F, 0.0F}, {0.0F, 0.25F, 0.0F}};
     list.highlight.hoveredFaces = faces;
-    EXPECT_FALSE(haloBounds(list)) << "a hovered face pushes nothing outside Wireframe";
+    EXPECT_FALSE(haloBounds(list)) << "hovered face pushes nothing outside Wireframe";
     list.highlight.wireFill = true;
     EXPECT_EQ(haloBounds(list), (PixelRect{.x = 98, .y = 35, .width = 17, .height = 17}));
 }
@@ -859,7 +859,7 @@ TEST(Light, FollowsTheLookFormula)
     ASSERT_TRUE(camera.setUp({0.0, 1.0, 0.0}));
     const Frame frame = makeFrame(camera, {640, 480, 1.0}, {}, kCanvas);
     const double length = std::sqrt((1.0 * 1.0) + (0.6 * 0.6) + (0.35 * 0.35));
-    EXPECT_NEAR(frame.light[0], 0.35 / length, kTolerance) << "the light comes from the viewer's right";
+    EXPECT_NEAR(frame.light[0], 0.35 / length, kTolerance) << "light comes from the viewer's right";
     EXPECT_NEAR(frame.light[1], 0.6 / length, kTolerance);
     EXPECT_NEAR(frame.light[2], 1.0 / length, kTolerance);
     EXPECT_FALSE(frame.perspective);
@@ -878,7 +878,7 @@ TEST(Light, FollowsTheLookFormula)
     EXPECT_EQ(lit({0.0F, 0.0F, -1.0F}, frame.eye, gray, frame), facing) << "back faces shade like front faces";
     const Linear away = lit({-1.0F, 0.0F, 0.0F}, frame.eye, gray, frame);
     for (std::size_t i = 0; i < 3; ++i) {
-        EXPECT_NEAR(away[i], gray[i] * 0.0875F, kTolerance) << "a side turned from the light gets ambient";
+        EXPECT_NEAR(away[i], gray[i] * 0.0875F, kTolerance) << "side turned from the light gets ambient";
     }
 }
 
@@ -901,7 +901,7 @@ TEST(Light, PerspectiveViewsFromTheEye)
     const Frame frame = makeFrame(camera, {640, 480, 1.0}, {10.0, 0.0, 0.0}, kCanvas);
     EXPECT_TRUE(frame.perspective);
     const Normal view = viewAt({0.0F, 0.0F, 0.0F}, frame);
-    EXPECT_NEAR(view[2], 1.0F, kTolerance) << "the eye sits straight above the origin";
+    EXPECT_NEAR(view[2], 1.0F, kTolerance) << "eye sits straight above the origin";
     const Normal slanted = viewAt({100.0F, 0.0F, 0.0F}, frame);
     EXPECT_NEAR(slanted[0], -std::sqrt(0.5F), kTolerance);
 }

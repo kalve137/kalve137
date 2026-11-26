@@ -212,7 +212,7 @@ TEST(Parameters, ReconcileDropsExpressionsOfValuesWrittenAnotherWay)
     Document flipped = before;
     std::get<ExtrudeFeature>(flipped.find(block.extrude)->data).distance = -40.0;
     reconcileExpressions(before, flipped);
-    EXPECT_EQ(flipped.find(block.extrude)->expressions.size(), 1U) << "A flip keeps the expression";
+    EXPECT_EQ(flipped.find(block.extrude)->expressions.size(), 1U) << "Flip keeps the expression";
 
     Document dragged = before;
     std::get<ExtrudeFeature>(dragged.find(block.extrude)->data).distance = 25.0;
@@ -226,7 +226,7 @@ TEST(Parameters, ReconcileDropsExpressionsOfValuesWrittenAnotherWay)
     Document stamped = before;
     ASSERT_FALSE(setParameterExpression(stamped, "w", "50 mm"));
     reconcileExpressions(before, stamped);
-    EXPECT_EQ(stamped.find(block.extrude)->expressions.at("distance"), "w") << "A stamp is not an override";
+    EXPECT_EQ(stamped.find(block.extrude)->expressions.at("distance"), "w") << "Stamp is not an override";
     EXPECT_EQ(constraintOf(stamped, block.sketch, block.width).expression, "w * 2");
 
     Document table = before;
@@ -249,10 +249,10 @@ TEST(Parameters, ReconcileDropsExpressionsOfValuesWrittenAnotherWay)
     added.find(kept)->expressions["taper"] = "w";
     added.find(kept)->expressions["angle"] = "w";
     reconcileExpressions(before, added);
-    EXPECT_TRUE(added.find(typed)->expressions.empty()) << "A new value that the expression doesn't give";
+    EXPECT_TRUE(added.find(typed)->expressions.empty()) << "New value that the expression doesn't give";
     EXPECT_EQ(added.find(kept)->expressions.at("distance"), "w / 4");
-    EXPECT_TRUE(added.find(kept)->expressions.contains("taper")) << "An error is left for the stamp to refuse";
-    EXPECT_FALSE(added.find(kept)->expressions.contains("angle")) << "A key with no field is dropped";
+    EXPECT_TRUE(added.find(kept)->expressions.contains("taper")) << "Error is left for the stamp to refuse";
+    EXPECT_FALSE(added.find(kept)->expressions.contains("angle")) << "Key with no field is dropped";
 }
 
 TEST(Parameters, APlainNumberClearsTheExpression)
@@ -563,7 +563,7 @@ TEST(Parameters, InvalidStampsAreRefusedWithTheFieldAndValue)
     ASSERT_FALSE(setParameterExpression(doc, "n", "4"));
     ASSERT_NE(0.1 * 3.0 * 10.0, 3.0);
     ASSERT_FALSE(setParameterExpression(doc, "n", "0.1 * 3 * 10"));
-    EXPECT_EQ(dataOf<PatternFeature>(doc, pattern).count, 3) << "a count within rounding of a whole number stamps";
+    EXPECT_EQ(dataOf<PatternFeature>(doc, pattern).count, 3) << "count within rounding of a whole number stamps";
     EXPECT_TRUE(setParameterExpression(doc, "n", "3.000001"));
 
     const std::optional<ExpressionError> steep = setFieldExpression(doc, {block.extrude, "taper"}, "w * 3 deg / 1 mm");

@@ -95,7 +95,7 @@ TEST_F(SlotTest, PreviewsThenKeepsItsShapeWhenTheWidthChanges)
     const QImage wide = ui->canvasImage();
     const QRectF above = QRectF(ui->at(gp_Pnt(-25, 33, 0)), ui->at(gp_Pnt(25, 23, 0))).normalized();
     EXPECT_GE(changedPixels(*ui, flat, wide, above, ui->at(gp_Pnt(0, 30, 0))), kPreviewPixels)
-        << "The preview draws the slot outline";
+        << "Preview draws the slot outline";
 
     ui->click(gp_Pnt(0, 30, 0));
     ui->save("slot");
@@ -114,7 +114,7 @@ TEST_F(SlotTest, PreviewsThenKeepsItsShapeWhenTheWidthChanges)
     const sketch::Vec2 a = s->point(arcs[0]->points[0])->pos;
     const sketch::Vec2 b = s->point(arcs[1]->points[0])->pos;
     expectSlot(*s, a, b, 16.0);
-    EXPECT_NEAR(a.y, b.y, kTolerance) << "The sides stay parallel to the centers";
+    EXPECT_NEAR(a.y, b.y, kTolerance) << "Sides stay parallel to the centers";
 }
 
 TEST_F(SlotTest, TypedLengthAndWidthBecomeDimensions)
@@ -155,7 +155,7 @@ TEST_F(SlotTest, CenterPointAndOverallVariantsPlaceTheArcCenters)
     const bool centered = std::ranges::any_of(s->constraints(), [](const auto& entry) {
         return entry.second.kind == sketch::ConstraintKind::Midpoint && entry.second.refs[0] == sketch::kOriginId;
     });
-    EXPECT_TRUE(centered) << "The clicked center stays in the middle";
+    EXPECT_TRUE(centered) << "Clicked center stays in the middle";
 
     ui->trigger("Overall Slot");
     ui->click(gp_Pnt(-30, 40, 0));

@@ -158,7 +158,7 @@ void GlyphAtlas::addIcon(BadgeIcon icon)
         if (renderer.isValid()) {
             renderer.render(&painter);
         } else {
-            K137_WARN(Viewer, "The viewport could not read the {} badge icon", iconName(icon));
+            K137_WARN(Viewer, "Viewport could not read the {} badge icon", iconName(icon));
         }
         painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
         painter.fillRect(tile.rect(), Qt::white);

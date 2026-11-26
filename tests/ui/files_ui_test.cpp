@@ -230,7 +230,7 @@ TEST_F(FilesTest, ADesignFromTheCommandLineOpensAfterTheWindowHasDrawn)
     window.show();
     ASSERT_TRUE(QTest::qWaitFor([&] { return !session->document().features().empty(); }, kStartupOpenMs));
 
-    ASSERT_TRUE(lastEmptyFrame.has_value()) << "The design loaded before the window drew";
+    ASSERT_TRUE(lastEmptyFrame.has_value()) << "Design loaded before the window drew";
     EXPECT_EQ(*lastEmptyFrame, window.centralWidget()->size());
     EXPECT_EQ(window.statusBar()->currentMessage(), QStringLiteral("Opened dodecahedron.k137"));
 }

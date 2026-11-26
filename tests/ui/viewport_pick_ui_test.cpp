@@ -207,10 +207,10 @@ void expectCpuIds(render::Viewport& canvas, const std::string& api)
         }
     }
     const std::size_t pixels = static_cast<std::size_t>(cpu.width) * static_cast<std::size_t>(cpu.height);
-    EXPECT_GT(body, pixels / 20) << api << ": the box and the torus fill part of the view";
+    EXPECT_GT(body, pixels / 20) << api << ": box and the torus fill part of the view";
     EXPECT_LT(different, body / 50) << api << ": " << different << " of " << body << " picked pixels differ";
     EXPECT_LT(kinds, body / 100) << api;
-    EXPECT_LT(depthGap, 2e-4F) << api << ": the picked depth leaves out the face bias";
+    EXPECT_LT(depthGap, 2e-4F) << api << ": picked depth leaves out the face bias";
     std::set<render::PickKind> seen;
     for (const auto& [id, item] : gpuCache) {
         if (item) {
@@ -276,7 +276,7 @@ TEST_F(ViewportTest, PicksOnDemandAndOnlyWhenStale)
     ASSERT_TRUE(face);
     EXPECT_EQ(face->item,
               (render::PickedItem{.feature = 1, .part = 0, .kind = render::PickKind::Face, .index = kTopFace}));
-    EXPECT_EQ(canvas->idPasses(), passes + 1) << "the first pick draws the id pass";
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "first pick draws the id pass";
 
     std::uint32_t frontTop = 0;
     for (const snapshot::Edge& edge : mesh->edges) {
@@ -290,8 +290,8 @@ TEST_F(ViewportTest, PicksOnDemandAndOnlyWhenStale)
     ASSERT_TRUE(edge);
     EXPECT_EQ(edge->item,
               (render::PickedItem{.feature = 1, .part = 0, .kind = render::PickKind::Edge, .index = frontTop}))
-        << "an edge 3 px away beats the face under the cursor";
-    EXPECT_EQ(canvas->idPasses(), passes + 1) << "an unchanged view reads the kept id pass";
+        << "edge 3 px away beats the face under the cursor";
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "unchanged view reads the kept id pass";
 
     const QPointF corner = toward(logicalPixelOf(*canvas, {10.0, -10.0, 10.0}), topCenter, 2.0);
     const std::optional<render::IdPick> point = canvas->pickAt(corner, everything, {.points = true});
@@ -304,11 +304,11 @@ TEST_F(ViewportTest, PicksOnDemandAndOnlyWhenStale)
     ASSERT_TRUE(turned.setScale(70.0));
     canvas->setCamera(turned);
     EXPECT_TRUE(canvas->pickAt(logicalPixelOf(*canvas, {0.0, 0.0, 10.0}), facesAndEdges));
-    EXPECT_EQ(canvas->idPasses(), passes + 3) << "a camera change makes the id pass stale";
+    EXPECT_EQ(canvas->idPasses(), passes + 3) << "camera change makes the id pass stale";
 
     canvas->setScene({.bodies = {}, .origin = {}, .hidden = {box}});
     EXPECT_FALSE(canvas->pickAt(logicalPixelOf(*canvas, {0.0, 0.0, 10.0}), everything, {.points = true}))
-        << "a hidden body picks nothing";
+        << "hidden body picks nothing";
     EXPECT_EQ(canvas->idPasses(), passes + 4);
     EXPECT_FALSE(canvas->pickAt(QPointF(2.0, 2.0), everything));
 }
@@ -357,7 +357,7 @@ TEST_F(ViewportTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
     EXPECT_EQ(picked({0.0, 15.0, 0.0}, points), point);
     const std::uint64_t pointPasses = canvas->idPasses();
     canvas->setSketchMarks({.hovered = point, .selected = {}});
-    EXPECT_EQ(picked({0.0, 15.0, 0.0}, points), point) << "a hovered point recolors without moving";
+    EXPECT_EQ(picked({0.0, 15.0, 0.0}, points), point) << "hovered point recolors without moving";
     EXPECT_EQ(canvas->idPasses(), pointPasses);
 
     EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line);
@@ -365,15 +365,15 @@ TEST_F(ViewportTest, SketchMarksKeepTheIdPassAndSketchEditsRedrawIt)
 
     canvas->setSketchMarks({.hovered = line, .selected = {}});
     EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line) << "picks right after a hover";
-    EXPECT_EQ(canvas->idPasses(), passes) << "a hover keeps the id pass";
+    EXPECT_EQ(canvas->idPasses(), passes) << "hover keeps the id pass";
 
     canvas->setSketchMarks({.hovered = std::nullopt, .selected = {line}});
     EXPECT_EQ(picked({8.0, 0.0, 0.0}, lines), line) << "picks right after a selection";
-    EXPECT_EQ(canvas->idPasses(), passes) << "a selection keeps the id pass";
+    EXPECT_EQ(canvas->idPasses(), passes) << "selection keeps the id pass";
 
     canvas->setSketches({sketchAt(-8.0)});
-    EXPECT_FALSE(picked({8.0, 0.0, 0.0}, lines)) << "an edit drops the old line from the id pass";
-    EXPECT_EQ(canvas->idPasses(), passes + 1) << "an edit makes the id pass stale";
+    EXPECT_FALSE(picked({8.0, 0.0, 0.0}, lines)) << "edit drops the old line from the id pass";
+    EXPECT_EQ(canvas->idPasses(), passes + 1) << "edit makes the id pass stale";
     EXPECT_EQ(picked({8.0, -8.0, 0.0}, lines), line) << "picks right after an edit";
 }
 
@@ -500,12 +500,12 @@ TEST_F(ViewportTest, ABodyBroughtNearerWithoutACameraMoveDrawsWholeAndPicks)
             EXPECT_FALSE(sameColor(image.pixelColor(pixel), QColor::fromRgbF(canvas->viewportStyle().background.red,
                                                                              canvas->viewportStyle().background.green,
                                                                              canvas->viewportStyle().background.blue)))
-                << "the nearest corner draws";
+                << "nearest corner draws";
             const std::optional<std::vector<render::PickedItem>> items =
                 canvas->itemsIn(QRect(pixel, QSize(1, 1)), false, solids);
             ASSERT_TRUE(items);
             ASSERT_EQ(items->size(), 1U);
-            EXPECT_EQ(items->front().part, change.part) << "the nearest corner picks";
+            EXPECT_EQ(items->front().part, change.part) << "nearest corner picks";
         }
     }
 }
@@ -548,11 +548,11 @@ TEST_F(ViewportTest, HoverAndClicksSelectThroughTheIdPass)
     EXPECT_EQ(hovered->shape.ShapeType(), TopAbs_FACE);
     ASSERT_TRUE(hovered->point);
     const QPointF at = logicalPixelOf(*canvas, {hovered->point->X(), hovered->point->Y(), hovered->point->Z()});
-    EXPECT_LT(std::hypot(at.x() - middle.x(), at.y() - middle.y()), 1.5) << "the point lies under the cursor";
+    EXPECT_LT(std::hypot(at.x() - middle.x(), at.y() - middle.y()), 1.5) << "point lies under the cursor";
     EXPECT_EQ(canvas->chunks().highlight().hovered.size(), 1U);
     sendMouse(*canvas, QEvent::MouseMove, middle + QPointF(0.5, 0.0), Qt::NoButton, Qt::NoButton);
     QApplication::processEvents();
-    EXPECT_EQ(hovers.count(), 1) << "a move over the same face announces nothing";
+    EXPECT_EQ(hovers.count(), 1) << "move over the same face announces nothing";
 
     click(*canvas, middle);
     EXPECT_EQ(selections.count(), 1);
@@ -581,7 +581,7 @@ TEST_F(ViewportTest, HoverAndClicksSelectThroughTheIdPass)
     sendMouse(*canvas, QEvent::MouseMove, middle + QPointF(30.0, 0.0), Qt::NoButton, Qt::LeftButton);
     sendMouse(*canvas, QEvent::MouseButtonRelease, middle + QPointF(30.0, 0.0), Qt::LeftButton, Qt::NoButton);
     QApplication::processEvents();
-    EXPECT_EQ(selections.count(), before) << "a drag is no click";
+    EXPECT_EQ(selections.count(), before) << "drag is no click";
 
     click(*canvas, middle);
     EXPECT_TRUE(picker->selectHovered());
@@ -595,13 +595,13 @@ TEST_F(ViewportTest, HoverAndClicksSelectThroughTheIdPass)
     click(*canvas, middle);
     ASSERT_EQ(picker->selected().size(), 1U);
     click(*canvas, QPointF(2.0, 2.0));
-    EXPECT_TRUE(picker->selected().empty()) << "a click on empty space clears";
+    EXPECT_TRUE(picker->selected().empty()) << "click on empty space clears";
 
     click(*canvas, middle);
     ui->trigger("Fillet");
     QApplication::processEvents();
     EXPECT_EQ(picker->kinds(), (render::PickKinds{.faces = false, .edges = true, .points = false}));
-    EXPECT_TRUE(picker->selected().empty()) << "a mode change clears the selection";
+    EXPECT_TRUE(picker->selected().empty()) << "mode change clears the selection";
     sendMouse(*canvas, QEvent::MouseMove, middle, Qt::NoButton, Qt::NoButton);
     QApplication::processEvents();
     EXPECT_FALSE(picker->hovered()) << "fillet picks edges only";
@@ -673,12 +673,12 @@ TEST_F(ViewportTest, BoxSelectsWithTheOldViewsRule)
 
     bool bandShown = false;
     boxDrag(*canvas, topLeft, bottomRight, Qt::NoModifier, [&] { bandShown = band->isVisible(); });
-    EXPECT_TRUE(bandShown) << "the band shows while dragging";
+    EXPECT_TRUE(bandShown) << "band shows while dragging";
     EXPECT_FALSE(band->isVisible()) << "and goes on release";
     EXPECT_EQ(selections.count(), 1);
     const std::vector<render::PickedItem> all = selectedItems(*canvas);
     EXPECT_EQ(all, picker->boxItems(topLeft, bottomRight));
-    EXPECT_EQ(countOf(all, render::PickKind::Face), 6U) << "a window over the view takes the faces in sight";
+    EXPECT_EQ(countOf(all, render::PickKind::Face), 6U) << "window over the view takes the faces in sight";
     EXPECT_GT(countOf(all, render::PickKind::Edge), 0U);
     EXPECT_LT(all.size(), 6U + 30U) << "hidden faces and edges stay out";
     const std::optional<std::vector<render::PickedItem>> ids = picker->boxIdItems(topLeft, bottomRight);
@@ -688,7 +688,7 @@ TEST_F(ViewportTest, BoxSelectsWithTheOldViewsRule)
     boxDrag(*canvas, topRight, middle, Qt::NoModifier);
     const std::vector<render::PickedItem> crossed = selectedItems(*canvas);
     EXPECT_EQ(crossed, picker->boxItems(topRight, middle));
-    EXPECT_FALSE(crossed.empty()) << "a crossing to the middle touches the faces there";
+    EXPECT_FALSE(crossed.empty()) << "crossing to the middle touches the faces there";
     EXPECT_LT(crossed.size(), all.size());
     EXPECT_TRUE(std::ranges::includes(all, crossed));
 
@@ -703,7 +703,7 @@ TEST_F(ViewportTest, BoxSelectsWithTheOldViewsRule)
     EXPECT_EQ(selectedItems(*canvas), added) << "Shift adds to the selection";
 
     boxDrag(*canvas, middle, bottomRight, Qt::NoModifier);
-    EXPECT_EQ(selectedItems(*canvas), added) << "a drag from a face boxes nothing";
+    EXPECT_EQ(selectedItems(*canvas), added) << "drag from a face boxes nothing";
 
     ui->trigger("Fillet");
     QApplication::processEvents();
@@ -714,7 +714,7 @@ TEST_F(ViewportTest, BoxSelectsWithTheOldViewsRule)
         << "fillet boxes the same edges, though its preview gives the old view a model of its own";
     const qsizetype before = selections.count();
     boxDrag(*canvas, topLeft, bottomRight, Qt::NoModifier);
-    EXPECT_EQ(selections.count(), before + 1) << "the fillet panel takes the boxed edges";
+    EXPECT_EQ(selections.count(), before + 1) << "fillet panel takes the boxed edges";
     ui->key(Qt::Key_Escape);
     QApplication::processEvents();
 }

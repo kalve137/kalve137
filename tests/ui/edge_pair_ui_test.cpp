@@ -528,7 +528,7 @@ TEST_F(EdgePairTest, EdgesMatchTheOldViewInNumbers)
                       << quantile(stats.centerGaps, 0.9) << '\t' << unmatched << '\n';
                 EXPECT_GT(stats.samples, 10U) << stem << " samples its edges";
                 if (style.coversCenter) {
-                    EXPECT_LE(gap, kColorTolerance) << stem << ": the line centers match";
+                    EXPECT_LE(gap, kColorTolerance) << stem << ": line centers match";
                 }
 
                 const std::vector<bool> oldMask = edgeMask(shots.old, edge);

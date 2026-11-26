@@ -200,7 +200,7 @@ TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
         const std::unique_ptr<app::MainWindow> oldWindow = showPairWindow(app::ViewKind::Old);
         ASSERT_TRUE(oldWindow->oldView()->isReady());
         if (!drawsReferenceColors(*oldWindow->oldView())) {
-            GTEST_SKIP() << "The old view's shading needs OpenGL 3.2";
+            GTEST_SKIP() << "Old view's shading needs OpenGL 3.2";
         }
         for (app::MainWindow* window : {oldWindow.get(), newWindow.get()}) {
             showOnlyBodies(*window, QStringLiteral("Shaded"));

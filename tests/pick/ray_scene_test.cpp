@@ -152,7 +152,7 @@ TEST(SceneRays, OneRayScenePerSetOfMeshes)
     snapshot::Body recolored = *body;
     recolored.appearance.color = snapshot::Color{1.0F, 0.0F, 0.0F};
     scene.bodies = {std::make_shared<const snapshot::Body>(recolored)};
-    EXPECT_EQ(rays.rays(scene).scene, first) << "a color edit keeps the mesh and the ray scene";
+    EXPECT_EQ(rays.rays(scene).scene, first) << "color edit keeps the mesh and the ray scene";
     EXPECT_EQ(rays.builds(), 1U);
 
     auto moved = std::make_shared<Mesh>();
