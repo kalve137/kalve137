@@ -42,8 +42,6 @@ using kalve137::render::MarkerShape;
 using kalve137::render::PickedItem;
 using kalve137::render::PickKind;
 
-constexpr int kBoxFaces = 6;
-constexpr int kBoxEdges = 12;
 constexpr int kFaceEdges = 4;
 
 Body boxBody(int feature, int part, const gp_Pnt& corner)
@@ -96,17 +94,8 @@ TEST_F(PanelPicksTest, MapsAPickedEdgeFaceAndBodyOfTwoBodiesToTheirItems)
     }
     EXPECT_EQ(outline.size(), static_cast<std::size_t>(kFaceEdges));
     EXPECT_EQ(items.selectedOutline, outline) << "a picked face carries its outline as a selected face does";
-    ASSERT_EQ(items.bodies.size(), static_cast<std::size_t>(kBoxFaces));
-    ASSERT_EQ(items.bodyOutline.size(), static_cast<std::size_t>(kBoxEdges));
-    for (const PickedItem& item : items.bodies) {
-        EXPECT_EQ(item.feature, m_second.id);
-        EXPECT_EQ(item.part, m_second.part);
-        EXPECT_EQ(item.kind, PickKind::Face);
-    }
-    for (const PickedItem& item : items.bodyOutline) {
-        EXPECT_EQ(item.feature, m_second.id);
-        EXPECT_EQ(item.kind, PickKind::Edge);
-    }
+    EXPECT_EQ(items.tinted, (std::set{std::pair{m_second.id, m_second.part}}))
+        << "a picked body tints whatever the viewport draws under its key";
 }
 
 TEST_F(PanelPicksTest, MatchesAReversedEdgeAndSkipsShapesNoShownBodyHolds)
@@ -124,8 +113,7 @@ TEST_F(PanelPicksTest, MatchesAReversedEdgeAndSkipsShapesNoShownBodyHolds)
 
     EXPECT_EQ(items.selected, std::set{itemOf(m_second, PickKind::Edge, 0)});
     EXPECT_TRUE(items.selectedOutline.empty());
-    EXPECT_TRUE(items.bodies.empty());
-    EXPECT_TRUE(items.bodyOutline.empty());
+    EXPECT_TRUE(items.tinted.empty());
 }
 
 TEST_F(PanelPicksTest, RemapsABodyWhoseShapeChanged)
@@ -151,7 +139,7 @@ TEST_F(PanelPicksTest, MapsAPickedVertexToItsPointOnTheBodyThatHoldsIt)
 
     EXPECT_EQ(items.selected, std::set{itemOf(m_second, PickKind::Point, kVertex)});
     EXPECT_TRUE(items.selectedOutline.empty()) << "a vertex has no outline";
-    EXPECT_TRUE(items.bodies.empty());
+    EXPECT_TRUE(items.tinted.empty());
 }
 
 TEST_F(PanelPicksTest, MarksAHoveredVertexAsARingAndAPickedOneAsABallAtItsPlace)

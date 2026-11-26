@@ -558,13 +558,14 @@ void Viewport::setHighlight(Highlight highlight)
     update();
 }
 
-void Viewport::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline)
+void Viewport::setHover(std::set<PickedItem> hovered, std::set<PickedItem> hoveredOutline,
+                        std::set<std::pair<int, int>> tinted)
 {
     const Highlight& current = m_chunks.highlight();
-    if (hovered == current.hovered && hoveredOutline == current.hoveredOutline) {
+    if (hovered == current.hovered && hoveredOutline == current.hoveredOutline && tinted == current.tinted) {
         return;
     }
-    m_chunks.setHover(std::move(hovered), std::move(hoveredOutline));
+    m_chunks.setHover(std::move(hovered), std::move(hoveredOutline), std::move(tinted));
     update();
 }
 

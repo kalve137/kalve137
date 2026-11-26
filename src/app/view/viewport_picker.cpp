@@ -615,7 +615,7 @@ void ViewportPicker::showHover()
 {
     render::Highlight highlight;
     addHover(highlight);
-    m_view->setHover(std::move(highlight.hovered), std::move(highlight.hoveredOutline));
+    m_view->setHover(std::move(highlight.hovered), std::move(highlight.hoveredOutline), std::move(highlight.tinted));
     showMarks();
 }
 
@@ -680,8 +680,7 @@ void ViewportPicker::addHover(render::Highlight& highlight) const
         }
         addWholeBody(*body, m_shapes, highlight.hovered, highlight.hoveredOutline);
     }
-    highlight.hovered.insert(m_panelItems.bodies.begin(), m_panelItems.bodies.end());
-    highlight.hoveredOutline.insert(m_panelItems.bodyOutline.begin(), m_panelItems.bodyOutline.end());
+    highlight.tinted.insert(m_panelItems.tinted.begin(), m_panelItems.tinted.end());
 }
 
 void ViewportPicker::announce(void (PickSource::*signal)())

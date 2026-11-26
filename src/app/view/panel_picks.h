@@ -22,6 +22,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace kalve137::app {
@@ -69,8 +70,7 @@ struct PanelPicks {
 struct PanelItems {
     std::set<render::PickedItem> selected;
     std::set<render::PickedItem> selectedOutline;
-    std::set<render::PickedItem> bodies;
-    std::set<render::PickedItem> bodyOutline;
+    std::set<std::pair<int, int>> tinted;
 
     bool operator==(const PanelItems&) const = default;
 };

@@ -127,7 +127,7 @@ PanelItems panelItems(const PanelPicks& picks, std::span<const core::Body* const
             }
         }
         if (std::ranges::find(picks.bodies, body->key()) != picks.bodies.end()) {
-            addWholeBody(*body, shapes, items.bodies, items.bodyOutline);
+            items.tinted.emplace(body->id, body->part);
         }
     }
     return items;

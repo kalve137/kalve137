@@ -4,6 +4,7 @@
 #include "pair_shots.h"
 #include "scenario.h"
 #include "ui_test.h"
+#include "viewport_ui_support.h"
 
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
@@ -19,6 +20,7 @@
 #include <QImage>
 #include <QPoint>
 #include <QPointF>
+#include <QRectF>
 #include <QString>
 
 #include <gp_Pnt.hxx>
@@ -41,6 +43,7 @@ constexpr int kMinLift = 30;
 constexpr int kGoldTolerance = 15;
 constexpr int kRuleTolerance = 6;
 constexpr QPointF kAway{6.0, 6.0};
+constexpr double kBothBlocks = 140.0;
 
 enum class Shows { Edge, Face, Body };
 
@@ -181,12 +184,13 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
             EXPECT_FALSE(items.selectedOutline.empty()) << name;
             break;
         case Shows::Body:
-            EXPECT_TRUE(has(items.bodies, render::PickKind::Face)) << name;
-            EXPECT_TRUE(has(items.bodyOutline, render::PickKind::Edge)) << name;
+            EXPECT_FALSE(items.tinted.empty()) << name;
+            EXPECT_TRUE(has(ui->viewport()->chunks().tints(), render::PickKind::Face)) << name;
+            EXPECT_TRUE(has(ui->viewport()->chunks().tints(), render::PickKind::Edge)) << name;
             break;
         }
         EXPECT_TRUE(std::ranges::includes(shown.selected, items.selected)) << name;
-        EXPECT_TRUE(std::ranges::includes(shown.hovered, items.bodies)) << name;
+        EXPECT_TRUE(std::ranges::includes(shown.tinted, items.tinted)) << name;
 
         const int lift = liftAt(plain, picked, at);
         const int oldLift = liftAt(oldPlain, oldPicked, old.at(pick.at));
@@ -230,6 +234,7 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         EXPECT_EQ(picker->panelItems(), app::PanelItems{}) << name << ": cancel drops the picks";
         EXPECT_TRUE(ui->viewport()->chunks().highlight().selected.empty()) << name;
         EXPECT_TRUE(ui->viewport()->chunks().highlight().hovered.empty()) << name;
+        EXPECT_TRUE(ui->viewport()->chunks().tints().empty()) << name;
     }
 }
 
@@ -245,6 +250,47 @@ TEST_F(PanelPickPairTest, ShowsThePickedProfileUntilThePanelCloses)
     ui->key(Qt::Key_Escape);
     ASSERT_FALSE(ui->state()["featurePanel"]);
     EXPECT_TRUE(ui->viewport()->sketchLook().highlighted.empty());
+}
+
+TEST_F(PanelPickPairTest, AMovedBodyIsTintedWhereItsPreviewShows)
+{
+    render::Viewport* canvas = ui->viewport();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    block(*ui);
+    ui->trigger("Move");
+    ui->click(kTopFace);
+    ui->fill("X distance", "60", false);
+    canvas->setCamera(obliqueAt({30.0, 0.0, kBlockHeight / 2.0}, kBothBlocks));
+    ui->frame();
+    ASSERT_TRUE(ui->state()["featurePanel"]);
+    ASSERT_EQ(canvas->scene().bodies.size(), 1U);
+    ASSERT_FALSE(canvas->chunks().overlaid().empty()) << "picks stay on the committed block";
+    ASSERT_FALSE(canvas->chunks().tints().empty());
+
+    const gp_Pnt left(-15.0, -5.0, kBlockHeight);
+    const gp_Pnt moved(left.X() + 60.0, left.Y(), left.Z());
+    ui->move(kAway);
+    const QImage tinted = ui->canvasImage();
+    ui->save("move preview tinted");
+    const render::Highlight full = canvas->chunks().highlight();
+    canvas->setHover(full.hovered, full.hoveredOutline, {});
+    ui->frame();
+    const QImage bare = ui->canvasImage();
+    canvas->setHover(full.hovered, full.hoveredOutline, full.tinted);
+    for (const gp_Pnt& point : {moved, left}) {
+        ASSERT_TRUE(QRectF(QPointF(), canvas->size()).contains(ui->at(point))) << "both places show";
+    }
+    const int there = liftAt(bare, tinted, ui->at(moved));
+    const int before = liftAt(bare, tinted, ui->at(left));
+    std::printf("move tint: %d where the preview shows, %d where the block was\n", there, before);
+    EXPECT_GE(there, kMinLift) << "the tint lights the moved body";
+    EXPECT_LT(before, kMinLift) << "and not the empty place it left";
+
+    ui->key(Qt::Key_Escape);
+    ASSERT_FALSE(ui->state()["featurePanel"]);
+    EXPECT_TRUE(canvas->chunks().tints().empty());
 }
 
 } // namespace
