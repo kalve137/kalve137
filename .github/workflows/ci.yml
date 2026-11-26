@@ -101,7 +101,7 @@ jobs:
         id: build
         run: |
           . ./scripts/dev-shell.ps1
-          cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET"
+          cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -217,7 +217,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          cmake --preset linux-release
+          cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           cmake --build --preset linux-release
 
       - name: Stop the vcpkg build log tail
@@ -327,7 +327,7 @@ jobs:
       - name: Build
         id: build
         run: |
-          cmake --preset macos-release
+          cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           cmake --build --preset macos-release
 
       - name: Stop the vcpkg build log tail

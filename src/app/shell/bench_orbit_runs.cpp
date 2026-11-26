@@ -61,7 +61,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <numbers>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -72,15 +71,8 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr int kColdSkipFrames = 10;
-constexpr int kOrbitFrames = 120;
-constexpr double kOrbitStep = 2.0 * std::numbers::pi / kOrbitFrames;
-constexpr double kWarmupMs = 500.0;
 constexpr int kReadyTimeoutMs = 30000;
-constexpr int kOrbitTimeoutMs = 120000;
 constexpr double kPercentile = 0.95;
-constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
-constexpr double kFirstPressStep = 20.0;
 constexpr int kChangeWarmup = 2;
 constexpr int kChangeRepeats = 20;
 constexpr double kBenchMoveStep = 10.0;
@@ -89,11 +81,6 @@ constexpr int kHoverMoves = 80;
 constexpr int kStaleMoves = 20;
 constexpr double kStaleTurn = 0.002;
 constexpr double kHoverSpan = 0.6;
-constexpr int kSelectReach = 200;
-constexpr int kSketchCells = 10;
-constexpr double kSketchPitch = 20.0;
-constexpr double kSketchCell = 12.0;
-constexpr double kSketchZoom = 1.05;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
 

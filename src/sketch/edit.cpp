@@ -415,7 +415,7 @@ std::optional<Sketch> trim(const Sketch& sketch, Id curve, Vec2 pick)
         } else if (low) {
             out.curve(curve)->points[1] = *low;
             dropIfUnused(out, end);
-        } else {
+        } else if (high) {
             out.curve(curve)->points[0] = *high;
             dropIfUnused(out, start);
         }
@@ -433,7 +433,7 @@ std::optional<Sketch> trim(const Sketch& sketch, Id curve, Vec2 pick)
         } else if (low) {
             out.curve(curve)->points[2] = *low;
             dropIfUnused(out, end);
-        } else {
+        } else if (high) {
             out.curve(curve)->points[1] = *high;
             dropIfUnused(out, start);
         }
@@ -441,6 +441,9 @@ std::optional<Sketch> trim(const Sketch& sketch, Id curve, Vec2 pick)
         return out;
     }
     case CurveKind::Circle: {
+        if (!low || !high) {
+            return std::nullopt;
+        }
         const Id arc = out.addArc(original.points[0], *high, *low, original.construction);
         std::vector<std::pair<Id, Constraint>> moved;
         for (const auto& [constraintId, constraint] : out.constraints()) {

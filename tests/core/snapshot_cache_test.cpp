@@ -9,8 +9,9 @@
 
 #include <gtest/gtest.h>
 
+#include <NCollection_IndexedMap.hxx>
 #include <TopExp.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -68,7 +69,7 @@ TEST(SnapshotCache, AColorEditKeepsTheMesh)
     SnapshotCache cache;
     const snapshot::Scene before = cache.scene(model);
     model.bodies[0].color = geometry::Color{1.0, 0.0, 0.0};
-    TopTools_IndexedMapOfShape faces;
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> faces;
     TopExp::MapShapes(model.bodies[0].shape, TopAbs_FACE, faces);
     model.bodies[0].faceColors.set(TopoDS::Face(faces(3)), geometry::Color{0.0, 0.0, 1.0});
     const snapshot::Scene after = cache.scene(model);

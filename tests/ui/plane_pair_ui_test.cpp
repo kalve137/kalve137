@@ -22,9 +22,10 @@
 #include "viewer/occt_view_widget.h"
 
 #include <BRepGProp_Face.hxx>
+#include <NCollection_IndexedMap.hxx>
 #include <TopExp.hxx>
 #include <TopLoc_Location.hxx>
-#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <gp.hxx>
 #include <gp_Ax1.hxx>
@@ -176,7 +177,7 @@ std::string describe(const std::optional<app::Pick>& pick, const core::Model& mo
             normal.Normalize();
             return std::format("face {:.0f} {:.0f} {:.0f}", normal.X() + 0.0, normal.Y() + 0.0, normal.Z() + 0.0);
         }
-        TopTools_IndexedMapOfShape shapes;
+        NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> shapes;
         TopExp::MapShapes(body->shape, pick->shape.ShapeType(), shapes);
         return std::format("{} {}", pick->kind == app::Pick::Kind::Edge ? "edge" : "vertex",
                            shapes.FindIndex(pick->shape));

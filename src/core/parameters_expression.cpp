@@ -11,7 +11,6 @@
 #include <locale>
 #include <memory>
 #include <numbers>
-#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -20,14 +19,7 @@ namespace kalve137::core {
 
 namespace {
 
-constexpr std::array<std::string_view, 24> kKeywords{
-    "part", "param", "sketch",   "on",      "rect", "circle", "center", "size", "point", "line",  "arc",     "near",
-    "from", "to",    "diameter", "extrude", "cut",  "fillet", "check",  "up",   "down",  "depth", "through", "radius"};
-constexpr std::array<std::string_view, 15> kFeatureKinds{"sketch", "extrude", "revolve", "fillet", "chamfer",
-                                                         "shell",  "pattern", "import",  "plane",  "offset_face",
-                                                         "hole",   "move",    "axis",    "point",  "appearance"};
 constexpr std::array<std::string_view, 5> kPlainOnlyFunctions{"sqrt", "sin", "cos", "tan", "pi"};
-constexpr std::array<std::string_view, 2> kPlainOnlyUnits{"um", "ft"};
 constexpr std::string_view kPlainOnlyMessage = "sqrt, sin, cos, tan, pi and ^ work only in a value without names";
 constexpr std::string_view kPlainOnlyHint = "Work that part out as a number or put it in its own parameter";
 constexpr std::string_view kPieces = "pieces";
@@ -90,16 +82,6 @@ bool listsWord(const std::array<std::string_view, N>& words, std::string_view wo
 bool isPlainOnlyFunction(std::string_view word)
 {
     return listsWord(kPlainOnlyFunctions, word);
-}
-
-bool isPlainOnlyWord(std::string_view word)
-{
-    return isPlainOnlyFunction(word) || listsWord(kPlainOnlyUnits, word);
-}
-
-bool lists(std::span<const std::string_view> words, std::string_view word)
-{
-    return std::find(words.begin(), words.end(), word) != words.end();
 }
 
 std::string withArticle(const std::string& noun)
