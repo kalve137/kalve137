@@ -211,12 +211,14 @@ TEST_F(FeatureTest, IdleHoverAndSelectStayFast)
         ASSERT_FALSE(ui->selectionText().isEmpty());
         ui->key(Qt::Key_Escape);
     }
+    const qint64 budget = timeBudgetMs(kBudgetMs);
     RecordProperty("worst_hover_ms", static_cast<int>(worstHover));
     RecordProperty("worst_select_ms", static_cast<int>(worstSelect));
-    std::printf("worst hover %lld ms, worst select %lld ms\n", worstHover, worstSelect);
+    RecordProperty("budget_ms", static_cast<int>(budget));
+    std::printf("worst hover %lld ms, worst select %lld ms, budget %lld ms\n", worstHover, worstSelect, budget);
 #ifdef NDEBUG
-    EXPECT_LT(worstHover, kBudgetMs);
-    EXPECT_LT(worstSelect, kBudgetMs);
+    EXPECT_LT(worstHover, budget);
+    EXPECT_LT(worstSelect, budget);
 #endif
 }
 

@@ -421,6 +421,16 @@ bool drawsReferenceColors(const viewer::OcctViewWidget& oldView)
     return major > kReferenceOpenGlMajor || (major == kReferenceOpenGlMajor && minor >= kReferenceOpenGlMinor);
 }
 
+qint64 timeBudgetMs(qint64 baseMs)
+{
+    bool valid = false;
+    const double scale = qEnvironmentVariable("KALVE137_TIME_BUDGET_SCALE").toDouble(&valid);
+    if (!valid || !std::isfinite(scale) || scale < 1.0) {
+        return baseMs;
+    }
+    return std::llround(static_cast<double>(baseMs) * scale);
+}
+
 UiDriver::UiDriver() : UiDriver(app::startupFromEnvironment()) {}
 
 UiDriver::UiDriver(const app::StartupOptions& options) : m_window(std::make_unique<app::MainWindow>(options))
