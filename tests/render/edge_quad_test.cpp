@@ -56,7 +56,7 @@ TEST(EdgeQuad, TheWidthStaysInPixelsOnAStretchedViewportAndInPerspective)
     const double dy = corners[2][1] - corners[0][1];
     const double sideX = corners[1][0] - corners[0][0];
     const double sideY = corners[1][1] - corners[0][1];
-    EXPECT_NEAR((dx * sideX) + (dy * sideY), 0.0, 1e-6) << "the sides stand square to the line";
+    EXPECT_NEAR((dx * sideX) + (dy * sideY), 0.0, 1e-6) << "sides stand square to the line";
 }
 
 TEST(EdgeQuad, AnEdgeBehindTheEyeIsDroppedAndOneCrossingItIsCut)

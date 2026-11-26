@@ -138,7 +138,7 @@ TEST(SketchSnapshot, CurvesBecomeWorldPolylinesWithKindIdAndConstructionFlag)
 
     const snapshot::SketchCurve& hole = curveOf(shown, d.hole);
     EXPECT_EQ(hole.kind, snapshot::SketchCurveKind::Circle);
-    EXPECT_EQ(hole.points.front(), hole.points.back()) << "a circle closes on itself";
+    EXPECT_EQ(hole.points.front(), hole.points.back()) << "circle closes on itself";
     const gp_Pnt holeCenter = toWorld(kTilted, {kWidth / 2.0, kHeight / 2.0});
     for (const snapshot::Point& point : hole.points) {
         EXPECT_NEAR(distance3(point, holeCenter), kHoleRadius, kTolerance);
@@ -159,7 +159,7 @@ TEST(SketchSnapshot, CurvesTessellateLikeBodyEdges)
     const Drawn d = drawn();
     const double side = 200.0 + kArcRadius;
     const double deflection = curveDeflection(d.sketch);
-    EXPECT_NEAR(deflection, snapshot::chordDeflection(side), kTolerance) << "the deflection follows the sketch's box";
+    EXPECT_NEAR(deflection, snapshot::chordDeflection(side), kTolerance) << "deflection follows the sketch's box";
     const snapshot::Sketch shown = snapshotOf(d.sketch, placementOf(kTilted));
     for (const Id id : {d.hole, d.arc}) {
         const snapshot::SketchCurve& curve = curveOf(shown, id);
@@ -171,7 +171,7 @@ TEST(SketchSnapshot, CurvesTessellateLikeBodyEdges)
     const snapshot::Sketch alone = snapshotOf(small, placementOf(kTilted));
     ASSERT_EQ(alone.curves.size(), 1U);
     EXPECT_EQ(static_cast<int>(alone.curves[0].points.size()), occtNodes(small, lone, curveDeflection(small)));
-    EXPECT_GE(alone.curves[0].points.size(), 37U) << "the angle limit keeps a lone circle round";
+    EXPECT_GE(alone.curves[0].points.size(), 37U) << "angle limit keeps a lone circle round";
 
     Sketch flat;
     const double angle = 6.0 * std::numbers::pi / 180.0;
@@ -180,7 +180,7 @@ TEST(SketchSnapshot, CurvesTessellateLikeBodyEdges)
                                 flat.addPoint({1000.0 * std::cos(angle), 1000.0 * std::sin(angle)}));
     const snapshot::Sketch shallow = snapshotOf(flat, placementOf(kTilted));
     ASSERT_EQ(shallow.curves.size(), 1U);
-    EXPECT_LT(shallow.curves[0].points.size(), 6U) << "the deflection limit rules a shallow arc";
+    EXPECT_LT(shallow.curves[0].points.size(), 6U) << "deflection limit rules a shallow arc";
     EXPECT_EQ(static_cast<int>(shallow.curves[0].points.size()), occtNodes(flat, wide, curveDeflection(flat)));
 
     Sketch crowded;
@@ -188,7 +188,7 @@ TEST(SketchSnapshot, CurvesTessellateLikeBodyEdges)
     const Id tiny = crowded.addCircle(crowded.addPoint({500.0, 20.0}), 1.0);
     const snapshot::Sketch dense = snapshotOf(crowded, placementOf(kTilted));
     const snapshot::SketchCurve& dot = curveOf(dense, tiny);
-    EXPECT_LT(dot.points.size(), 37U) << "the minimum size rules a tiny circle in a large sketch";
+    EXPECT_LT(dot.points.size(), 37U) << "minimum size rules a tiny circle in a large sketch";
     EXPECT_EQ(static_cast<int>(dot.points.size()), occtNodes(crowded, tiny, curveDeflection(crowded)));
 }
 
@@ -222,8 +222,8 @@ TEST(SketchSnapshot, ProfilesBecomeTrianglesWithTheirIndex)
     const double rim = 2.0 * std::numbers::pi * kHoleRadius * deflection;
     const double first = area(profiles, 0);
     const double second = area(profiles, 1);
-    EXPECT_NEAR(std::min(first, second), disk, rim) << "the hole fills as its own profile";
-    EXPECT_NEAR(std::max(first, second), (kWidth * kHeight) - disk, rim) << "the plate keeps the hole open";
+    EXPECT_NEAR(std::min(first, second), disk, rim) << "hole fills as its own profile";
+    EXPECT_NEAR(std::max(first, second), (kWidth * kHeight) - disk, rim) << "plate keeps the hole open";
     EXPECT_NEAR(first + second, kWidth * kHeight, rim);
     const std::uint32_t hole = first < second ? 0 : 1;
     EXPECT_EQ(profiles.disks, std::vector<std::uint32_t>{hole}) << "only the hole is bounded by one full circle";

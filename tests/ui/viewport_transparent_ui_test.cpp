@@ -118,13 +118,13 @@ void expectTransparentBodiesBlend(render::Viewport& canvas, const std::string& a
             canvas.setScene(both);
             const QImage bothShot = grabbed(canvas);
             ui.save("transparent " + where);
-            EXPECT_TRUE(sameImage(cpuOf(canvas), cpuOpaque)) << where << ": the CPU backend draws the ghost opaque";
+            EXPECT_TRUE(sameImage(cpuOf(canvas), cpuOpaque)) << where << ": CPU backend draws the ghost opaque";
 
             const BlendCount count = countBlend(bothShot, bothOpaqueShot, opaqueShot, ghostShot, empty);
             const std::size_t pixels =
                 static_cast<std::size_t>(bothShot.width()) * static_cast<std::size_t>(bothShot.height());
-            EXPECT_GT(count.blended, pixels / 50) << where << ": the ghost blends over what lies behind it";
-            EXPECT_GT(count.hidden, pixels / 500) << where << ": the opaque box hides the ghost behind it";
+            EXPECT_GT(count.blended, pixels / 50) << where << ": ghost blends over what lies behind it";
+            EXPECT_GT(count.hidden, pixels / 500) << where << ": opaque box hides the ghost behind it";
             if (visual == render::VisualStyle::Shaded) {
                 EXPECT_LT(count.wrong, pixels / 200)
                     << where << ": " << count.wrong << " pixels miss the blend of the opaque shots";

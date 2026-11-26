@@ -83,9 +83,9 @@ TEST_F(ViewportTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     const camera::Viewport viewport = *commands.viewport();
     const camera::Pixel middlePixel{viewport.width / 2, viewport.height / 2};
     const std::optional<camera::Vec3> hit = scene.pick(commands.camera(), viewport, middlePixel, true);
-    ASSERT_TRUE(hit) << "the depth under the middle finds the part";
+    ASSERT_TRUE(hit) << "depth under the middle finds the part";
     EXPECT_LT(camera::dot(*hit - commands.camera().center(), commands.camera().direction()), 0.0);
-    EXPECT_FALSE(scene.pick(commands.camera(), viewport, {2, 2}, true)) << "the corner finds nothing";
+    EXPECT_FALSE(scene.pick(commands.camera(), viewport, {2, 2}, true)) << "corner finds nothing";
     EXPECT_EQ(session->rays().builds(), 0U) << "navigation builds no ray scene";
     const camera::Ray ray = commands.camera().ray(middlePixel, viewport);
     const camera::Vec3 direction = camera::normalized(ray.direction);
@@ -96,12 +96,12 @@ TEST_F(ViewportTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     ASSERT_TRUE(traced);
     EXPECT_LT(camera::distance(*hit, ray.origin + direction * traced->distance),
               commands.camera().worldPerPixel(viewport))
-        << "the depth at the pixel center matches the ray through its corner within a pixel";
+        << "depth at the pixel center matches the ray through its corner within a pixel";
     const std::size_t builds = session->rays().builds();
     const gp_Pnt hiddenGravity = ui->window().oldView()->gravityPoint();
     const camera::Vec3 gravity = scene.gravityPoint(commands.camera(), viewport);
     EXPECT_LT(camera::distance(gravity, {hiddenGravity.X(), hiddenGravity.Y(), hiddenGravity.Z()}), 1e-6)
-        << "the snapshot gravity point matches the hidden view's";
+        << "snapshot gravity point matches the hidden view's";
 
     const QPointF middle(canvas->width() / 2.0, canvas->height() / 2.0);
     QWheelEvent wheel(middle, canvas->mapToGlobal(middle), QPoint(), QPoint(0, 2 * kWheelStep), Qt::NoButton,
@@ -115,7 +115,7 @@ TEST_F(ViewportTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     sendMouse(*canvas, QEvent::MouseButtonRelease, middle + QPointF(40, -25), Qt::MiddleButton, Qt::NoButton);
     EXPECT_GT(camera::distance(commands.camera().direction(), camera::normalized({-1.0, 1.0, -1.0})), 0.01);
     expectFollowed(*ui, "orbit");
-    EXPECT_EQ(session->rays().builds(), builds) << "the wheel and the orbit build no ray scene";
+    EXPECT_EQ(session->rays().builds(), builds) << "wheel and the orbit build no ray scene";
 
     ui->trigger("Fit All");
     waitForCamera(commands);
@@ -170,22 +170,22 @@ TEST_F(ViewportTest, OrbitsAroundTheDepthUnderTheCursor)
         const std::uint64_t passes = canvas->idPasses();
         QMouseEvent press(QEvent::MouseButtonPress, from, canvas->mapToGlobal(from), button, button, modifiers);
         QApplication::sendEvent(canvas, &press);
-        EXPECT_LE(canvas->idPasses(), passes + 1) << "a press draws at most one id pass";
+        EXPECT_LE(canvas->idPasses(), passes + 1) << "press draws at most one id pass";
         for (int step = 1; step <= 3; ++step) {
             const QPointF to = from + QPointF(15.0 * step, -10.0 * step);
             QMouseEvent move(QEvent::MouseMove, to, canvas->mapToGlobal(to), Qt::NoButton, button, modifiers);
             QApplication::sendEvent(canvas, &move);
         }
-        EXPECT_LE(canvas->idPasses(), passes + 1) << "the drag reads no more ids";
+        EXPECT_LE(canvas->idPasses(), passes + 1) << "drag reads no more ids";
         QMouseEvent release(QEvent::MouseButtonRelease, from, canvas->mapToGlobal(from), button, Qt::NoButton,
                             modifiers);
         QApplication::sendEvent(canvas, &release);
         const camera::ScreenPoint after = commands.camera().project(pivot, viewport);
-        EXPECT_LT(std::hypot(after.x - before.x, after.y - before.y), 1.0) << "the pivot stays put on screen";
+        EXPECT_LT(std::hypot(after.x - before.x, after.y - before.y), 1.0) << "pivot stays put on screen";
         return surface.has_value();
     };
     const QPointF middle(canvas->width() / 2.0, canvas->height() / 2.0);
-    EXPECT_TRUE(orbitFrom(middle + QPointF(12.0, 8.0))) << "the part lies under the cursor";
+    EXPECT_TRUE(orbitFrom(middle + QPointF(12.0, 8.0))) << "part lies under the cursor";
     EXPECT_FALSE(orbitFrom(QPointF(4.0, 4.0))) << "empty space orbits around the gravity point";
     commands.setNavigation(saved);
 }

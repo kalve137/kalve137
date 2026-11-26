@@ -46,7 +46,7 @@ mkdir -p "$smoke_root"
 unzip -q "$dest" -d "$smoke_root"
 top="$(find "$smoke_root" -maxdepth 1 -mindepth 1 -type d | head -n 1)"
 if [[ -z "$top" ]]; then
-    echo "The zip has no top-level folder" >&2
+    echo "Zip has no top-level folder" >&2
     exit 1
 fi
 
@@ -92,7 +92,7 @@ plugins="$top/plugins"
 missing=0
 for file in bin/THIRD-PARTY-NOTICES.md bin/samples/dodecahedron.k137; do
     if [[ ! -f "$top/$file" ]]; then
-        echo "The package is missing $top/$file" >&2
+        echo "Package is missing $top/$file" >&2
         missing=1
     fi
 done
@@ -125,7 +125,7 @@ done
 
 for notice in $(printf '%s\n' "${required[@]}" | sort -u); do
     if [[ ! -f "$notices_dir/${notice}.txt" ]]; then
-        echo "The package is missing $notices_dir/${notice}.txt" >&2
+        echo "Package is missing $notices_dir/${notice}.txt" >&2
         missing=1
     fi
 done

@@ -417,7 +417,7 @@ TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
     const QRgb oldRim = origin.old.pixel(rim);
     const QRgb newRim = origin.fresh.pixel(rim);
     table << "origin rim\t\t\t\t\t" << hex(oldRim) << '\t' << hex(newRim) << '\n';
-    EXPECT_GT(gapOf(newRim, origin.background.rgb()), kChange) << "the origin point shows";
+    EXPECT_GT(gapOf(newRim, origin.background.rgb()), kChange) << "origin point shows";
     if (colors) {
         EXPECT_LE(gapOf(newRim, oldRim), kColorTolerance)
             << "origin point is " << hex(newRim) << " against " << hex(oldRim);
@@ -471,7 +471,7 @@ TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever
         picker->hoverAt(center);
         const std::string onPoint = describe(picker->hovered());
         if (mode == app::PickMode::AxisSources) {
-            EXPECT_TRUE(onPoint.starts_with("point")) << "the point wins over the edge under it, got " << onPoint;
+            EXPECT_TRUE(onPoint.starts_with("point")) << "point wins over the edge under it, got " << onPoint;
             ASSERT_FALSE(oldRegion.isNull());
             ASSERT_FALSE(newRegion.isNull());
             const std::string regions = std::format(
@@ -494,7 +494,7 @@ TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever
     for (int dy = -kScanRadius; dy <= kScanRadius; dy += 2) {
         for (int dx = -kScanRadius; dx <= kScanRadius; dx += 2) {
             picker->hoverAt(origin + QPointF(dx, dy));
-            EXPECT_EQ(describe(picker->hovered()), "none") << "the origin point never picks, at " << dx << ", " << dy;
+            EXPECT_EQ(describe(picker->hovered()), "none") << "origin point never picks, at " << dx << ", " << dy;
             const std::optional<render::IdPick> hit = m_new->viewport()->pickAt(
                 origin + QPointF(dx, dy), {.faces = false, .edges = false, .markers = true}, {.markers = true});
             EXPECT_FALSE(hit.has_value()) << "no marker id at " << dx << ", " << dy;

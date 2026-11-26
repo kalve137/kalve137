@@ -198,7 +198,7 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         switch (pick.shows) {
         case Shows::Edge:
             rule = nearestTo(picked, at, gold);
-            EXPECT_LE(rule, kGoldTolerance) << name << ": the picked edge draws in selection gold";
+            EXPECT_LE(rule, kGoldTolerance) << name << ": picked edge draws in selection gold";
             break;
         case Shows::Face:
         case Shows::Body: {
@@ -221,9 +221,9 @@ TEST_F(PanelPickPairTest, ShowsPickedEdgesFacesAndBodiesWhereTheOldViewDoes)
         }
         }
         std::printf("%s: viewport lift %d, old view lift %d, rule gap %d\n", name.c_str(), lift, oldLift, rule);
-        EXPECT_GE(lift, kMinLift) << name << ": the viewport shows the pick";
+        EXPECT_GE(lift, kMinLift) << name << ": viewport shows the pick";
         if (oldColors && !pick.oldPreviewCovers) {
-            EXPECT_GE(oldLift, kMinLift) << name << ": the old view shows the pick";
+            EXPECT_GE(oldLift, kMinLift) << name << ": old view shows the pick";
         }
 
         for (UiDriver* driver : {ui.get(), &old}) {
@@ -285,7 +285,7 @@ TEST_F(PanelPickPairTest, AMovedBodyIsTintedWhereItsPreviewShows)
     const int there = liftAt(bare, tinted, ui->at(moved));
     const int before = liftAt(bare, tinted, ui->at(left));
     std::printf("move tint: %d where the preview shows, %d where the block was\n", there, before);
-    EXPECT_GE(there, kMinLift) << "the tint lights the moved body";
+    EXPECT_GE(there, kMinLift) << "tint lights the moved body";
     EXPECT_LT(before, kMinLift) << "and not the empty place it left";
 
     ui->key(Qt::Key_Escape);

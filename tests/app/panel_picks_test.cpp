@@ -93,9 +93,9 @@ TEST_F(PanelPicksTest, MapsAPickedEdgeFaceAndBodyOfTwoBodiesToTheirItems)
         outline.insert(itemOf(m_first, PickKind::Edge, firstEdges.FindIndex(explorer.Current()) - 1));
     }
     EXPECT_EQ(outline.size(), static_cast<std::size_t>(kFaceEdges));
-    EXPECT_EQ(items.selectedOutline, outline) << "a picked face carries its outline as a selected face does";
+    EXPECT_EQ(items.selectedOutline, outline) << "picked face carries its outline as a selected face does";
     EXPECT_EQ(items.tinted, (std::set{std::pair{m_second.id, m_second.part}}))
-        << "a picked body tints whatever the viewport draws under its key";
+        << "picked body tints whatever the viewport draws under its key";
 }
 
 TEST_F(PanelPicksTest, MatchesAReversedEdgeAndSkipsShapesNoShownBodyHolds)
@@ -123,7 +123,7 @@ TEST_F(PanelPicksTest, RemapsABodyWhoseShapeChanged)
 
     m_second.shape = boxBody(5, 1, gp_Pnt(20.0, 0.0, 0.0)).shape;
     EXPECT_TRUE(panelItems({.edges = {before}, .faces = {}, .bodies = {}}, m_shown, m_shapes).selected.empty())
-        << "an edge of the old shape no longer maps";
+        << "edge of the old shape no longer maps";
     const TopoDS_Edge after = TopoDS::Edge(indexOf(m_second.shape, TopAbs_EDGE).FindKey(1));
     EXPECT_EQ(panelItems({.edges = {after}, .faces = {}, .bodies = {}}, m_shown, m_shapes).selected,
               std::set{itemOf(m_second, PickKind::Edge, 0)});
@@ -138,7 +138,7 @@ TEST_F(PanelPicksTest, MapsAPickedVertexToItsPointOnTheBodyThatHoldsIt)
     const PanelItems items = panelItems(picks, m_shown, m_shapes);
 
     EXPECT_EQ(items.selected, std::set{itemOf(m_second, PickKind::Point, kVertex)});
-    EXPECT_TRUE(items.selectedOutline.empty()) << "a vertex has no outline";
+    EXPECT_TRUE(items.selectedOutline.empty()) << "vertex has no outline";
     EXPECT_TRUE(items.tinted.empty());
 }
 
@@ -154,7 +154,7 @@ TEST_F(PanelPicksTest, MarksAHoveredVertexAsARingAndAPickedOneAsABallAtItsPlace)
     addVertexMark(m_second, kVertex, true, colors, m_shapes, marks);
     addVertexMark(m_second, static_cast<std::uint32_t>(vertices.Extent()), true, colors, m_shapes, marks);
 
-    ASSERT_EQ(marks.size(), 2U) << "an index past the body's vertices marks nothing";
+    ASSERT_EQ(marks.size(), 2U) << "index past the body's vertices marks nothing";
     for (const MarkerItem& mark : marks) {
         EXPECT_DOUBLE_EQ(mark.anchor.x, expected.X());
         EXPECT_DOUBLE_EQ(mark.anchor.y, expected.Y());

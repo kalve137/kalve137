@@ -552,11 +552,11 @@ TEST(ExtrudeTool, KeepsThePrismAndItsEndCapFromTheSameBuild)
             ++corners;
         }
         EXPECT_GE(corners, 4) << taper;
-        EXPECT_EQ(hasVertexAt(model.tool.caps.front(), gp_Pnt(30, 5, 5)), taper == 0.0) << "the taper moves the cap in";
+        EXPECT_EQ(hasVertexAt(model.tool.caps.front(), gp_Pnt(30, 5, 5)), taper == 0.0) << "taper moves the cap in";
 
         std::get<ExtrudeFeature>(feature.data).distance = -5.0;
         const Model missed = extend(base, feature);
         EXPECT_EQ(missed.status.at(99).health, FeatureHealth::Failed);
-        EXPECT_EQ(missed.tool.feature, 0) << "a failed build keeps no tool";
+        EXPECT_EQ(missed.tool.feature, 0) << "failed build keeps no tool";
     }
 }

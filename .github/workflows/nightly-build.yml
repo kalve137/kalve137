@@ -29,7 +29,7 @@ jobs:
         with:
           ref: dev
 
-      - name: Plan the nightly build
+      - name: Plan nightly build
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,14 +77,14 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.commit }}
 
-      - name: Download the packages
+      - name: Download packages
         uses: actions/download-artifact@v8
         with:
           pattern: kalve137-*
           path: assets
           merge-multiple: true
 
-      - name: Update the nightly release
+      - name: Update nightly release
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT: ${{ needs.prepare.outputs.commit }}

@@ -155,7 +155,7 @@ TEST_F(PreviewPairTest, TheExtrudeGhostMatchesTheOldViewInBothThemes)
     }
     UiDriver old(app::StartupOptions{.view = app::ViewKind::Old, .graphicsApi = std::nullopt});
     if (!drawsReferenceColors(old.view())) {
-        GTEST_SKIP() << "The old view's colors need OpenGL 3.2";
+        GTEST_SKIP() << "Old view's colors need OpenGL 3.2";
     }
     for (UiDriver* driver : {ui.get(), &old}) {
         sketchRectangle(*driver, core::OriginPlane::XY, gp_Pnt(-20, -10, 0), gp_Pnt(20, 10, 0));
@@ -170,7 +170,7 @@ TEST_F(PreviewPairTest, TheExtrudeGhostMatchesTheOldViewInBothThemes)
     EXPECT_FLOAT_EQ(ghost->opacity, kGhostOpacity);
     const std::optional<Samples> fresh = samplesOf(*ui, *ghost->mesh);
     const std::optional<Samples> saved = samplesOf(old, *ghost->mesh);
-    ASSERT_TRUE(fresh && saved) << "the ghost's top face shows over the canvas somewhere";
+    ASSERT_TRUE(fresh && saved) << "ghost's top face shows over the canvas somewhere";
 
     const SchemeReset reset;
     for (const auto& [scheme, theme] :
@@ -201,10 +201,10 @@ TEST_F(PreviewPairTest, TheExtrudeGhostMatchesTheOldViewInBothThemes)
         const auto [bare, canvasGap] = pair("canvas", &Samples::canvas);
         std::printf("%s bare profile %s, tinted by %d\n", theme, hex(bareProfile).c_str(),
                     gapOf(overProfile, bareProfile));
-        EXPECT_LE(canvasGap, kPairTolerance) << theme << ": the canvas beside the ghost";
-        EXPECT_LE(canvasGhostGap, kPairTolerance) << theme << ": the ghost over the canvas";
-        EXPECT_GE(gapOf(overCanvas, bare), kGhostLift) << theme << ": the ghost shows over the canvas";
-        EXPECT_GE(gapOf(overProfile, bareProfile), kGhostLift) << theme << ": the ghost tints the profile";
+        EXPECT_LE(canvasGap, kPairTolerance) << theme << ": canvas beside the ghost";
+        EXPECT_LE(canvasGhostGap, kPairTolerance) << theme << ": ghost over the canvas";
+        EXPECT_GE(gapOf(overCanvas, bare), kGhostLift) << theme << ": ghost shows over the canvas";
+        EXPECT_GE(gapOf(overProfile, bareProfile), kGhostLift) << theme << ": ghost tints the profile";
     }
 
     for (UiDriver* driver : {ui.get(), &old}) {
@@ -232,13 +232,13 @@ TEST_F(PreviewPairTest, AFilletPreviewKeepsItsEdgeInViewAndCancelKeepsTheCommitt
     ui->fill("Radius", "4", false);
     ASSERT_EQ(canvas->scene().bodies.size(), 1U);
     const snapshot::Body& preview = *canvas->scene().bodies.front();
-    EXPECT_NE(preview.mesh, committed) << "the fillet preview shows its result";
+    EXPECT_NE(preview.mesh, committed) << "fillet preview shows its result";
     EXPECT_FALSE(preview.ghost);
     EXPECT_FLOAT_EQ(preview.opacity, 1.0F) << "only extrude and revolve show a ghost";
     ASSERT_EQ(canvas->pickScene().bodies.size(), 1U);
     EXPECT_EQ(canvas->pickScene().bodies.front()->mesh, committed) << "picks hit the committed mesh";
     EXPECT_TRUE(canvas->chunks().overlaid().contains({preview.feature, preview.part}));
-    EXPECT_FALSE(picker->panelItems().selected.empty()) << "the consumed edge stays picked on the model";
+    EXPECT_FALSE(picker->panelItems().selected.empty()) << "consumed edge stays picked on the model";
 
     const gp_Pnt trimmed(-kBlockWidth / 2, -kBlockDepth / 2 + 1.0, kBlockHeight);
     ui->move(kAwayFromBlock);
@@ -246,7 +246,7 @@ TEST_F(PreviewPairTest, AFilletPreviewKeepsItsEdgeInViewAndCancelKeepsTheCommitt
     ui->move(ui->at(trimmed));
     const QImage hovered = ui->canvasImage();
     ui->save("fillet hovers a trimmed edge");
-    ASSERT_TRUE(picker->hovered()) << "the fillet cut this end away, the model still has it";
+    ASSERT_TRUE(picker->hovered()) << "fillet cut this end away, the model still has it";
     EXPECT_EQ(picker->hovered()->kind, app::Pick::Kind::Edge);
     EXPECT_GE(gapOf(medianAt(away, ui->at(trimmed)), medianAt(hovered, ui->at(trimmed))), kGhostLift)
         << "and the hover lights it";
@@ -282,7 +282,7 @@ TEST_F(PreviewPairTest, OnlyTheViewThatShowsBuildsBodiesWhenWindowsOfBothKindsAl
 
     UiDriver old(app::StartupOptions{.view = app::ViewKind::Old, .graphicsApi = std::nullopt});
     open(old);
-    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "the old view draws its bodies";
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "old view draws its bodies";
 
     filletPreview(*ui);
     EXPECT_EQ(hidden.displayedBodies(), 0U) << "during a preview";
@@ -298,7 +298,7 @@ TEST_F(PreviewPairTest, OnlyTheViewThatShowsBuildsBodiesWhenWindowsOfBothKindsAl
     EXPECT_EQ(canvas->scene().bodies.size(), 1U);
 
     filletPreview(old);
-    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "the old view draws the preview";
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "old view draws the preview";
     old.pressButton("OK");
     ASSERT_FALSE(old.state()["featurePanel"]);
     EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "and the edit";
@@ -307,7 +307,7 @@ TEST_F(PreviewPairTest, OnlyTheViewThatShowsBuildsBodiesWhenWindowsOfBothKindsAl
         app::StartupOptions{.view = app::ViewKind::New, .graphicsApi = app::startupFromEnvironment().graphicsApi});
     ASSERT_NE(again.viewport(), nullptr);
     open(again);
-    EXPECT_EQ(again.window().scene()->displayedBodies(), 0U) << "a viewport window opened after an old one";
+    EXPECT_EQ(again.window().scene()->displayedBodies(), 0U) << "viewport window opened after an old one";
     EXPECT_EQ(again.viewport()->scene().bodies.size(), 1U);
     EXPECT_EQ(old.window().scene()->displayedBodies(), 1U);
 }

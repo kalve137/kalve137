@@ -162,7 +162,7 @@ TEST_F(MenuTest, TimelineHoverHighlightsTheBody)
     ui->save("hovered");
     EXPECT_GT(shift(lit, plain), kColorShift) << plain.name().toStdString() << " " << lit.name().toStdString();
     ui->move(ui->timelineChip(1));
-    EXPECT_LT(shift(ui->shot().pixelColor(top), plain), kColorShift) << "The sketch shapes no body";
+    EXPECT_LT(shift(ui->shot().pixelColor(top), plain), kColorShift) << "Sketch shapes no body";
 }
 
 TEST_F(MenuTest, BrowserHidesAndShowsABody)
@@ -176,7 +176,7 @@ TEST_F(MenuTest, BrowserHidesAndShowsABody)
     const auto erased = ui->viewport() == nullptr ? 1 : 0;
     ui->contextMenu(ui->browserItem("Body1"), "Hide");
     EXPECT_FALSE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
-    EXPECT_EQ(displayed(), before - erased) << "the old view erases only the body";
+    EXPECT_EQ(displayed(), before - erased) << "old view erases only the body";
     ui->save("hidden");
     ui->contextMenu(ui->browserItem("Body1"), "Show");
     EXPECT_TRUE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);

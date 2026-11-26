@@ -48,7 +48,7 @@ void pinCanvas(app::MainWindow& window, const QWidget& canvas)
         window.resize(window.size() + kCanvasSize - canvas.size());
         QApplication::processEvents();
     }
-    EXPECT_EQ(canvas.size(), kCanvasSize) << "The pair window's canvas keeps one size on every platform";
+    EXPECT_EQ(canvas.size(), kCanvasSize) << "Pair window's canvas keeps one size on every platform";
 }
 
 void hideViewCube(viewer::OcctViewWidget& view)
@@ -72,7 +72,7 @@ std::optional<std::string> viewportMissing()
     }
     const render::GraphicsApi api = startup.graphicsApi.value_or(render::platformGraphicsApi());
     if (!render::canStart(api)) {
-        return std::format("The viewport has no usable {} device here", render::graphicsApiName(api));
+        return std::format("Viewport has no usable {} device here", render::graphicsApiName(api));
     }
     return std::nullopt;
 }
@@ -94,7 +94,7 @@ std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view)
             return window->oldView()->isReady();
         },
         kReadyMs);
-    EXPECT_TRUE(settled) << "The window's view did not start";
+    EXPECT_TRUE(settled) << "Window's view did not start";
     if (QWidget* canvas = view == app::ViewKind::New ? static_cast<QWidget*>(window->viewport())
                                                      : static_cast<QWidget*>(window->oldView())) {
         pinCanvas(*window, *canvas);
@@ -182,7 +182,7 @@ Shots grabPair(app::MainWindow& oldWindow, app::MainWindow& newWindow, const std
     viewer::OcctViewWidget& old = *oldWindow.oldView();
     EXPECT_TRUE(
         QTest::qWaitFor([&] { return !newWindow.cameraCommands()->isAnimating() && !old.isAnimating(); }, kReadyMs))
-        << "The camera kept moving before the pair was aimed";
+        << "Camera kept moving before the pair was aimed";
     aim(newWindow);
     QTest::qWait(kSettleMs);
     const camera::Camera camera = canvas.camera();

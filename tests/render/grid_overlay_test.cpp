@@ -101,11 +101,10 @@ TEST(GridOverlay, FadesEachLineTowardTheBackgroundAtTheRim)
     bool sawAxisX = false;
     for (const OverlayLine& line : grid.lines) {
         if (std::hypot(line.start[0], line.start[1]) >= overlay.layout().radius * 0.999) {
-            EXPECT_TRUE(nearColor(line.startColor, background)) << "a line starts on the rim in the background color";
+            EXPECT_TRUE(nearColor(line.startColor, background)) << "line starts on the rim in the background color";
         }
         if (std::abs(line.start[1]) < 1e-6 && std::abs(line.end[1]) < 1e-6 && std::abs(line.start[0]) < 1e-3) {
-            EXPECT_TRUE(nearColor(line.startColor, vertexColor(kColors.axisX)))
-                << "the X axis is unfaded at the center";
+            EXPECT_TRUE(nearColor(line.startColor, vertexColor(kColors.axisX))) << "X axis is unfaded at the center";
             EXPECT_FLOAT_EQ(line.width, static_cast<float>(kGridAxisWidth));
             sawAxisX = true;
         }
@@ -138,17 +137,17 @@ TEST(GridOverlay, RebuildsOnlyWhenTheStaleRuleSaysSo)
     ASSERT_TRUE(camera.setEyeAndCenter(camera.eye() + camera::Vec3{radius * 0.02, 0.0, 0.0},
                                        camera.center() + camera::Vec3{radius * 0.02, 0.0, 0.0}));
     overlay.update(camera, kViewport, {});
-    EXPECT_EQ(overlay.draw(camera, kViewport).revision, first) << "a small pan keeps the lines";
+    EXPECT_EQ(overlay.draw(camera, kViewport).revision, first) << "small pan keeps the lines";
 
     ASSERT_TRUE(camera.setEyeAndCenter(camera.eye() + camera::Vec3{radius * 0.5, 0.0, 0.0},
                                        camera.center() + camera::Vec3{radius * 0.5, 0.0, 0.0}));
     overlay.update(camera, kViewport, {});
-    EXPECT_NE(overlay.draw(camera, kViewport).revision, first) << "a long pan recenters";
+    EXPECT_NE(overlay.draw(camera, kViewport).revision, first) << "long pan recenters";
 
     const std::uint64_t panned = overlay.draw(camera, kViewport).revision;
     ASSERT_TRUE(camera.setScale(camera.scale() / 8.0));
     overlay.update(camera, kViewport, {});
-    EXPECT_NE(overlay.draw(camera, kViewport).revision, panned) << "a zoom changes the step";
+    EXPECT_NE(overlay.draw(camera, kViewport).revision, panned) << "zoom changes the step";
 }
 
 TEST(GridOverlay, WashesOnlyWithoutAnExtentAndHidesWhole)
@@ -161,7 +160,7 @@ TEST(GridOverlay, WashesOnlyWithoutAnExtentAndHidesWhole)
     overlay.update(camera, kViewport, {});
     EXPECT_TRUE(overlay.draw(camera, kViewport).wash.empty());
     EXPECT_FALSE(overlay.draw(camera, kViewport).lines.empty());
-    EXPECT_NEAR(overlay.layout().radius, 10.0, 1e-12) << "a small extent bounds the disk";
+    EXPECT_NEAR(overlay.layout().radius, 10.0, 1e-12) << "small extent bounds the disk";
 
     settings.visible = false;
     overlay.setSettings(settings);
@@ -302,9 +301,9 @@ void expectGridOnlyAround(const snapshot::Scene& scene, const camera::Vec3& cent
                 const Changes changes = changesOf(drawn, backgroundPixel());
                 const std::string where = what + " " + std::to_string(static_cast<int>(projection)) + " at " +
                                           std::to_string(elevation) + " and " + std::to_string(degrees);
-                EXPECT_EQ(changes.onBodies, 0U) << where << ": the grid never shows through the body";
+                EXPECT_EQ(changes.onBodies, 0U) << where << ": grid never shows through the body";
                 EXPECT_LE(changes.onSilhouettes, 8U) << where << ": only the face bias at grazing rims lets it touch";
-                EXPECT_GT(changes.onBackground, 500U) << where << ": the grid shows around the body";
+                EXPECT_GT(changes.onBackground, 500U) << where << ": grid shows around the body";
             }
         }
     }
@@ -334,12 +333,12 @@ TEST(GridOverlay, AGridOutsideTheBodyRangeDrawsInFrontOrBehind)
     for (const camera::Projection projection : {camera::Projection::Orthographic, camera::Projection::Perspective}) {
         const Drawn above = drawBoth(scene, lookingAt({0.0, 0.0, 55.0}, 20.0, 50.0, 60.0), projection);
         const Changes behind = changesOf(above, backgroundPixel());
-        EXPECT_EQ(behind.onBodies + behind.onSilhouettes, 0U) << "the grid beyond the far end stays behind the body";
+        EXPECT_EQ(behind.onBodies + behind.onSilhouettes, 0U) << "grid beyond the far end stays behind the body";
         EXPECT_GT(behind.onBackground, 500U) << "and still draws whole";
 
         const Drawn below = drawBoth(scene, lookingAt({0.0, 0.0, 55.0}, 20.0, -50.0, 60.0), projection);
         const Changes front = changesOf(below, backgroundPixel());
-        EXPECT_GT(front.onBodies, 200U) << "the grid before the near end draws over the body";
+        EXPECT_GT(front.onBodies, 200U) << "grid before the near end draws over the body";
     }
 }
 
@@ -349,7 +348,7 @@ TEST(GridOverlay, ALowOrbitRunsTheGridToTheHorizonWithoutCuts)
     const snapshot::Scene scene{.bodies = {box}, .origin = {}, .hidden = {}};
     const Drawn drawn = drawBoth(scene, lookingAt({0.0, 0.0, 2.5}, 30.0, 3.0, 20.0), camera::Projection::Perspective);
     const Changes changes = changesOf(drawn, backgroundPixel());
-    EXPECT_EQ(changes.onBodies, 0U) << "the back edges stay hidden and the faces whole";
+    EXPECT_EQ(changes.onBodies, 0U) << "back edges stay hidden and the faces whole";
     std::size_t rowsWithGrid = 0;
     for (int y = 0; y < drawn.gridded.height; ++y) {
         for (int x = 0; x < drawn.gridded.width; ++x) {
@@ -359,7 +358,7 @@ TEST(GridOverlay, ALowOrbitRunsTheGridToTheHorizonWithoutCuts)
             }
         }
     }
-    EXPECT_GT(rowsWithGrid, static_cast<std::size_t>(kViewport.height / 3)) << "the grid reaches toward the horizon";
+    EXPECT_GT(rowsWithGrid, static_cast<std::size_t>(kViewport.height / 3)) << "grid reaches toward the horizon";
 }
 
 } // namespace

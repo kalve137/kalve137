@@ -42,7 +42,7 @@ TEST_F(HarnessTest, RendersTheWindowOffScreen)
                 colors.insert(view.pixel(x, y));
             }
         }
-        EXPECT_GT(colors.size(), 3U) << "The view rendered a flat image";
+        EXPECT_GT(colors.size(), 3U) << "View rendered a flat image";
     }
     const QImage whole = ui->shot();
     EXPECT_EQ(whole.size(), ui->window().size() * ui->window().devicePixelRatio());

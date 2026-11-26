@@ -164,10 +164,10 @@ if not ran:
     print("No viewport test ran", file=sys.stderr)
     status = 1
 if any("no usable" in message for _, message in skipped):
-    print("The viewport found no OpenGL device", file=sys.stderr)
+    print("Viewport found no OpenGL device", file=sys.stderr)
     status = 1
 if any("OpenGL 3.2" in message for _, message in skipped):
-    print("A reference color test skipped although llvmpipe has OpenGL 4.5", file=sys.stderr)
+    print("Reference color test skipped although llvmpipe has OpenGL 4.5", file=sys.stderr)
     status = 1
 sys.exit(status)
 EOF

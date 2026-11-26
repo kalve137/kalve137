@@ -99,7 +99,7 @@ TEST(Transparency, AnOpacityChangeKeepsTheMeshAndMovesTheBodyToItsOwnChunk)
     EXPECT_EQ(seeThrough.ranges[0].indexCount, seeThrough.indices.size());
 
     const DrawList picks = chunks.pickList(frame);
-    EXPECT_EQ(picks.chunks.size(), 2U) << "a half transparent model body stays pickable";
+    EXPECT_EQ(picks.chunks.size(), 2U) << "half transparent model body stays pickable";
     EXPECT_TRUE(picks.transparent.empty());
 }
 

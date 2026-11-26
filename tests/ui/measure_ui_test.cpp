@@ -87,8 +87,7 @@ TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
         ASSERT_NE(picker, nullptr);
         ASSERT_TRUE(picker->hovered());
         EXPECT_EQ(picker->hovered()->kind, app::Pick::Kind::Vertex);
-        EXPECT_GE(markerChangeAround(away, hovered, ui->at(kBottomCorner)), kChangedPixels)
-            << "the hovered vertex shows";
+        EXPECT_GE(markerChangeAround(away, hovered, ui->at(kBottomCorner)), kChangedPixels) << "hovered vertex shows";
     }
 
     ui->click(kTopFace);
@@ -106,7 +105,7 @@ TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
         const std::ptrdiff_t atFace = markersAt(*ui, *canvas, kTopCorner);
         std::printf("picked vertex at pixel %.0f %.0f: %td markers there, %td at the face end\n", vertex.x(),
                     vertex.y(), atVertex, atFace);
-        EXPECT_EQ(atVertex, 1) << "the picker's ball alone marks the picked vertex";
+        EXPECT_EQ(atVertex, 1) << "picker's ball alone marks the picked vertex";
         EXPECT_EQ(atFace, 1) << "measure marks the face end";
         ASSERT_EQ(canvas->vertexMarks().size(), 1U);
         EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ball);
@@ -122,7 +121,7 @@ TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
         EXPECT_LE(pixelsBetween(drawn, ui->at(kTopCorner)), kOnPoint);
         auto* picker = ui->window().findChild<app::ViewportPicker*>();
         ASSERT_NE(picker, nullptr);
-        EXPECT_EQ(picker->panelItems().selected.size(), 2U) << "the face and the vertex show picked";
+        EXPECT_EQ(picker->panelItems().selected.size(), 2U) << "face and the vertex show picked";
     }
 
     ui->pressButton("Close");

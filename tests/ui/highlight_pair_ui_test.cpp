@@ -471,15 +471,15 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
             const Measure line = edgeMeasure(lit, plain, from, to, oldTarget, newTarget);
             const std::string lineName = state.kind == Kind::Face ? state.name + " outline" : state.name;
             record(lineName, line);
-            EXPECT_GE(line.oldLift, kMinLift) << stem << ", " << lineName << ": the old view shows it";
-            EXPECT_GE(line.shown, kMinShownShare) << stem << ", " << lineName << ": the viewport shows it";
+            EXPECT_GE(line.oldLift, kMinLift) << stem << ", " << lineName << ": old view shows it";
+            EXPECT_GE(line.shown, kMinShownShare) << stem << ", " << lineName << ": viewport shows it";
             rule(stem + (state.kind == Kind::Face ? " outline" : ""), newTarget, line.fresh, kColorTolerance);
             if (state.kind == Kind::Edge && state.selected) {
                 const double oldWidth = goldWidth(lit.old, plain.old, from * ratio, to * ratio, oldTarget);
                 const double newWidth = goldWidth(lit.fresh, plain.fresh, from * ratio, to * ratio, newTarget);
                 const double expected = render::kHighlightEdgeWidth * ratio;
                 m_rules << std::format("{} width\t{:.2f}\t{:.2f}\t{:.2f}\n", stem, expected, newWidth, oldWidth);
-                EXPECT_NEAR(newWidth, expected, kWidthTolerance * ratio) << stem << ": the core width";
+                EXPECT_NEAR(newWidth, expected, kWidthTolerance * ratio) << stem << ": core width";
             }
             if (state.kind == Kind::Face) {
                 const Measure tint = faceMeasure(lit, plain, face * ratio);
@@ -527,11 +527,11 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
             const Halo halo = haloOf(lit, plain, from, to, side);
             m_rules << std::format("halo {} side {}\t{}\t{:.3f}\t\n", name, side, halo.light ? "darker" : "lighter",
                                    halo.push);
-            EXPECT_GE(halo.push, 0.1) << name << " side " << side << ": the halo pushes away from the face";
+            EXPECT_GE(halo.push, 0.1) << name << " side " << side << ": halo pushes away from the face";
             EXPECT_LE(halo.push, render::kHaloStep + 0.05) << name << " side " << side;
             sawLight = sawLight || halo.light;
         }
-        EXPECT_EQ(sawLight, light) << name << ": a light face sits on at least one side";
+        EXPECT_EQ(sawLight, light) << name << ": light face sits on at least one side";
         act(*m_old->oldView(), kEmpty, true);
         act(*m_new->viewport(), kEmpty, true);
     }
@@ -561,8 +561,8 @@ TEST_F(HighlightPairTest, HoverAndSelectionFollowTheNewRules)
         const double expected = (render::kHiddenDash + render::kHiddenGap) * ratio / major;
         const std::optional<double> period = dashPeriod(hiddenEdge.fresh, from, to);
         m_rules << std::format("hidden edge dash period\t{:.1f}\t{:.1f}\t\n", expected, period.value_or(0.0));
-        ASSERT_TRUE(period.has_value()) << "a hidden selected edge shows in runs";
-        EXPECT_NEAR(*period, expected, 2.0 * ratio) << "the runs repeat at the dash period";
+        ASSERT_TRUE(period.has_value()) << "hidden selected edge shows in runs";
+        EXPECT_NEAR(*period, expected, 2.0 * ratio) << "runs repeat at the dash period";
         grabPair(*m_old, *m_new, homeCamera);
         reset(blockDocument());
     }

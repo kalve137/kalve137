@@ -215,7 +215,7 @@ TEST(BodyMesh, OnlySolidsWithClosedShellsAreClosed)
     const TopoDS_Shape box = BRepPrimAPI_MakeBox(10.0, 20.0, 30.0).Shape();
     ShapeMap faces;
     TopExp::MapShapes(box, TopAbs_FACE, faces);
-    EXPECT_FALSE(meshBody(faces(1)).closed) << "a loose face";
+    EXPECT_FALSE(meshBody(faces(1)).closed) << "loose face";
 
     BRep_Builder builder;
     TopoDS_Shell shell;
@@ -226,13 +226,13 @@ TEST(BodyMesh, OnlySolidsWithClosedShellsAreClosed)
     TopoDS_Solid solid;
     builder.MakeSolid(solid);
     builder.Add(solid, shell);
-    EXPECT_FALSE(meshBody(solid).closed) << "a box with its last face missing";
+    EXPECT_FALSE(meshBody(solid).closed) << "box with its last face missing";
 
     TopoDS_Compound compound;
     builder.MakeCompound(compound);
     builder.Add(compound, BRepPrimAPI_MakeBox(10.0, 20.0, 30.0).Shape());
     builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(50.0, 0.0, 0.0), 1.0, 1.0, 1.0).BottomFace());
-    EXPECT_FALSE(meshBody(compound).closed) << "a solid next to a loose face";
+    EXPECT_FALSE(meshBody(compound).closed) << "solid next to a loose face";
 }
 
 TEST(BodyMesh, AMirroredPlacementKeepsTrianglesOutward)

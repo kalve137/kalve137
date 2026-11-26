@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Check the version
+      - name: Check version
         shell: pwsh
         env:
           TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
@@ -75,7 +75,7 @@ jobs:
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 
-      - name: Restore the vcpkg binary cache
+      - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v6
         with:
@@ -83,7 +83,7 @@ jobs:
           key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
-      - name: Count the vcpkg binary cache after restore
+      - name: Count vcpkg binary cache after restore
         id: vcpkg-cache-count-before
         run: pwsh ./scripts/ci-vcpkg-cache.ps1 count -Path C:\vcpkg-cache
 
@@ -94,7 +94,7 @@ jobs:
           git -C $env:VCPKG_ROOT checkout $env:VCPKG_COMMIT
           & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Start the vcpkg build log tail
+      - name: Start vcpkg build log tail
         run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-start -VcpkgRoot $env:VCPKG_ROOT
 
       - name: Build
@@ -106,7 +106,7 @@ jobs:
           python scripts/ci-no-cmake-warnings.py cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Stop the vcpkg build log tail
+      - name: Stop vcpkg build log tail
         if: always()
         run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-stop
 
@@ -119,7 +119,7 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
-      - name: Plan the vcpkg binary cache save
+      - name: Plan vcpkg binary cache save
         id: vcpkg-cache-save
         if: steps.build.outcome == 'success'
         env:
@@ -129,7 +129,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: pwsh ./scripts/ci-vcpkg-cache.ps1 save-plan -Path C:\vcpkg-cache
 
-      - name: Save the vcpkg binary cache
+      - name: Save vcpkg binary cache
         if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
@@ -150,7 +150,7 @@ jobs:
           ctest --preset windows-release -j $env:NUMBER_OF_PROCESSORS --timeout 180 --output-junit test-results.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Summarize the tests
+      - name: Summarize tests
         if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         run: python scripts/ci-test-report.py "Windows tests" build/windows-release/test-results.xml
 
@@ -166,7 +166,7 @@ jobs:
         timeout-minutes: 10
         run: python scripts/ci-no-cmake-warnings.py pwsh ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
 
-      - name: Upload the package
+      - name: Upload package
         uses: actions/upload-artifact@v7
         with:
           name: kalve137-windows-x64
@@ -185,7 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install the system packages
+      - name: Install system packages
         run: bash scripts/linux-deps.sh
 
       - name: Install Qt
@@ -199,7 +199,7 @@ jobs:
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 
-      - name: Restore the vcpkg binary cache
+      - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v6
         with:
@@ -207,7 +207,7 @@ jobs:
           key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
-      - name: Count the vcpkg binary cache after restore
+      - name: Count vcpkg binary cache after restore
         id: vcpkg-cache-count-before
         run: bash scripts/ci-vcpkg-cache.sh count -Path /home/runner/vcpkg-cache
 
@@ -218,7 +218,7 @@ jobs:
           git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
-      - name: Start the vcpkg build log tail
+      - name: Start vcpkg build log tail
         run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
 
       - name: Build
@@ -227,7 +227,7 @@ jobs:
           python3 scripts/ci-no-cmake-warnings.py cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           python3 scripts/ci-no-cmake-warnings.py cmake --build --preset linux-release
 
-      - name: Stop the vcpkg build log tail
+      - name: Stop vcpkg build log tail
         if: always()
         run: bash scripts/ci-vcpkg-cache.sh tail-stop
 
@@ -240,7 +240,7 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
-      - name: Plan the vcpkg binary cache save
+      - name: Plan vcpkg binary cache save
         id: vcpkg-cache-save
         if: steps.build.outcome == 'success'
         env:
@@ -250,30 +250,30 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /home/runner/vcpkg-cache
 
-      - name: Save the vcpkg binary cache
+      - name: Save vcpkg binary cache
         if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
           path: /home/runner/vcpkg-cache
           key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
-      - name: Test without a window
+      - name: Test without window
         id: test
         timeout-minutes: 10
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset linux-release -LE ui --timeout 180 --output-junit test-results.xml
 
-      - name: Summarize the tests without a window
+      - name: Summarize tests without window
         if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         run: python3 scripts/ci-test-report.py "Linux tests without a window" build/linux-release/test-results.xml
 
-      - name: Test the viewport on OpenGL
+      - name: Test viewport on OpenGL
         id: opengl
         timeout-minutes: 15
         run: bash scripts/linux-opengl-tests.sh
 
-      - name: Summarize the viewport tests on OpenGL
+      - name: Summarize viewport tests on OpenGL
         if: ${{ !cancelled() && steps.opengl.outcome != 'skipped' }}
         run: >-
           python3 scripts/ci-test-report.py "Linux viewport on OpenGL" build/linux-release/opengl-results
@@ -291,7 +291,7 @@ jobs:
         timeout-minutes: 10
         run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-linux.sh --skip-build
 
-      - name: Upload the package
+      - name: Upload package
         uses: actions/upload-artifact@v7
         with:
           name: kalve137-linux-x64
@@ -310,7 +310,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install the build tools
+      - name: Install build tools
         run: brew install autoconf autoconf-archive automake libtool ninja pkgconf
 
       - name: Install Qt
@@ -324,7 +324,7 @@ jobs:
           cache: true
           aqtsource: ${{ env.AQT_SOURCE }}
 
-      - name: Restore the vcpkg binary cache
+      - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v6
         with:
@@ -332,7 +332,7 @@ jobs:
           key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
           restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
-      - name: Count the vcpkg binary cache after restore
+      - name: Count vcpkg binary cache after restore
         id: vcpkg-cache-count-before
         run: bash scripts/ci-vcpkg-cache.sh count -Path /Users/runner/vcpkg-cache
 
@@ -343,7 +343,7 @@ jobs:
           git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
-      - name: Start the vcpkg build log tail
+      - name: Start vcpkg build log tail
         run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
 
       - name: Build
@@ -352,7 +352,7 @@ jobs:
           python3 scripts/ci-no-cmake-warnings.py cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev
           python3 scripts/ci-no-cmake-warnings.py cmake --build --preset macos-release
 
-      - name: Stop the vcpkg build log tail
+      - name: Stop vcpkg build log tail
         if: always()
         run: bash scripts/ci-vcpkg-cache.sh tail-stop
 
@@ -365,7 +365,7 @@ jobs:
           retention-days: 3
           if-no-files-found: ignore
 
-      - name: Plan the vcpkg binary cache save
+      - name: Plan vcpkg binary cache save
         id: vcpkg-cache-save
         if: steps.build.outcome == 'success'
         env:
@@ -375,21 +375,21 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /Users/runner/vcpkg-cache
 
-      - name: Save the vcpkg binary cache
+      - name: Save vcpkg binary cache
         if: steps.vcpkg-cache-save.outputs.save == 'true'
         uses: actions/cache/save@v6
         with:
           path: /Users/runner/vcpkg-cache
           key: ${{ steps.vcpkg-cache-save.outputs.key }}
 
-      - name: Test without a window
+      - name: Test without window
         id: test
         timeout-minutes: 10
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset macos-release -LE ui --timeout 180 --output-junit test-results.xml
 
-      - name: Summarize the tests without a window
+      - name: Summarize tests without window
         if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
         run: python3 scripts/ci-test-report.py "macOS tests without a window" build/macos-release/test-results.xml
 
@@ -397,7 +397,7 @@ jobs:
         timeout-minutes: 10
         run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-macos.sh --skip-build
 
-      - name: Upload the package
+      - name: Upload package
         uses: actions/upload-artifact@v7
         with:
           name: kalve137-macos-arm64
@@ -414,14 +414,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download the packages
+      - name: Download packages
         uses: actions/download-artifact@v8
         with:
           pattern: kalve137-*
           path: package
           merge-multiple: true
 
-      - name: Attach the packages to the release
+      - name: Attach packages to release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}

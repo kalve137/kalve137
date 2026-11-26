@@ -85,7 +85,7 @@ TEST_F(ViewportTest, FitsASketchOnlyDesignToTheSketch)
         left = std::min(left, at.x);
         right = std::max(right, at.x);
     }
-    EXPECT_GT(right - left, viewport.width * 0.5) << "the sketch fills the view";
+    EXPECT_GT(right - left, viewport.width * 0.5) << "sketch fills the view";
 }
 
 TEST_F(ViewportTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
@@ -117,7 +117,7 @@ TEST_F(ViewportTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
     EXPECT_EQ(bounds->min.y, -10.0);
     expectSameMatrix(canvas->camera().projection(), projection, "projection");
     const render::Frame after = canvas->frame();
-    EXPECT_EQ(after.viewProjection, before.viewProjection) << "the body depth range stays";
+    EXPECT_EQ(after.viewProjection, before.viewProjection) << "body depth range stays";
     EXPECT_EQ(after.exactViewProjection, before.exactViewProjection);
     for (const snapshot::Point& point : distant) {
         const std::array<float, 16>& m = after.wideViewProjection;
@@ -127,7 +127,7 @@ TEST_F(ViewportTest, ASketchOutsideTheBodiesLeavesTheDepthRange)
                 (m.at(row) * point[0]) + (m.at(row + 4) * point[1]) + (m.at(row + 8) * point[2]) + m.at(row + 12);
         }
         const double depth = clip[2] / clip[3];
-        EXPECT_GE(depth, -1.0) << "the sketch clamps into the depth range instead of clipping";
+        EXPECT_GE(depth, -1.0) << "sketch clamps into the depth range instead of clipping";
         EXPECT_LE(depth, 1.0);
     }
     const std::optional<camera::Box> fitted = canvas->fitBounds(60.0);
@@ -184,14 +184,14 @@ TEST_F(ViewportTest, AChangeShowsInTheNextFrame)
     expectShown(*canvas, {}, "an origin change");
     const QImage moved = grabbed(*canvas);
     EXPECT_LT(differing(moved, previous), static_cast<std::size_t>(moved.width() * moved.height()) / 200)
-        << "a new origin draws the same picture";
+        << "new origin draws the same picture";
     previous = moved;
 
     render::ViewportStyle denser = canvas->viewportStyle();
     denser.pixelRatio = 2.0;
     canvas->setViewportStyle(denser);
     expectShown(*canvas, {}, "a pixel ratio change");
-    EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, 2.0) << "the next frame draws at the new ratio";
+    EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, 2.0) << "next frame draws at the new ratio";
     canvas->setViewportStyle(themed);
     expectShown(*canvas, {}, "the theme and the pixel ratio back");
     EXPECT_EQ(canvas->chunks().draw({}).pixelRatio, themed.pixelRatio);
@@ -243,17 +243,17 @@ TEST_F(ViewportTest, HideAndShowRewriteOnlyThePalette)
     session.setBodyVisible(second, false);
     EXPECT_EQ(canvas->scene().bodies.size(), 1U);
     EXPECT_EQ(canvas->scene().hidden.size(), 1U);
-    EXPECT_EQ(canvas->chunks().meshBuilds(), meshBuilds) << "a hide rewrites palettes only";
+    EXPECT_EQ(canvas->chunks().meshBuilds(), meshBuilds) << "hide rewrites palettes only";
     expectShown(*canvas, before, "a hide");
-    EXPECT_FALSE(session.rays().rays(canvas->scene()).first(above, down)) << "a hidden body takes no ray";
-    EXPECT_EQ(session.rays().builds(), rayBuilds) << "a hide keeps the ray scene";
-    EXPECT_EQ(displayedObjects(old), displayed) << "the hidden view draws no bodies to erase";
+    EXPECT_FALSE(session.rays().rays(canvas->scene()).first(above, down)) << "hidden body takes no ray";
+    EXPECT_EQ(session.rays().builds(), rayBuilds) << "hide keeps the ray scene";
+    EXPECT_EQ(displayedObjects(old), displayed) << "hidden view draws no bodies to erase";
 
     session.setBodyVisible(second, true);
-    EXPECT_EQ(canvas->scene().bodies, bodies) << "a show puts the body back in model order";
+    EXPECT_EQ(canvas->scene().bodies, bodies) << "show puts the body back in model order";
     EXPECT_TRUE(canvas->scene().hidden.empty());
     EXPECT_EQ(canvas->chunks().meshBuilds(), meshBuilds);
-    EXPECT_EQ(differing(grabbed(*canvas), before), 0U) << "a hide and a show leave the same frame";
+    EXPECT_EQ(differing(grabbed(*canvas), before), 0U) << "hide and a show leave the same frame";
     EXPECT_TRUE(session.rays().rays(canvas->scene()).first(above, down));
     EXPECT_EQ(session.rays().builds(), rayBuilds);
     EXPECT_EQ(displayedObjects(old), displayed);

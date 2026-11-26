@@ -85,7 +85,7 @@ TEST_F(DimensionTest, LandsWhereTheClickPutsItAndPreviewsTheTypedValue)
     const nlohmann::json kept = state["dimensions"][0];
     EXPECT_NEAR(kept["value"].get<double>(), 56.0, kNear);
     EXPECT_NEAR(kept["measured"].get<double>(), 56.0, 1e-4);
-    EXPECT_NEAR(kept["label"][1].get<double>(), -13.0, kPixel) << "The label keeps its offset from the line";
+    EXPECT_NEAR(kept["label"][1].get<double>(), -13.0, kPixel) << "Label keeps its offset from the line";
 }
 
 TEST_F(DimensionTest, TwoPointsMeasureAlongTheAxisTheCursorLeavesBy)
