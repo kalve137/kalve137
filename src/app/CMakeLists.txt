@@ -121,6 +121,8 @@ add_library(kalve137_app STATIC
     view/viewport_navigation.h
     view/viewport_picker.cpp
     view/viewport_picker.h
+    view/panel_picks.cpp
+    view/panel_picks.h
     view/pick.h
     view/pick_source.h
     view/scene.cpp
