@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Install Ubuntu 24.04 packages for Linux build, excluding Qt and vcpkg.
-
 set -euo pipefail
 
 sudo=""

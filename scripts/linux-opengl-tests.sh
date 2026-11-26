@@ -2,13 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Run the viewport UI tests of ctest's Viewport.* on OpenGL with Mesa llvmpipe under Xvfb, after a
-# linux-release build, one test per core and tests with RUN_SERIAL or RESOURCE_LOCK alone after the
-# rest. Tests in EXCLUDED don't run here and are printed with their reason. Fails
-# when a test fails or times out, when no test ran, when the viewport found no OpenGL device or
-# when a reference color test skipped. The old view's glX messages from its unmapped hidden window
-# are counted instead of printed, and opengl-report.json feeds scripts/ci-test-report.py.
-
 set -euo pipefail
 
 sudo=""
