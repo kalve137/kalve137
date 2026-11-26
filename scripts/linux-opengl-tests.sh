@@ -36,6 +36,8 @@ EXCLUDED = {
         "sketch bar drops its labels at full width with the Linux fonts",
     "SelectTest.WindowOverThousandsOfFacesStaysFast":
         "window selection takes 1165 ms on the CPU rasterizer, budget 1000 ms",
+    "FeatureTest.IdleHoverAndSelectStayFast":
+        "worst viewport select takes 270 to 300 ms on the CPU rasterizer, budget 150 ms",
 }
 
 build = pathlib.Path(sys.argv[1]).resolve()
