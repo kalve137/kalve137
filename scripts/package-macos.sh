@@ -57,6 +57,19 @@ frameworks="$app/Contents/Frameworks"
 macos_dir="$app/Contents/MacOS"
 mkdir -p "$frameworks"
 
+cache_value() {
+    sed -n "s/^$1:[A-Z]*=//p" "$build/CMakeCache.txt"
+}
+
+vcpkg_installed="$(cache_value VCPKG_INSTALLED_DIR)"
+vcpkg_triplet="$(cache_value VCPKG_TARGET_TRIPLET)"
+if [[ -z "$vcpkg_installed" || -z "$vcpkg_triplet" ]]; then
+    echo "No vcpkg install dir or triplet in $build/CMakeCache.txt" >&2
+    exit 1
+fi
+lib_dirs=("$staging/lib" "$vcpkg_installed/$vcpkg_triplet/lib")
+copied=0
+
 is_macho() {
     file "$1" 2>/dev/null | grep -q 'Mach-O'
 }
@@ -76,6 +89,23 @@ is_bad_dep() {
     return 1
 }
 
+list_deps() {
+    otool -L "$1" | awk '/^\t/ {print $1}'
+}
+
+own_id() {
+    otool -D "$1" | awk '!/:$/ && id == "" {id = $0} END {print id}'
+}
+
+is_leak() {
+    case "$1" in
+        @rpath/* | @executable_path/* | @loader_path/*) return 1 ;;
+        /System/* | /usr/lib/*) return 1 ;;
+        /*) return 0 ;;
+    esac
+    return 1
+}
+
 add_exec_rpath() {
     local target="$1"
     if ! otool -l "$target" | grep -q 'path @executable_path/../Frameworks'; then
@@ -83,13 +113,40 @@ add_exec_rpath() {
     fi
 }
 
+bundle_rpath_dep() {
+    local name="$1"
+    local dest="$frameworks/$name"
+    if [[ -e "$dest" ]]; then
+        return
+    fi
+    local dir
+    for dir in "${lib_dirs[@]}"; do
+        if [[ -f "$dir/$name" ]]; then
+            cp -f "$dir/$name" "$dest"
+            chmod 755 "$dest"
+            install_name_tool -id "@rpath/$name" "$dest"
+            copied=1
+            return
+        fi
+    done
+}
+
 fix_dependencies() {
     local target="$1"
     local deps=()
+    local id
+    id="$(own_id "$target")"
     while IFS= read -r line; do
         deps+=("$line")
-    done < <(otool -L "$target" | tail -n +2 | awk '{print $1}')
+    done < <(list_deps "$target")
     for dep in "${deps[@]}"; do
+        if [[ "$dep" == "$id" ]]; then
+            continue
+        fi
+        if [[ "$dep" == @rpath/* ]]; then
+            bundle_rpath_dep "${dep#@rpath/}"
+            continue
+        fi
         if should_skip_dep "$dep"; then
             continue
         fi
@@ -134,30 +191,53 @@ bundle_dylibs() {
             local before
             before="$(otool -L "$macho")"
             fix_dependencies "$macho"
-            if [[ "$(otool -L "$macho")" != "$before" ]]; then
+            if [[ "$(otool -L "$macho")" != "$before" || "$copied" -eq 1 ]]; then
                 changed=1
+                copied=0
             fi
         done < <(list_machos)
     done
 }
 
-"$macdeployqt" "$app" -verbose=1 -always-overwrite
+"$macdeployqt" "$app" -verbose=1 -always-overwrite -no-strip
+rm -f "$app/Contents/PlugIns/generic/libqtuiotouchplugin.dylib"
 bundle_dylibs
 add_exec_rpath "$macos_dir/kalve137"
 
-bad=0
-while IFS= read -r macho; do
-    [[ -z "$macho" ]] && continue
-    while IFS= read -r dep; do
-        if is_bad_dep "$dep"; then
-            echo "Dependency leak in $macho: $dep" >&2
-            bad=1
-        fi
-    done < <(otool -L "$macho" | tail -n +2 | awk '{print $1}')
-done < <(list_machos)
-if [[ "$bad" -ne 0 ]]; then
+fonts="$app/Contents/Resources/fonts/roboto"
+for font in Roboto-Regular.ttf Roboto-Medium.ttf; do
+    if [[ ! -f "$fonts/$font" ]]; then
+        echo "The bundle is missing $fonts/$font" >&2
+        exit 1
+    fi
+done
+if [[ -e "$macos_dir/fonts" || -e "$staging/bin/fonts" ]]; then
+    echo "Fonts were installed outside $app/Contents/Resources" >&2
     exit 1
 fi
+
+leaks=0
+while IFS= read -r macho; do
+    [[ -z "$macho" ]] && continue
+    id="$(own_id "$macho")"
+    while IFS= read -r dep; do
+        [[ -n "$id" && "$dep" == "$id" ]] && continue
+        if [[ "$dep" == @rpath/* && ! -e "$frameworks/${dep#@rpath/}" ]]; then
+            echo "Unbundled dependency in $macho: $dep" >&2
+            leaks=$((leaks + 1))
+        elif is_leak "$dep"; then
+            echo "Dependency leak in $macho: $dep" >&2
+            leaks=$((leaks + 1))
+        fi
+    done < <(list_deps "$macho")
+done < <(list_machos)
+if [[ "$leaks" -ne 0 ]]; then
+    echo "$leaks dependency leaks in $app" >&2
+    exit 1
+fi
+
+codesign --force --deep --sign - "$app"
+codesign --verify --deep --strict "$app"
 
 zip="$package_dir/kalve137-macos-arm64.zip"
 rm -f "$zip"
@@ -175,16 +255,11 @@ if [[ -z "$unpacked_app" ]]; then
     exit 1
 fi
 
-sample="$unpacked_app/Contents/MacOS/samples/dodecahedron.k137"
-if [[ ! -f "$sample" ]]; then
-    echo "The bundle is missing $sample" >&2
-    exit 1
-fi
+sample="$root/assets/samples/dodecahedron.k137"
 
 smoke_out="$smoke_root/out"
 mkdir -p "$smoke_out"
-unset DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_INSERT_LIBRARIES DYLD_FALLBACK_LIBRARY_PATH || true
-export QT_QPA_PLATFORM=offscreen
+unset DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_INSERT_LIBRARIES DYLD_FALLBACK_LIBRARY_PATH QT_QPA_PLATFORM
 exe="$unpacked_app/Contents/MacOS/kalve137"
 if ! "$exe" --smoke "$sample" "$smoke_out"; then
     echo "Smoke failed" >&2
