@@ -22,7 +22,6 @@ function(kalve137_set_warnings target)
             -Werror=switch
         )
     endif()
-    kalve137_use_build_options(${target})
     set_target_properties(${target} PROPERTIES COMPILE_WARNING_AS_ERROR ${KALVE137_WARNINGS_AS_ERRORS})
     get_target_property(type ${target} TYPE)
     if(APPLE AND type STREQUAL "EXECUTABLE")

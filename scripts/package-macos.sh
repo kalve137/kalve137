@@ -199,7 +199,18 @@ bundle_dylibs() {
     done
 }
 
-"$macdeployqt" "$app" -verbose=1 -always-overwrite -no-strip
+deploy_args=("$app" -verbose=1 -always-overwrite -no-strip)
+for dir in "${lib_dirs[@]}"; do
+    if [[ -d "$dir" ]]; then
+        deploy_args+=("-libpath=$dir")
+    fi
+done
+deploy_log="$package_dir/macdeployqt.log"
+"$macdeployqt" "${deploy_args[@]}" 2>&1 | tee "$deploy_log"
+deploy_errors="$(grep -c '^ERROR' "$deploy_log" || true)"
+if [[ "$deploy_errors" -ne 0 && -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::warning title=macdeployqt::$deploy_errors ERROR lines from macdeployqt, see the Package step"
+fi
 rm -f "$app/Contents/PlugIns/generic/libqtuiotouchplugin.dylib"
 bundle_dylibs
 add_exec_rpath "$macos_dir/kalve137"
