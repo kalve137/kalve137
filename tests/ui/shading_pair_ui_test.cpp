@@ -166,7 +166,7 @@ TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
     if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
-    const std::filesystem::path folder = pairFolder("ShadingPairTest");
+    const std::filesystem::path folder = shotFolder();
     std::filesystem::create_directories(folder);
     std::ofstream faces(folder / "shading-pairs.tsv");
     faces << "case\ttheme\tbody\tface\told\tnew\tgap\n";

@@ -414,7 +414,7 @@ protected:
             window->beginSketch(design.sketch);
         }
         QTest::qWait(kSettleMs);
-        m_folder = pairFolder("ProjectPairTest");
+        m_folder = shotFolder();
         std::filesystem::create_directories(m_folder);
         return true;
     }

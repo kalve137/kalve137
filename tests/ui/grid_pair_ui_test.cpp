@@ -226,7 +226,7 @@ protected:
         for (app::MainWindow* window : {m_old.get(), m_new.get()}) {
             showGrid(*window);
         }
-        m_folder = pairFolder("GridPairTest");
+        m_folder = shotFolder();
         std::filesystem::create_directories(m_folder);
         return true;
     }

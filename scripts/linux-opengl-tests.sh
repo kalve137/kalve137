@@ -20,12 +20,14 @@ export QT_XCB_GL_INTEGRATION=xcb_glx
 build=build/linux-release
 
 cat > "$build/opengl-tests.py" <<'EOF'
+import concurrent.futures
 import json
 import os
 import pathlib
 import subprocess
 import sys
 import threading
+import time
 import xml.etree.ElementTree as ET
 
 DEFAULT_TIMEOUT = 180
@@ -43,24 +45,28 @@ EXCLUDED = {
 }
 
 build = pathlib.Path(sys.argv[1]).resolve()
+jobs = max(1, int(sys.argv[2]))
 plan = json.loads((build / "opengl-tests.json").read_text())
 results = build / "opengl-results"
 results.mkdir(exist_ok=True)
 for old in results.glob("*.xml"):
     old.unlink()
+printing = threading.Lock()
 
 
-def run(command, env, cwd, timeout):
-    process = subprocess.Popen(command, env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, errors="replace")
+def run(test):
+    process = subprocess.Popen(test["command"], env=test["env"], cwd=test["cwd"], stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, errors="replace")
     expired = threading.Event()
 
     def expire():
         expired.set()
         process.kill()
 
-    timer = threading.Timer(timeout, expire)
+    started = time.monotonic()
+    timer = threading.Timer(test["timeout"], expire)
     timer.start()
+    output = []
     drawables = 0
     glx = 0
     held = None
@@ -70,61 +76,65 @@ def run(command, env, cwd, timeout):
                 glx += 1
                 held = None
                 continue
-            sys.stdout.write(held)
+            output.append(held)
             held = None
         if line.strip() == DRAWABLE:
             drawables += 1
         elif line.rstrip() == GLX_HEADER:
             held = line
         else:
-            sys.stdout.write(line)
-            sys.stdout.flush()
+            output.append(line)
     if held is not None:
-        sys.stdout.write(held)
+        output.append(held)
     returncode = process.wait()
     timer.cancel()
-    return returncode, expired.is_set(), drawables, glx
+    name = test["name"]
+    with printing:
+        sys.stdout.write("".join(output))
+        took = time.monotonic() - started
+        print(f"{name}: {took:.1f} s, hid {drawables} '{DRAWABLE}' and {glx} '{GLX_FAILED}' lines", flush=True)
+        if expired.is_set():
+            print(f"{name} timed out after {test['timeout']:.0f} s", file=sys.stderr, flush=True)
+        elif returncode != 0:
+            print(f"{name} failed", file=sys.stderr, flush=True)
+    return returncode == 0 and not expired.is_set(), drawables, glx
 
 
 for name, reason in EXCLUDED.items():
     print(f"excluded {name}: {reason}")
 
 listed = set()
-status = 0
-drawables = 0
-glx = 0
+parallel = []
+serial = []
 for test in plan["tests"]:
     properties = {p["name"]: p["value"] for p in test.get("properties", [])}
-    cwd = properties.get("WORKING_DIRECTORY", str(build / "tests"))
+    command = list(test["command"])
+    gtest_name = next(arg for arg in command if arg.startswith("--gtest_filter=")).partition("=")[2]
+    listed.add(gtest_name)
+    if gtest_name in EXCLUDED or properties.get("DISABLED"):
+        continue
     env = dict(os.environ)
     for entry in properties.get("ENVIRONMENT", []):
         key, _, value = entry.partition("=")
         env[key] = value
-    command = list(test["command"])
-    index = next(i for i, arg in enumerate(command) if arg.startswith("--gtest_filter="))
-    listing = subprocess.run(command + ["--gtest_list_tests"], env=env, cwd=cwd, capture_output=True,
-                             text=True, check=True)
-    suite = ""
-    for line in listing.stdout.splitlines():
-        if not line.startswith(" "):
-            suite = line.strip()
-        elif line.strip():
-            listed.add(suite + line.split()[0])
-    pattern = command[index].partition("=")[2]
-    command[index] += (":" if "-" in pattern else "-") + ":".join(EXCLUDED)
     command.append(f"--gtest_output=xml:{results / (test['name'] + '.xml')}")
-    timeout = float(properties.get("TIMEOUT", DEFAULT_TIMEOUT))
-    print(f"Running {test['name']}", flush=True)
-    returncode, timed_out, test_drawables, test_glx = run(command, env, cwd, timeout)
-    drawables += test_drawables
-    glx += test_glx
-    print(f"{test['name']}: hid {test_drawables} '{DRAWABLE}' and {test_glx} '{GLX_FAILED}' lines", flush=True)
-    if timed_out:
-        print(f"{test['name']} timed out after {timeout:.0f} s", file=sys.stderr)
-        status = 1
-    elif returncode != 0:
-        print(f"{test['name']} failed", file=sys.stderr)
-        status = 1
+    job = {
+        "name": test["name"],
+        "command": command,
+        "env": env,
+        "cwd": properties.get("WORKING_DIRECTORY", str(build / "tests")),
+        "timeout": float(properties.get("TIMEOUT", DEFAULT_TIMEOUT)),
+    }
+    alone = properties.get("RUN_SERIAL") or properties.get("RESOURCE_LOCK")
+    (serial if alone else parallel).append(job)
+
+print(f"Running {len(parallel)} tests on {jobs} jobs, then {len(serial)} alone", flush=True)
+with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+    outcomes = list(pool.map(run, parallel))
+outcomes += [run(test) for test in serial]
+status = 0 if all(passed for passed, _, _ in outcomes) else 1
+drawables = sum(count for _, count, _ in outcomes)
+glx = sum(count for _, _, count in outcomes)
 
 notes = [f"Hid {drawables} '{DRAWABLE}' and {glx} '{GLX_FAILED}' lines from the old view's hidden window"]
 (build / "opengl-report.json").write_text(json.dumps({"excluded": EXCLUDED, "notes": notes}, indent=2))
@@ -165,5 +175,5 @@ EOF
 xvfb-run -a -s "-screen 0 1920x1080x24" bash -euo pipefail -c '
     glxinfo -B | grep -E "OpenGL (renderer|core profile version) string"
     ctest --preset linux-release -R "^Viewport\." --show-only=json-v1 > "$1/opengl-tests.json"
-    python3 "$1/opengl-tests.py" "$1"
+    python3 "$1/opengl-tests.py" "$1" "$(nproc)"
 ' bash "$build"
