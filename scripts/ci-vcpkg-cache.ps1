@@ -44,12 +44,9 @@ switch ($Command) {
         $runId = $env:RUN_ID ?? ''
         $save = 'false'
         $key = $primary
-        if ($countAfter -gt 0 -and $primary) {
-            if ($cacheHit -ne 'true') {
-                $save = 'true'
-            }
-            elseif ($countAfter -gt $countBefore) {
-                $save = 'true'
+        if ($countAfter -gt $countBefore -and $primary) {
+            $save = 'true'
+            if ($cacheHit -eq 'true') {
                 $key = "${primary}-${runId}"
             }
         }
