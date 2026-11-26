@@ -24,6 +24,7 @@
 #include "app/theme/fonts.h"
 #include "app/theme/icons.h"
 #include "app/theme/theme.h"
+#include "app/view/body_opacity.h"
 #include "app/view/camera_commands.h"
 #include "app/view/grid_settings.h"
 #include "app/view/scene.h"
@@ -151,6 +152,7 @@ MainWindow::MainWindow(const StartupOptions& options, QWidget* parent) : QMainWi
             m_viewport->setDatums(m_scene->datums());
             m_viewport->setSketchLook(sketchLook(*m_scene));
         });
+        connect(m_scene.get(), &Scene::pickModeChanged, this, &MainWindow::showPickModeOpacity);
     }
     m_viewProjection = new ViewProjection(*m_view, m_viewport, this);
     m_sketchEditor = new SketchEditor(*m_session, *m_scene, *m_viewProjection, this);
@@ -268,6 +270,20 @@ MainWindow::~MainWindow()
     m_sketchEditor->end();
     delete m_featureFrame;
     delete m_measureFrame;
+}
+
+void MainWindow::showViewportScene(snapshot::Scene scene)
+{
+    m_viewport->setScene(withBodyOpacity(std::move(scene), m_scene->pickMode()));
+}
+
+void MainWindow::showPickModeOpacity()
+{
+    snapshot::Scene shown = withBodyOpacity(m_viewport->scene(), m_scene->pickMode());
+    const snapshot::Scene& current = m_viewport->scene();
+    if (shown.bodies != current.bodies || shown.hidden != current.hidden) {
+        m_viewport->setScene(std::move(shown));
+    }
 }
 
 } // namespace kalve137::app
