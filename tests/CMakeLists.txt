@@ -122,6 +122,7 @@ add_executable(kalve137_uitests
     ui/highlight_pair_ui_test.cpp
     ui/line_ui_test.cpp
     ui/marker_pair_ui_test.cpp
+    ui/measure_ui_test.cpp
     ui/menu_ui_test.cpp
     ui/viewport_api_ui_test.cpp
     ui/viewport_camera_ui_test.cpp
