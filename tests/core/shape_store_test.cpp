@@ -189,8 +189,8 @@ std::uintmax_t folderSize(const std::filesystem::path& folder)
 TEST_F(ShapeStoreTest, DISABLED_LargeImportSave)
 {
     char* value = nullptr;
-    std::size_t length = 0;
 #ifdef _WIN32
+    std::size_t length = 0;
     _dupenv_s(&value, &length, "KALVE137_BENCH_STEP");
     const std::string step = value != nullptr ? value : "";
     std::free(value);

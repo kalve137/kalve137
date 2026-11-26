@@ -28,13 +28,6 @@ constexpr std::array<std::string_view, 15> kFeatureKinds{"sketch", "extrude", "r
                                                          "hole",   "move",    "axis",    "point",  "appearance"};
 constexpr std::array<std::string_view, 5> kPlainOnlyFunctions{"sqrt", "sin", "cos", "tan", "pi"};
 constexpr std::array<std::string_view, 2> kPlainOnlyUnits{"um", "ft"};
-constexpr std::string_view kPlainOnlyMessage = "sqrt, sin, cos, tan, pi and ^ work only in a value without names";
-constexpr std::string_view kPlainOnlyHint = "Work that part out as a number or put it in its own parameter";
-constexpr std::string_view kPieces = "pieces";
-constexpr std::string_view kPiecesMessage = " only counts the pieces a pick chooses among";
-constexpr std::string_view kPiecesHint = "Use a plain number here, like 4";
-constexpr std::string_view kUnreadableMessage = "Can't read this as a value";
-constexpr std::string_view kUnreadableHint = "Type a number or an expression, such as 30/2 or 1in";
 
 constexpr double kDegreesPerRadian = 180.0 / std::numbers::pi;
 
@@ -52,17 +45,6 @@ constexpr UnitInfo kUnitTable[] = {
 };
 
 constexpr int kMaxDecimals = 40;
-
-const UnitInfo& unitInfo(std::string_view unit)
-{
-    for (const UnitInfo& info : kUnitTable) {
-        if (unit == info.name) {
-            return info;
-        }
-    }
-    static const UnitInfo kNone{"", 1.0, {0, 0}};
-    return kNone;
-}
 
 bool isUnit(std::string_view word)
 {
@@ -100,12 +82,6 @@ bool isPlainOnlyWord(std::string_view word)
 bool lists(std::span<const std::string_view> words, std::string_view word)
 {
     return std::find(words.begin(), words.end(), word) != words.end();
-}
-
-std::string withArticle(const std::string& noun)
-{
-    const bool vowel = !noun.empty() && std::string_view("aeiou").find(noun.front()) != std::string_view::npos;
-    return (vowel ? "an " : "a ") + noun;
 }
 
 bool isThreadName(std::string_view word)
@@ -197,38 +173,6 @@ std::string unitFor(Dim dim)
         return "deg";
     }
     return {};
-}
-
-int editDistance(const std::string& a, const std::string& b)
-{
-    std::vector<int> row(b.size() + 1);
-    for (std::size_t j = 0; j <= b.size(); ++j) {
-        row[j] = static_cast<int>(j);
-    }
-    for (std::size_t i = 1; i <= a.size(); ++i) {
-        int diagonal = row[0];
-        row[0] = static_cast<int>(i);
-        for (std::size_t j = 1; j <= b.size(); ++j) {
-            const int above = row[j];
-            row[j] = std::min({row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] == b[j - 1] ? 0 : 1)});
-            diagonal = above;
-        }
-    }
-    return row[b.size()];
-}
-
-std::string closest(const std::string& word, const std::vector<std::string>& candidates)
-{
-    std::string best;
-    int bestDistance = 3;
-    for (const std::string& candidate : candidates) {
-        const int distance = editDistance(word, candidate);
-        if (distance < bestDistance) {
-            best = candidate;
-            bestDistance = distance;
-        }
-    }
-    return best;
 }
 
 } // namespace

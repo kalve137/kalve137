@@ -3,6 +3,8 @@
 
 # Run by kalve137_forbid with -DCONFIG=<file> -DSTAMP=<file>.
 
+cmake_policy(VERSION 3.25)
+
 include("${CONFIG}")
 
 set(failures)

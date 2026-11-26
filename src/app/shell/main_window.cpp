@@ -69,9 +69,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
-#include <functional>
 #include <initializer_list>
-#include <map>
 #include <memory>
 #include <utility>
 #include <variant>
@@ -81,42 +79,7 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr int kToolIconSize = 32;
-constexpr double kAboutWordmarkHeight = 48.0;
-constexpr int kFeaturePanelWidth = theme::kWidthNarrow;
-constexpr QPoint kFeaturePanelMargin{12, 12};
-constexpr QPoint kNavBarMargin{0, 10};
 const char* const kWindowGeometryKey = "windowGeometry";
-
-snapshot::Scene withVisibility(snapshot::Scene scene, const core::Model& model, const DesignSession& session)
-{
-    std::map<core::BodyKey, std::size_t> order;
-    for (std::size_t i = 0; i < model.bodies.size(); ++i) {
-        order.emplace(model.bodies[i].key(), i);
-    }
-    const auto keyOf = [](const snapshot::Body& body) {
-        return core::BodyKey{static_cast<core::FeatureId>(body.feature), body.part};
-    };
-    const auto place = [&](const std::shared_ptr<const snapshot::Body>& body) {
-        const auto it = order.find(keyOf(*body));
-        return it == order.end() ? model.bodies.size() : it->second;
-    };
-    std::vector<std::shared_ptr<const snapshot::Body>> all = std::move(scene.bodies);
-    all.insert(all.end(), scene.hidden.begin(), scene.hidden.end());
-    std::ranges::stable_sort(all, std::less{}, place);
-    scene.bodies.clear();
-    scene.hidden.clear();
-    for (auto& body : all) {
-        (session.isBodyVisible(keyOf(*body)) ? scene.bodies : scene.hidden).push_back(std::move(body));
-    }
-    return scene;
-}
-
-snapshot::Color snapshotColor(const QColor& color)
-{
-    return {static_cast<float>(color.redF()), static_cast<float>(color.greenF()), static_cast<float>(color.blueF()),
-            static_cast<float>(color.alphaF())};
-}
 
 } // namespace
 

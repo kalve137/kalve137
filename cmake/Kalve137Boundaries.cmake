@@ -49,9 +49,13 @@ function(kalve137_forbid target)
     endforeach()
     file(WRITE "${config}" "${body}")
 
+    set(dev_errors)
+    if(KALVE137_WARNINGS_AS_ERRORS)
+        set(dev_errors -Werror=dev)
+    endif()
     add_custom_command(
         OUTPUT "${stamp}"
-        COMMAND ${CMAKE_COMMAND} -DCONFIG=${config} -DSTAMP=${stamp} -P ${KALVE137_BOUNDARY_SCRIPT}
+        COMMAND ${CMAKE_COMMAND} ${dev_errors} -DCONFIG=${config} -DSTAMP=${stamp} -P ${KALVE137_BOUNDARY_SCRIPT}
         DEPENDS ${files} "${config}" "${KALVE137_BOUNDARY_SCRIPT}"
         COMMENT "Checking includes of ${target}"
         VERBATIM

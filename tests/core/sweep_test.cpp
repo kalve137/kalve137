@@ -188,16 +188,6 @@ Document everyKind()
     return doc;
 }
 
-std::vector<double> volumes(const Model& model)
-{
-    std::vector<double> result;
-    result.reserve(model.bodies.size());
-    for (const Body& body : model.bodies) {
-        result.push_back(geometry::volume(body.shape));
-    }
-    return result;
-}
-
 void expectSameVolumes(const Model& actual, const Model& expected)
 {
     ASSERT_EQ(actual.bodies.size(), expected.bodies.size());

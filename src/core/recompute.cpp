@@ -760,7 +760,7 @@ bool buildOne(Builder& builder, Model& model, const Feature& feature)
         return false;
     }
     model.status[feature.id] = {FeatureHealth::Ok, {}};
-    const auto start = std::chrono::steady_clock::now();
+    [[maybe_unused]] const auto start = std::chrono::steady_clock::now();
     std::vector<Body> bodiesBefore = model.bodies;
     std::string failure;
     try {
