@@ -50,6 +50,7 @@ add_library(kalve137_app STATIC
     session/step_import.h
     shell/batch_import.cpp
     shell/batch_import.h
+    shell/bench_drag.cpp
     shell/bench_orbit.cpp
     shell/bench_orbit.h
     shell/bench_orbit_runs.cpp

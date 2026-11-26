@@ -77,7 +77,6 @@ constexpr int kColdSkipFrames = 10;
 constexpr int kOrbitFrames = 120;
 constexpr double kOrbitStep = 2.0 * std::numbers::pi / kOrbitFrames;
 constexpr double kWarmupMs = 500.0;
-constexpr int kReadyTimeoutMs = 30000;
 constexpr int kOrbitTimeoutMs = 120000;
 constexpr double kPercentile = 0.95;
 constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
@@ -97,38 +96,6 @@ constexpr double kSketchCell = 12.0;
 constexpr double kSketchZoom = 1.05;
 constexpr std::array kBenchColors{geometry::Color{.red = 0.8, .green = 0.2, .blue = 0.2},
                                   geometry::Color{.red = 0.2, .green = 0.4, .blue = 0.8}};
-
-std::optional<QSize> sizeNamed(const QString& text)
-{
-    static const QRegularExpression kPattern(QStringLiteral("^(\\d+)x(\\d+)$"));
-    const QRegularExpressionMatch match = kPattern.match(text);
-    if (!match.hasMatch()) {
-        return std::nullopt;
-    }
-    const QSize size(match.captured(1).toInt(), match.captured(2).toInt());
-    return size.isEmpty() ? std::nullopt : std::optional(size);
-}
-
-bool waitFor(const std::function<bool()>& done)
-{
-    const QDeadlineTimer deadline(kReadyTimeoutMs);
-    while (!done() && !deadline.hasExpired()) {
-        QApplication::processEvents(QEventLoop::AllEvents, 10);
-    }
-    return done();
-}
-
-double elapsedMs(const QElapsedTimer& timer)
-{
-    return static_cast<double>(timer.nsecsElapsed()) / 1e6;
-}
-
-double percentile(std::vector<double> values, double share)
-{
-    std::ranges::sort(values);
-    const auto index = static_cast<std::size_t>(std::ceil(share * static_cast<double>(values.size()))) - 1;
-    return values[std::min(index, values.size() - 1)];
-}
 
 struct ColdBuild {
     double ms = 0.0;
@@ -284,95 +251,6 @@ Orbit orbit(MainWindow& window)
     return result;
 }
 
-std::optional<QSize> checkedRequest(const std::filesystem::path& design, const QString& size)
-{
-    const std::optional<QSize> requested = sizeNamed(size);
-    if (!requested) {
-        K137_ERROR(App, "The bench size must look like 2560x1440, got {}", size.toStdString());
-        return std::nullopt;
-    }
-    std::error_code missing;
-    if (!std::filesystem::is_regular_file(design, missing)) {
-        K137_ERROR(App, "The bench design {} does not exist", design.string());
-        return std::nullopt;
-    }
-    return requested;
-}
-
-void hideChrome(MainWindow& window)
-{
-    for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
-        dock->hide();
-    }
-    for (QToolBar* bar : window.findChildren<QToolBar*>()) {
-        bar->hide();
-    }
-    window.statusBar()->hide();
-    window.menuBar()->hide();
-}
-
-void sizeCanvas(MainWindow& window, QSize requested)
-{
-    QWidget* canvas = window.centralWidget();
-    const double ratio = window.devicePixelRatioF();
-    if (window.isFullScreen()) {
-        waitFor([&] { return canvas->size() * ratio == requested; });
-    } else {
-        const QSize logical(static_cast<int>(std::lround(requested.width() / ratio)),
-                            static_cast<int>(std::lround(requested.height() / ratio)));
-        window.resize(logical + window.size() - canvas->size());
-    }
-    QApplication::processEvents();
-}
-
-bool showForBench(MainWindow& window, bool useViewport, QSize requested)
-{
-    hideChrome(window);
-    const QScreen* screen = window.screen();
-    const bool onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
-    if (!onScreen) {
-        window.setAttribute(Qt::WA_DontShowOnScreen);
-        window.show();
-    } else if (screen != nullptr && screen->size() * screen->devicePixelRatio() == requested) {
-        window.showFullScreen();
-    } else {
-        window.show();
-    }
-    if (useViewport && window.viewport() == nullptr) {
-        K137_ERROR(App, "The bench view did not start");
-        return false;
-    }
-    const bool ready = waitFor([&] {
-        return useViewport ? window.viewport()->isReady() || window.viewport()->hasFailed()
-                           : window.oldView()->isReady();
-    });
-    if (!ready || (useViewport && window.viewport()->hasFailed())) {
-        K137_ERROR(App, "The bench view did not start");
-        return false;
-    }
-    sizeCanvas(window, requested);
-    return true;
-}
-
-QJsonObject benchHeader(MainWindow& window, bool useViewport, const std::filesystem::path& design, const QString& size)
-{
-    const QSize actual = window.centralWidget()->size() * window.devicePixelRatioF();
-    const QScreen* screen = window.screen();
-    const QSize shown = screen != nullptr ? screen->size() * screen->devicePixelRatio() : QSize();
-    return {
-        {"on_screen", !window.testAttribute(Qt::WA_DontShowOnScreen)},
-        {"full_screen", window.isFullScreen()},
-        {"screen", QStringLiteral("%1x%2").arg(shown.width()).arg(shown.height())},
-        {"view", useViewport ? "new" : "old"},
-        {"backend", useViewport ? window.viewport()->backendName() : QStringLiteral("OpenGL")},
-        {"device", useViewport ? window.viewport()->deviceName() : window.oldView()->deviceName()},
-        {"samples", useViewport ? window.viewport()->sampleCount() : window.oldView()->sampleCount()},
-        {"qt", QString::fromLatin1(qVersion())},
-        {"design", QString::fromStdU16String(design.parent_path().filename().u16string())},
-        {"requested", size},
-        {"actual", QStringLiteral("%1x%2").arg(actual.width()).arg(actual.height())},
-    };
-}
 } // namespace
 
 int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
@@ -397,6 +275,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const ColdBuild cold = buildColdSnapshots(session->model());
     const bool selected = selectForBench(window);
     SketchEditor* sketch = openDenseSketch(window, *requested);
+    const bool ghost = sketch == nullptr && openGhostExtrude(window);
 
     const std::optional<double> pressMs = firstPress(window);
     const Orbit timed = orbit(window);
@@ -415,6 +294,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     QJsonObject result = benchHeader(window, useViewport, design, size);
     result.insert("selected", selected);
     result.insert("sketch", sketch != nullptr);
+    result.insert("ghost", ghost);
     if (redrawMs) {
         result.insert("sketch_redraw_median_ms", redrawMs->first);
         result.insert("sketch_redraw_p95_ms", redrawMs->second);

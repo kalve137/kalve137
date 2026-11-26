@@ -108,6 +108,8 @@ std::optional<QSize> sizeNamed(const QString& text)
     return size.isEmpty() ? std::nullopt : std::optional(size);
 }
 
+} // namespace
+
 bool waitFor(const std::function<bool()>& done)
 {
     const QDeadlineTimer deadline(kReadyTimeoutMs);
@@ -218,6 +220,8 @@ QJsonObject benchHeader(MainWindow& window, bool useViewport, const std::filesys
         {"actual", QStringLiteral("%1x%2").arg(actual.width()).arg(actual.height())},
     };
 }
+
+namespace {
 
 std::size_t trianglesOf(core::SnapshotCache& snapshots, const core::Body& body)
 {
