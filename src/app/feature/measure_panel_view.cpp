@@ -13,6 +13,7 @@
 
 #include <QColor>
 
+#include <array>
 #include <utility>
 
 namespace kalve137::app {
@@ -65,7 +66,12 @@ void MeasurePanel::publish(const Span& span)
     if (span) {
         const snapshot::Color accent = colorOf(theme::palette().chrome.accent);
         items.line = render::MeasureLine{.from = vecOf(span->first), .to = vecOf(span->second), .color = accent};
-        for (const gp_Pnt& end : {span->first, span->second}) {
+        const std::array<std::pair<gp_Pnt, const Pick*>, 2> ends{
+            {{span->first, &m_picks[0]}, {span->second, &m_picks[1]}}};
+        for (const auto& [end, pick] : ends) {
+            if (pick->kind == Pick::Kind::Vertex) {
+                continue;
+            }
             items.markers.push_back({.anchor = vecOf(end),
                                      .shape = render::MarkerShape::Ball,
                                      .scale = render::MarkerScale::Small,

@@ -11,6 +11,7 @@
 #include "app/view/viewport_picker.h"
 #include "render/draw_list.h"
 #include "render/rhi/viewport.h"
+#include "snapshot/body.h"
 
 #include <QImage>
 #include <QLabel>
@@ -21,9 +22,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <vector>
+#include <cstdio>
 
 namespace kalve137::uitest {
 namespace {
@@ -54,6 +56,16 @@ double pixelsBetween(QPointF a, QPointF b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+std::ptrdiff_t markersAt(const UiDriver& ui, const render::Viewport& canvas, const gp_Pnt& point)
+{
+    const snapshot::Point& origin = canvas.scene().origin;
+    const QPointF target = ui.at(point);
+    return std::ranges::count_if(canvas.markerDraw().markers, [&](const render::Marker& marker) {
+        const gp_Pnt at(origin[0] + marker.position[0], origin[1] + marker.position[1], origin[2] + marker.position[2]);
+        return pixelsBetween(ui.at(at), target) <= kOnPoint;
+    });
+}
+
 using MeasureTest = UiTest;
 
 TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
@@ -81,6 +93,7 @@ TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
 
     ui->click(kTopFace);
     ui->click(kBottomCorner);
+    ui->move(kAwayFromBlock);
     ui->save("measure");
     EXPECT_EQ(labelText(*panel, false), QStringLiteral("Face + Vertex"));
     const QString table = labelText(*panel, true);
@@ -88,18 +101,25 @@ TEST_F(MeasureTest, ShowsDistanceBetweenTwoPicks)
     EXPECT_TRUE(table.contains(QStringLiteral("15.000 mm"))) << table.toStdString();
 
     if (render::Viewport* canvas = ui->viewport()) {
+        const QPointF vertex = ui->at(kBottomCorner) * ui->canvasImage().devicePixelRatio();
+        const std::ptrdiff_t atVertex = markersAt(*ui, *canvas, kBottomCorner);
+        const std::ptrdiff_t atFace = markersAt(*ui, *canvas, kTopCorner);
+        std::printf("picked vertex at pixel %.0f %.0f: %td markers there, %td at the face end\n", vertex.x(),
+                    vertex.y(), atVertex, atFace);
+        EXPECT_EQ(atVertex, 1) << "the picker's ball alone marks the picked vertex";
+        EXPECT_EQ(atFace, 1) << "measure marks the face end";
+        ASSERT_EQ(canvas->vertexMarks().size(), 1U);
+        EXPECT_EQ(canvas->vertexMarks().front().shape, render::MarkerShape::Ball);
+
         const render::MeasureItems& measure = canvas->measure();
         ASSERT_TRUE(measure.line);
-        ASSERT_EQ(measure.markers.size(), 2U);
-        const std::vector<gp_Pnt> ends{kTopCorner, kBottomCorner};
-        for (std::size_t i = 0; i < ends.size(); ++i) {
-            const render::MarkerItem& marker = measure.markers[i];
-            EXPECT_EQ(marker.shape, render::MarkerShape::Ball);
-            EXPECT_EQ(marker.scale, render::MarkerScale::Small);
-            EXPECT_EQ(marker.flags, render::kMarkerTopmost);
-            const QPointF drawn = ui->at(gp_Pnt(marker.anchor.x, marker.anchor.y, marker.anchor.z));
-            EXPECT_LE(pixelsBetween(drawn, ui->at(ends[i])), kOnPoint) << "end " << i;
-        }
+        ASSERT_EQ(measure.markers.size(), 1U);
+        const render::MarkerItem& marker = measure.markers.front();
+        EXPECT_EQ(marker.shape, render::MarkerShape::Ball);
+        EXPECT_EQ(marker.scale, render::MarkerScale::Small);
+        EXPECT_EQ(marker.flags, render::kMarkerTopmost);
+        const QPointF drawn = ui->at(gp_Pnt(marker.anchor.x, marker.anchor.y, marker.anchor.z));
+        EXPECT_LE(pixelsBetween(drawn, ui->at(kTopCorner)), kOnPoint);
         auto* picker = ui->window().findChild<app::ViewportPicker*>();
         ASSERT_NE(picker, nullptr);
         EXPECT_EQ(picker->panelItems().selected.size(), 2U) << "the face and the vertex show picked";
