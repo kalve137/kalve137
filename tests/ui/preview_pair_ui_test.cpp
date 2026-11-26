@@ -5,10 +5,12 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
 #include "app/theme/theme.h"
 #include "app/view/pick.h"
+#include "app/view/scene.h"
 #include "app/view/viewport_picker.h"
 #include "render/rhi/viewport.h"
 #include "snapshot/body.h"
@@ -255,6 +257,59 @@ TEST_F(PreviewPairTest, AFilletPreviewKeepsItsEdgeInViewAndCancelKeepsTheCommitt
     EXPECT_EQ(canvas->scene().bodies.front()->mesh, committed) << "cancel reuses the committed mesh";
     EXPECT_TRUE(canvas->chunks().overlaid().empty());
     EXPECT_EQ(&canvas->pickScene(), &canvas->scene());
+}
+
+TEST_F(PreviewPairTest, OnlyTheViewThatShowsBuildsBodiesWhenWindowsOfBothKindsAlternate)
+{
+    render::Viewport* canvas = ui->viewport();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const auto open = [](UiDriver& driver) {
+        driver.window().findChild<app::DesignSession*>()->reset(blockDocument(), {});
+        homeView(driver);
+    };
+    const auto filletPreview = [](UiDriver& driver) {
+        driver.trigger("Fillet");
+        ASSERT_TRUE(driver.state()["featurePanel"]);
+        driver.click(gp_Pnt(0, -kBlockDepth / 2, kBlockHeight));
+        driver.fill("Radius", "4", false);
+    };
+    const app::Scene& hidden = *ui->window().scene();
+    open(*ui);
+    EXPECT_EQ(hidden.displayedBodies(), 0U) << "after open";
+    EXPECT_EQ(canvas->scene().bodies.size(), 1U);
+
+    UiDriver old(app::StartupOptions{.view = app::ViewKind::Old, .graphicsApi = std::nullopt});
+    open(old);
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "the old view draws its bodies";
+
+    filletPreview(*ui);
+    EXPECT_EQ(hidden.displayedBodies(), 0U) << "during a preview";
+    EXPECT_EQ(canvas->scene().bodies.size(), 1U);
+    ui->pressButton("OK");
+    ASSERT_FALSE(ui->state()["featurePanel"]);
+    ASSERT_EQ(ui->document().features().size(), 3U);
+    EXPECT_EQ(hidden.displayedBodies(), 0U) << "after an edit";
+    EXPECT_EQ(canvas->scene().bodies.size(), 1U);
+    ui->trigger("Undo");
+    ASSERT_EQ(ui->document().features().size(), 2U);
+    EXPECT_EQ(hidden.displayedBodies(), 0U) << "after undo";
+    EXPECT_EQ(canvas->scene().bodies.size(), 1U);
+
+    filletPreview(old);
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "the old view draws the preview";
+    old.pressButton("OK");
+    ASSERT_FALSE(old.state()["featurePanel"]);
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U) << "and the edit";
+
+    UiDriver again(
+        app::StartupOptions{.view = app::ViewKind::New, .graphicsApi = app::startupFromEnvironment().graphicsApi});
+    ASSERT_NE(again.viewport(), nullptr);
+    open(again);
+    EXPECT_EQ(again.window().scene()->displayedBodies(), 0U) << "a viewport window opened after an old one";
+    EXPECT_EQ(again.viewport()->scene().bodies.size(), 1U);
+    EXPECT_EQ(old.window().scene()->displayedBodies(), 1U);
 }
 
 } // namespace
