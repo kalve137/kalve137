@@ -6,14 +6,14 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
 #include "app/view/pick_source.h"
+#include "app/view/viewport_picker.h"
 #include "camera/navigation.h"
 #include "core/recompute.h"
 #include "render/box_select.h"
 #include "render/chunk_set.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QElapsedTimer>
@@ -145,7 +145,7 @@ public:
         text << describe(items) << " (" << edgeOn << " edge on, " << small << " under 2 px, " << crossing
              << " across the band edge, ";
         if (pixels.ids != nullptr) {
-            text << drawn << " where the id pass sides with the new view, ";
+            text << drawn << " where the id pass sides with the viewport, ";
         }
         text << rest << " other)";
         return text.str();
@@ -272,7 +272,7 @@ struct Band {
     QPointF to;
 };
 
-TEST_F(BoxCompareTest, DISABLED_NewViewMatchesTheOldViewsBoxSelection)
+TEST_F(BoxCompareTest, DISABLED_ViewportMatchesTheOldViewsBoxSelection)
 {
     const QString list = qEnvironmentVariable("KALVE137_BOX_COMPARE_DESIGNS");
     if (list.isEmpty()) {
@@ -281,8 +281,8 @@ TEST_F(BoxCompareTest, DISABLED_NewViewMatchesTheOldViewsBoxSelection)
     ui.reset();
     UiDriver old(app::StartupOptions{.view = app::ViewKind::Old, .graphicsApi = std::nullopt});
     UiDriver next(app::StartupOptions{.view = app::ViewKind::New, .graphicsApi = std::nullopt});
-    ASSERT_NE(next.newView(), nullptr);
-    auto* picker = next.window().findChild<app::NewViewPicker*>();
+    ASSERT_NE(next.viewport(), nullptr);
+    auto* picker = next.window().findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     const std::vector<std::pair<const char*, std::optional<camera::StandardView>>> views = {
         {"front", camera::StandardView::Front}, {"top", camera::StandardView::Top}, {"iso", std::nullopt}};
@@ -307,7 +307,7 @@ TEST_F(BoxCompareTest, DISABLED_NewViewMatchesTheOldViewsBoxSelection)
             }
             EXPECT_TRUE(QTest::qWaitFor([&] { return !commands.isAnimating(); }, kCameraWaitMs));
             next.settle();
-            const render::RhiView& canvas = *next.newView();
+            const render::Viewport& canvas = *next.viewport();
             ASSERT_EQ(old.view().size(), canvas.size()) << "both views need the same size";
             old.view().setSyncedCamera(commands.camera(), canvas.viewport());
             old.frame();

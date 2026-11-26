@@ -16,7 +16,7 @@
 
 #include "geometry/shapes.h"
 #include "log/log.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "sketch/dimension.h"
 #include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
@@ -49,8 +49,8 @@ namespace kalve137::app {
 using namespace sketch_editor_detail;
 
 SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::OcctViewWidget* view,
-                           render::RhiView* newView, QObject* parent)
-    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_newView(newView),
+                           render::Viewport* newView, QObject* parent)
+    : QObject(parent), m_session(session), m_scene(scene), m_view(view), m_viewport(newView),
       m_cameraInput(newView != nullptr)
 {
     m_valueEditor = new QLineEdit(canvas());
@@ -117,12 +117,12 @@ SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, viewer::O
     connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
     if (newView != nullptr) {
         m_band = new BandOverlay(newView);
-        connect(newView, &render::RhiView::capturedPress, this, &SketchEditor::onPress);
-        connect(newView, &render::RhiView::capturedRelease, this, &SketchEditor::onRelease);
-        connect(newView, &render::RhiView::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
-        connect(newView, &render::RhiView::mouseMoved, this,
+        connect(newView, &render::Viewport::capturedPress, this, &SketchEditor::onPress);
+        connect(newView, &render::Viewport::capturedRelease, this, &SketchEditor::onRelease);
+        connect(newView, &render::Viewport::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
+        connect(newView, &render::Viewport::mouseMoved, this,
                 [this](QPointF pos, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { onMove(pos, buttons); });
-        connect(newView, &render::RhiView::cameraChanged, this, &SketchEditor::onCameraChanged);
+        connect(newView, &render::Viewport::cameraChanged, this, &SketchEditor::onCameraChanged);
         return;
     }
     connect(view, &viewer::OcctViewWidget::capturedPress, this, &SketchEditor::onPress);
@@ -159,8 +159,8 @@ void SketchEditor::begin(core::FeatureId sketch)
     seed();
     m_tool = Tool::Select;
     m_repick = 0;
-    if (m_newView != nullptr) {
-        m_newView->setLeftButtonCaptured(true);
+    if (m_viewport != nullptr) {
+        m_viewport->setLeftButtonCaptured(true);
     } else {
         m_view->setLeftButtonCaptured(true);
     }
@@ -185,9 +185,9 @@ void SketchEditor::end()
     m_drawCache.reset();
     m_repick = 0;
     canvas()->unsetCursor();
-    if (m_newView != nullptr) {
+    if (m_viewport != nullptr) {
         clearView();
-        m_newView->setLeftButtonCaptured(false);
+        m_viewport->setLeftButtonCaptured(false);
     } else {
         m_view->setLeftButtonCaptured(false);
         m_view->redraw();

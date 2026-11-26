@@ -10,7 +10,7 @@
 #include "core/feature.h"
 #include "geometry/shapes.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "scenario.h"
 #include "ui_driver.h"
@@ -74,7 +74,7 @@ void showGrid(app::MainWindow& window)
 Aim orbit(const camera::Vec3& center, double degrees, double elevation, double scale, camera::Projection projection)
 {
     return [=](app::MainWindow& window) {
-        render::RhiView& canvas = *window.newView();
+        render::Viewport& canvas = *window.viewport();
         camera::Camera camera = canvas.camera();
         camera.setProjectionType(projection);
         const double angle = degrees * std::numbers::pi / 180.0;
@@ -92,7 +92,7 @@ Aim orbit(const camera::Vec3& center, double degrees, double elevation, double s
 
 QImage withoutGrid(app::MainWindow& window)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     const render::GridSettings shown = canvas.grid().settings();
     render::GridSettings hidden = shown;
     hidden.visible = false;
@@ -218,7 +218,7 @@ protected:
     bool start()
     {
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -257,7 +257,7 @@ TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     load(blockDocument());
     std::ofstream table(m_folder / "grid-plane-body.tsv");
     table << "view\tnew changes inside\n";
@@ -295,7 +295,7 @@ TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     load(blockDocument());
     std::ofstream table(m_folder / "rim.tsv");
     table << "view\trim pixels changed by the grid\trim pixels\n";
@@ -341,7 +341,7 @@ TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     core::Document document;
     geometry::StepPart cube;
     cube.name = "Cube";
@@ -374,7 +374,7 @@ TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     load(core::Document{});
     std::ofstream table(m_folder / "grid-lines.tsv");
     table << "view\told lines\tnew lines\tmatched\n";
@@ -409,7 +409,7 @@ TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     load(blockDocument());
     const camera::Vec3 middle{0.0, -kBlockDepth / 2.0, 0.0};
     const Aim aim = orbit({0.0, 0.0, 0.0}, -90.0, 50.0, 70.0, camera::Projection::Perspective);
@@ -432,7 +432,7 @@ TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
     };
     EXPECT_GE(shownNear(plain.fresh, edge, kEdgeTolerance), 3) << "the body edge draws over the grid line";
 
-    for (QWidget* view : std::array<QWidget*, 2>{m_old->oldView(), m_new->newView()}) {
+    for (QWidget* view : std::array<QWidget*, 2>{m_old->oldView(), m_new->viewport()}) {
         act(*view, at, true);
         send(*view, QEvent::MouseMove, QPointF(12.0, 12.0), Qt::NoButton, Qt::NoButton);
     }

@@ -10,7 +10,7 @@
 #include "core/feature.h"
 #include "core/parameter_table.h"
 #include "render/annotations.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "scenario.h"
 #include "sketch/sketch.h"
 #include "ui_test.h"
@@ -403,14 +403,14 @@ TEST_F(ValueNamesTest, PatternCountTakesAName)
 
 TEST_F(ValueNamesTest, ADrivenDimensionLabelShowsTheMark)
 {
-    if (ui->window().newView() == nullptr) {
-        GTEST_SKIP() << "Dimension labels carry the mark in the new view only";
+    if (ui->window().viewport() == nullptr) {
+        GTEST_SKIP() << "Dimension labels carry the mark in the viewport only";
     }
     const sketch::Id id = dimensionOnTheBottom();
     ASSERT_NE(id, 0);
     const auto labels = [this] {
         std::vector<std::u32string> texts;
-        for (const render::LabelItem& label : ui->window().newView()->annotations().labels) {
+        for (const render::LabelItem& label : ui->window().viewport()->annotations().labels) {
             texts.push_back(label.text);
         }
         return texts;

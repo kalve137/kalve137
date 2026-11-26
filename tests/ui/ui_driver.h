@@ -31,7 +31,7 @@ class OcctViewWidget;
 }
 
 namespace kalve137::render {
-class RhiView;
+class Viewport;
 }
 
 namespace kalve137::app {
@@ -67,7 +67,7 @@ public:
 
     app::MainWindow& window() { return *m_window; }
     viewer::OcctViewWidget& view() { return *m_view; }
-    render::RhiView* newView() { return m_newView; }
+    render::Viewport* viewport() { return m_viewport; }
     QWidget* canvas() const;
     QImage canvasImage();
     app::DesignSession& session() { return *m_session; }
@@ -120,7 +120,7 @@ private:
 
     std::unique_ptr<app::MainWindow> m_window;
     viewer::OcctViewWidget* m_view = nullptr;
-    render::RhiView* m_newView = nullptr;
+    render::Viewport* m_viewport = nullptr;
     app::DesignSession* m_session = nullptr;
     Qt::MouseButtons m_buttons;
     QPointer<QWidget> m_grab;

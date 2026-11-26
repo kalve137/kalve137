@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 
 #include <gtest/gtest.h>
 

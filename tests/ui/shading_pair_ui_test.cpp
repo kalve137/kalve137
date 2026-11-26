@@ -10,7 +10,7 @@
 #include "core/feature.h"
 #include "geometry/shapes.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "scenario.h"
 #include "snapshot/body.h"
 #include "ui_driver.h"
@@ -196,7 +196,7 @@ TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
     };
     for (const Case& sample : cases) {
         const std::unique_ptr<app::MainWindow> newWindow = showPairWindow(app::ViewKind::New);
-        ASSERT_TRUE(newWindow->newView() != nullptr && newWindow->newView()->isReady()) << kNewViewDidNotStart;
+        ASSERT_TRUE(newWindow->viewport() != nullptr && newWindow->viewport()->isReady()) << kViewportDidNotStart;
         const std::unique_ptr<app::MainWindow> oldWindow = showPairWindow(app::ViewKind::Old);
         ASSERT_TRUE(oldWindow->oldView()->isReady());
         if (!drawsReferenceColors(*oldWindow->oldView())) {

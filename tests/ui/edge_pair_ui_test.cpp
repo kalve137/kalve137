@@ -11,7 +11,7 @@
 #include "core/feature.h"
 #include "geometry/shapes.h"
 #include "pair_shots.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "scenario.h"
 #include "snapshot/body.h"
 #include "ui_driver.h"
@@ -353,7 +353,7 @@ void zoomOnGridLine(app::MainWindow& window)
 {
     homeCamera(window);
     QTest::qWait(kSettleMs);
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     for (int i = 0; i < kZoomSteps; ++i) {
         const camera::ScreenPoint at = canvas.camera().project({45.0, 20.0, 0.0}, canvas.viewport());
         emit canvas.wheelTurned(QPointF(at.x, at.y + 1.0), kZoomNotches);
@@ -470,7 +470,7 @@ TEST_F(EdgePairTest, EdgesMatchTheOldViewInNumbers)
     };
     for (const Case& sample : cases) {
         const std::unique_ptr<app::MainWindow> newWindow = showPairWindow(app::ViewKind::New);
-        ASSERT_TRUE(newWindow->newView() != nullptr && newWindow->newView()->isReady()) << kNewViewDidNotStart;
+        ASSERT_TRUE(newWindow->viewport() != nullptr && newWindow->viewport()->isReady()) << kViewportDidNotStart;
         const std::unique_ptr<app::MainWindow> oldWindow = showPairWindow(app::ViewKind::Old);
         ASSERT_TRUE(oldWindow->oldView()->isReady());
         for (app::MainWindow* window : {oldWindow.get(), newWindow.get()}) {

@@ -57,16 +57,16 @@ StartProblem checkStart(GraphicsApi api);
 bool canStart(GraphicsApi api);
 QLabel* makeFailureNotice(GraphicsApi api, StartProblem problem, QWidget* parent);
 
-class RhiView : public QRhiWidget {
+class Viewport : public QRhiWidget {
     Q_OBJECT
 
 public:
-    explicit RhiView(GraphicsApi api, QWidget* parent = nullptr);
-    ~RhiView() override;
-    RhiView(const RhiView&) = delete;
-    RhiView& operator=(const RhiView&) = delete;
-    RhiView(RhiView&&) = delete;
-    RhiView& operator=(RhiView&&) = delete;
+    explicit Viewport(GraphicsApi api, QWidget* parent = nullptr);
+    ~Viewport() override;
+    Viewport(const Viewport&) = delete;
+    Viewport& operator=(const Viewport&) = delete;
+    Viewport(Viewport&&) = delete;
+    Viewport& operator=(Viewport&&) = delete;
 
     void setViewportStyle(const ViewportStyle& style);
     const ViewportStyle& viewportStyle() const { return m_style; }

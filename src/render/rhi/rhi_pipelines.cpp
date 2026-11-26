@@ -32,7 +32,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassD
     const QShader vertex = loadShader(QStringLiteral("body.vert"));
     const QShader fragment = loadShader(QStringLiteral("body.frag"));
     if (!vertex.isValid() || !fragment.isValid()) {
-        K137_ERROR(Viewer, "The new view could not load its body shaders");
+        K137_ERROR(Viewer, "The viewport could not load its body shaders");
         return nullptr;
     }
     Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
@@ -56,7 +56,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::facePipeline(QRhiRenderPassD
     result->setShaderResourceBindings(m_layout.get());
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The new view could not create its body pipeline at {}x samples", samples);
+        K137_ERROR(Viewer, "The viewport could not create its body pipeline at {}x samples", samples);
         return nullptr;
     }
     return result;
@@ -67,7 +67,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::edgePipeline(QRhiRenderPassD
     const QShader vertex = loadShader(QStringLiteral("edge.vert"));
     const QShader fragment = loadShader(QStringLiteral("edge.frag"));
     if (!vertex.isValid() || !fragment.isValid()) {
-        K137_ERROR(Viewer, "The new view could not load its edge shaders");
+        K137_ERROR(Viewer, "The viewport could not load its edge shaders");
         return nullptr;
     }
     Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
@@ -89,7 +89,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::edgePipeline(QRhiRenderPassD
     result->setShaderResourceBindings(m_layout.get());
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The new view could not create its edge pipeline at {}x samples", samples);
+        K137_ERROR(Viewer, "The viewport could not create its edge pipeline at {}x samples", samples);
         return nullptr;
     }
     return result;
@@ -102,7 +102,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::idPipeline(QRhiRenderPassDes
     const QShader vertex = loadShader(face ? QStringLiteral("id_face.vert") : QStringLiteral("id_edge.vert"));
     const QShader fragment = loadShader(QStringLiteral("id.frag"));
     if (!vertex.isValid() || !fragment.isValid()) {
-        K137_ERROR(Viewer, "The new view could not load its id shaders");
+        K137_ERROR(Viewer, "The viewport could not load its id shaders");
         return nullptr;
     }
     Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
@@ -136,7 +136,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::idPipeline(QRhiRenderPassDes
     result->setShaderResourceBindings(m_idLayout.get());
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The new view could not create its id pipelines");
+        K137_ERROR(Viewer, "The viewport could not create its id pipelines");
         return nullptr;
     }
     return result;
@@ -149,7 +149,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
     const QShader vertex = loadShader(QString::fromLatin1(spec.vertex));
     const QShader fragment = loadShader(QString::fromLatin1(spec.fragment));
     if (!vertex.isValid() || !fragment.isValid()) {
-        K137_ERROR(Viewer, "The new view could not load its {} and {} shaders", spec.vertex, spec.fragment);
+        K137_ERROR(Viewer, "The viewport could not load its {} and {} shaders", spec.vertex, spec.fragment);
         return nullptr;
     }
     Owned<QRhiGraphicsPipeline> result(m_rhi->newGraphicsPipeline());
@@ -283,7 +283,7 @@ RhiBackend::Owned<QRhiGraphicsPipeline> RhiBackend::pipelineFor(const PipelineSp
     result->setShaderResourceBindings(bindings);
     result->setRenderPassDescriptor(pass);
     if (!result->create()) {
-        K137_ERROR(Viewer, "The new view could not create its {} pipeline at {}x samples", spec.fragment, samples);
+        K137_ERROR(Viewer, "The viewport could not create its {} pipeline at {}x samples", spec.fragment, samples);
         return nullptr;
     }
     return result;

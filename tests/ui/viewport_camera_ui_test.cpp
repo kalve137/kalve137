@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/theme/theme.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_navigation.h"
-#include "app/view/new_view_picker.h"
+#include "app/view/viewport_navigation.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "camera/navigation.h"
 #include "pick/scene_rays.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QApplication>
@@ -35,9 +35,9 @@ namespace {
 
 constexpr int kWheelStep = 120;
 
-TEST_F(NewViewTest, ClearsToTheViewportColor)
+TEST_F(ViewportTest, ClearsToTheViewportColor)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -54,9 +54,9 @@ TEST_F(NewViewTest, ClearsToTheViewportColor)
     ui->save("canvas");
 }
 
-TEST_F(NewViewTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
+TEST_F(ViewportTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -137,9 +137,9 @@ TEST_F(NewViewTest, ViewCommandsMoveTheCameraAndTheHiddenViewFollows)
     expectFollowed(*ui, "idle");
 }
 
-TEST_F(NewViewTest, OrbitsAroundTheDepthUnderTheCursor)
+TEST_F(ViewportTest, OrbitsAroundTheDepthUnderTheCursor)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }

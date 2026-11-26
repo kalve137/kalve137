@@ -214,7 +214,7 @@ bool RhiBackend::setTarget(QRhiRenderPassDescriptor* pass, int samples)
     m_activeLines.reset();
     m_annotationQuads.reset();
     if (!createShared()) {
-        K137_ERROR(Viewer, "The new view could not create its shared GPU resources");
+        K137_ERROR(Viewer, "The viewport could not create its shared GPU resources");
         return false;
     }
     for (int i = 0; i < static_cast<int>(m_faces.size()); ++i) {
@@ -603,27 +603,27 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     }
     writeUniforms(list, updates);
     if (!refreshHighlight(list.highlight, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its highlight");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its highlight");
         return false;
     }
     if (!refreshGrid(list.grid, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its grid");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its grid");
         return false;
     }
     if (!refreshDatums(list.datums, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its planes and axes");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its planes and axes");
         return false;
     }
     if (!refreshMarkers(list.markers, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its points");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its points");
         return false;
     }
     if (!refreshSketches(list.sketches, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its sketches");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its sketches");
         return false;
     }
     if (!refreshActiveSketch(list.activeSketch, updates)) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for the sketch being edited");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for the sketch being edited");
         return false;
     }
     if (m_annotationsFailed) {
@@ -631,7 +631,7 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     } else if (!refreshAnnotations(list.annotations, list.frame.pixelRatio, updates)) {
         m_annotationsFailed = true;
         m_annotations.quads.count = 0;
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for its badges and labels, it draws "
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for its badges and labels, it draws "
                            "without them");
     }
     m_hiddenPass = list.highlight.hidden;
@@ -664,7 +664,7 @@ bool RhiBackend::prepare(const DrawList& list, QRhiResourceUpdateBatch* updates)
     std::ranges::stable_partition(m_calls, [](const Call& call) { return call.cull; });
     m_biased = list.edges || m_sketches.curves.count > 0;
     if (!complete) {
-        K137_ERROR(Viewer, "The new view could not create the GPU resources for every chunk");
+        K137_ERROR(Viewer, "The viewport could not create the GPU resources for every chunk");
     }
     return complete;
 }

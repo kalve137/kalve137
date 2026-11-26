@@ -9,7 +9,7 @@
 #include "app/sketch/dimension_label.h"
 #include "app/sketch/sketch_editor_detail.h"
 
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
 #include "sketch/profiles.h"
@@ -41,17 +41,17 @@ bool usesPoint(const sketch::Curve& curve, Id point)
 
 QWidget* SketchEditor::canvas() const
 {
-    return m_newView != nullptr ? static_cast<QWidget*>(m_newView) : m_view;
+    return m_viewport != nullptr ? static_cast<QWidget*>(m_viewport) : m_view;
 }
 
 std::optional<SketchEditor::Projection> SketchEditor::projection() const
 {
-    if (m_newView != nullptr) {
-        const camera::Viewport viewport = m_newView->viewport();
-        if (!viewport.isValid() || !m_newView->camera().isUsable()) {
+    if (m_viewport != nullptr) {
+        const camera::Viewport viewport = m_viewport->viewport();
+        if (!viewport.isValid() || !m_viewport->camera().isUsable()) {
             return std::nullopt;
         }
-        return Projection{m_newView->camera(), viewport};
+        return Projection{m_viewport->camera(), viewport};
     }
     const std::optional<camera::Viewport> viewport = m_view->viewport();
     if (!viewport) {
@@ -89,10 +89,10 @@ QPointF SketchEditor::toScreen(const gp_Pnt& point) const
 
 double SketchEditor::gridStep() const
 {
-    if (m_newView == nullptr) {
+    if (m_viewport == nullptr) {
         return m_view->gridStep();
     }
-    return m_newView->grid().settings().visible ? m_newView->grid().layout().step : 0.0;
+    return m_viewport->grid().settings().visible ? m_viewport->grid().layout().step : 0.0;
 }
 
 std::optional<Vec2> SketchEditor::toSketch(QPointF pos) const

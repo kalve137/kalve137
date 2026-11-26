@@ -5,17 +5,17 @@
 #include "app/shell/main_window.h"
 #include "app/shell/startup_options.h"
 #include "app/theme/theme.h"
-#include "app/view/new_view_picker.h"
 #include "app/view/pick.h"
 #include "app/view/pick_source.h"
 #include "app/view/scene.h"
 #include "app/view/scene_detail.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "core/document.h"
 #include "core/feature.h"
 #include "pair_shots.h"
 #include "render/draw_list.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "scenario.h"
 #include "ui_driver.h"
 #include "viewer/occt_view_widget.h"
@@ -113,7 +113,7 @@ snapshot::Color colorOf(const QColor& color)
 
 void lookDown(app::MainWindow& window, const camera::Vec3& center, double scale)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     camera.setProjectionType(camera::Projection::Orthographic);
     EXPECT_TRUE(camera.setEyeAndCenter({center.x, center.y, center.z + kReach}, center));
@@ -124,7 +124,7 @@ void lookDown(app::MainWindow& window, const camera::Vec3& center, double scale)
 
 void lookAcross(app::MainWindow& window, const camera::Vec3& center, double scale)
 {
-    render::RhiView& canvas = *window.newView();
+    render::Viewport& canvas = *window.viewport();
     camera::Camera camera = canvas.camera();
     camera.setProjectionType(camera::Projection::Perspective);
     EXPECT_TRUE(camera.setEyeAndCenter({center.x + 250.0, center.y - 250.0, center.z + 200.0}, center));
@@ -240,7 +240,7 @@ protected:
     bool start()
     {
         m_new = showPairWindow(app::ViewKind::New);
-        if (m_new->newView() == nullptr || !m_new->newView()->isReady()) {
+        if (m_new->viewport() == nullptr || !m_new->viewport()->isReady()) {
             return false;
         }
         m_old = showPairWindow(app::ViewKind::Old);
@@ -301,7 +301,7 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     load(core::Document{}, false);
     const std::vector<Kind> kinds = everyKind();
     const double first = -kSpacing * static_cast<double>(kinds.size() - 1) / 2.0;
@@ -319,7 +319,7 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
                          .pick = 0});
     }
     m_old->oldView()->aisContext()->UpdateCurrentViewer();
-    m_new->newView()->setMarkers(items);
+    m_new->viewport()->setMarkers(items);
     const Shots shots =
         grabPair(*m_old, *m_new, [](app::MainWindow& window) { lookDown(window, {0.0, 0.0, 0.0}, kRowScale); });
     savePair(shots, m_folder, "every marker");
@@ -335,7 +335,7 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
         const std::optional<QRect> old = drawnIn(shots.old, crop, shots.background.rgb());
         const std::optional<QRect> fresh = drawnIn(shots.fresh, crop, shots.background.rgb());
         ASSERT_TRUE(old.has_value()) << kind.name << " shows in the old view";
-        ASSERT_TRUE(fresh.has_value()) << kind.name << " shows in the new view";
+        ASSERT_TRUE(fresh.has_value()) << kind.name << " shows in the viewport";
         const QRgb oldColor = strongColor(shots.old, crop, shots.background.rgb());
         const QRgb newColor = strongColor(shots.fresh, crop, shots.background.rgb());
         table << kind.name << '\t' << old->width() << '\t' << fresh->width() << '\t' << old->height() << '\t'
@@ -353,7 +353,7 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
     zoomSheet(shots.fresh, crops)
         .save(QString::fromStdU16String((m_folder / "every marker zoomed-new.png").u16string()));
     clearOldMarkers();
-    m_new->newView()->setMarkers({});
+    m_new->viewport()->setMarkers({});
 }
 
 TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
@@ -361,7 +361,7 @@ TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const camera::Vec3 inside{0.0, 0.0, kBlockHeight / 2.0};
     const camera::Vec3 onEdge{kBlockWidth / 2.0, -kBlockDepth / 2.0, kBlockHeight / 2.0};
     const auto aim = [&](app::MainWindow& window) { lookAcross(window, inside, kPickScale); };
@@ -397,7 +397,7 @@ TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
         table << name << '\t' << old.width() << '\t' << fresh.width() << '\t' << old.height() << '\t' << fresh.height()
               << '\t' << hex(shots.old.pixel(middle.x(), middle.y() - 1)) << '\t'
               << hex(shots.fresh.pixel(middle.x(), middle.y() - 1)) << '\n';
-        ASSERT_FALSE(fresh.isNull()) << name << " shows over the body in the new view";
+        ASSERT_FALSE(fresh.isNull()) << name << " shows over the body in the viewport";
         ASSERT_FALSE(old.isNull()) << name << " shows in the old view";
         EXPECT_NEAR(fresh.width(), old.width() * ratio, kSizeTolerance * ratio) << name;
         EXPECT_NEAR(fresh.height(), old.height() * ratio, kSizeTolerance * ratio) << name;
@@ -429,12 +429,12 @@ TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever
     if (const std::optional<std::string> missing = newViewMissing()) {
         GTEST_SKIP() << *missing;
     }
-    ASSERT_TRUE(start()) << kNewViewDidNotStart;
+    ASSERT_TRUE(start()) << kViewportDidNotStart;
     const camera::Vec3 onEdge{kBlockWidth / 2.0, -kBlockDepth / 2.0, kBlockHeight / 2.0};
     core::Document document = blockDocument();
     document.add(core::PointFeature{gp_Pnt(onEdge.x, onEdge.y, onEdge.z), "Edge"});
     load(document, true);
-    auto* picker = m_new->findChild<app::NewViewPicker*>();
+    auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
     std::ofstream record(m_folder / "pick-record.tsv");
     record << "mode\tdx\tdy\told\tnew\n";
@@ -495,7 +495,7 @@ TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever
         for (int dx = -kScanRadius; dx <= kScanRadius; dx += 2) {
             picker->hoverAt(origin + QPointF(dx, dy));
             EXPECT_EQ(describe(picker->hovered()), "none") << "the origin point never picks, at " << dx << ", " << dy;
-            const std::optional<render::IdPick> hit = m_new->newView()->pickAt(
+            const std::optional<render::IdPick> hit = m_new->viewport()->pickAt(
                 origin + QPointF(dx, dy), {.faces = false, .edges = false, .markers = true}, {.markers = true});
             EXPECT_FALSE(hit.has_value()) << "no marker id at " << dx << ", " << dy;
         }

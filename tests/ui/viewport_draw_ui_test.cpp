@@ -1,20 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "new_view_ui_support.h"
+#include "viewport_ui_support.h"
 
 #include "../render/test_meshes.h"
 #include "app/shell/main_window.h"
 #include "app/view/camera_commands.h"
-#include "app/view/new_view_navigation.h"
-#include "app/view/new_view_picker.h"
+#include "app/view/viewport_navigation.h"
+#include "app/view/viewport_picker.h"
 #include "camera/camera.h"
 #include "render/chunk_set.h"
 #include "render/cpu_backend.h"
 #include "render/datums.h"
 #include "render/graphics_api.h"
 #include "render/pick_id.h"
-#include "render/rhi/rhi_view.h"
+#include "render/rhi/viewport.h"
 #include "render/style.h"
 #include "snapshot/body.h"
 
@@ -35,9 +35,9 @@
 namespace kalve137::uitest {
 namespace {
 
-TEST_F(NewViewTest, DrawsTheTorusLikeTheCpuBackend)
+TEST_F(ViewportTest, DrawsTheTorusLikeTheCpuBackend)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -74,9 +74,9 @@ TEST_F(NewViewTest, DrawsTheTorusLikeTheCpuBackend)
     cpuShot.save(QString::fromStdU16String((shot.parent_path() / "cpu.png").u16string()));
 }
 
-TEST_F(NewViewTest, DrawsEdgesLikeTheCpuBackend)
+TEST_F(ViewportTest, DrawsEdgesLikeTheCpuBackend)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -107,7 +107,7 @@ TEST_F(NewViewTest, DrawsEdgesLikeTheCpuBackend)
     canvas->setViewportStyle(original);
 }
 
-void expectHighlightsLikeTheCpuBackend(render::RhiView& canvas, const std::string& api, UiDriver& ui)
+void expectHighlightsLikeTheCpuBackend(render::Viewport& canvas, const std::string& api, UiDriver& ui)
 {
     const GridHidden gridOff(canvas);
     const snapshot::Point origin{1000.0, -1000.0, 0.0};
@@ -157,9 +157,9 @@ void expectHighlightsLikeTheCpuBackend(render::RhiView& canvas, const std::strin
     canvas.setViewportStyle(original);
 }
 
-TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
+TEST_F(ViewportTest, DrawsHighlightsLikeTheCpuBackend)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -168,7 +168,7 @@ TEST_F(NewViewTest, DrawsHighlightsLikeTheCpuBackend)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -215,7 +215,7 @@ std::size_t insideChanges(const QImage& plain, const QImage& gridded)
     return count;
 }
 
-void expectGridLikeTheCpuBackend(render::RhiView& canvas, const render::GridSettings& shown, const std::string& api,
+void expectGridLikeTheCpuBackend(render::Viewport& canvas, const render::GridSettings& shown, const std::string& api,
                                  UiDriver& ui)
 {
     const auto lookFrom = [](double x, double y, double z, double scale) {
@@ -258,9 +258,9 @@ void expectGridLikeTheCpuBackend(render::RhiView& canvas, const render::GridSett
     }
 }
 
-TEST_F(NewViewTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
+TEST_F(ViewportTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -281,7 +281,7 @@ TEST_F(NewViewTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -291,9 +291,9 @@ TEST_F(NewViewTest, DrawsTheGridLikeTheCpuBackendAndHidesItInFaces)
     }
 }
 
-TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
+TEST_F(ViewportTest, DrawsPlanesAndAxesLikeTheCpuBackend)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
@@ -313,7 +313,7 @@ TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
         .axes = {{.id = 2, .anchor = {30.0, 0.0, 0.0}, .direction = {0.0, 1.0, 0.0}, .color = plane}},
         .planeColor = plane};
     const camera::Camera camera = obliqueAt({0.0, 0.0, 7.5}, 120.0);
-    const auto check = [&](render::RhiView& view, const std::string& name) {
+    const auto check = [&](render::Viewport& view, const std::string& name) {
         view.setScene(scene);
         view.setCamera(camera);
         const QImage plain = grabbed(view);
@@ -327,7 +327,7 @@ TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
         if (!render::canStart(api)) {
             continue;
         }
-        render::RhiView view(api);
+        render::Viewport view(api);
         view.setAttribute(Qt::WA_DontShowOnScreen);
         view.resize(canvas->size());
         view.show();
@@ -337,7 +337,7 @@ TEST_F(NewViewTest, DrawsPlanesAndAxesLikeTheCpuBackend)
     }
 }
 
-std::size_t backFaceLeakAllowed(const render::RhiView& view, const QImage& image)
+std::size_t backFaceLeakAllowed(const render::Viewport& view, const QImage& image)
 {
     const bool leaks = view.sampleCount() > 1;
     return leaks ? static_cast<std::size_t>(image.width() * image.height()) / 2000 : 0;
@@ -351,7 +351,7 @@ std::optional<std::pair<std::size_t, std::size_t>> cullingGap(render::GraphicsAp
     if (!render::canStart(api)) {
         return std::nullopt;
     }
-    render::RhiView view(api);
+    render::Viewport view(api);
     view.setAttribute(Qt::WA_DontShowOnScreen);
     view.resize(size);
     view.show();
@@ -365,9 +365,9 @@ std::optional<std::pair<std::size_t, std::size_t>> cullingGap(render::GraphicsAp
     return std::pair{differing(culled, grabbed(view)), backFaceLeakAllowed(view, culled)};
 }
 
-TEST_F(NewViewTest, CullingClosedBodiesChangesNoPixel)
+TEST_F(ViewportTest, CullingClosedBodiesChangesNoPixel)
 {
-    render::RhiView* canvas = ui->newView();
+    render::Viewport* canvas = ui->viewport();
     if (canvas == nullptr) {
         GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
     }
