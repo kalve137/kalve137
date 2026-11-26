@@ -38,7 +38,7 @@ struct Shots {
     QColor background;
 };
 
-inline constexpr const char* kViewportDidNotStart = "The viewport did not start on a device that can run it";
+inline constexpr const char* kViewportDidNotStart = "Viewport did not start on a device that can run it";
 
 std::optional<std::string> viewportMissing();
 std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view);

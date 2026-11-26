@@ -59,7 +59,7 @@ TEST_F(FeatureTest, FilletsTwoSetsWithTheirOwnRadius)
     ui->click(kTopFrontEdge);
     ui->fill("Radius", "2", false);
     ui->pressButton("Add set");
-    ASSERT_NE(ui->field("Set"), nullptr) << "the set chooser shows once there are two sets";
+    ASSERT_NE(ui->field("Set"), nullptr) << "set chooser shows once there are two sets";
     ui->click(gp_Pnt(0, kBlockDepth / 2, kBlockHeight));
     ui->save("second set");
     ui->fill("Radius", "3");

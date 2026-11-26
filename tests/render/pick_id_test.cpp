@@ -151,14 +151,14 @@ TEST(PickId, APointBeatsAnEdgeAndAnEdgeBeatsAFaceThenTheNearestWins)
         const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kinds);
         return hit ? hit->id : 0U;
     };
-    EXPECT_EQ(pick(kEverything), point) << "the point four pixels off each axis is in the square";
+    EXPECT_EQ(pick(kEverything), point) << "point four pixels off each axis is in the square";
     EXPECT_EQ(pick(kFacesAndEdges), near) << "two pixels beat three";
     EXPECT_EQ(pick({.faces = true, .edges = false, .points = false}), encodePickId(0, PickKind::Face, 1));
     EXPECT_EQ(pick({.faces = false, .edges = false, .points = false}), 0U);
     const std::optional<IdHit> hit = resolvePick(image, 4, 4, kPickTolerance, kFacesAndEdges);
     ASSERT_TRUE(hit);
     EXPECT_EQ(hit->x, 6);
-    EXPECT_EQ(hit->y, 4) << "the nearest pixel of the edge, straight across";
+    EXPECT_EQ(hit->y, 4) << "nearest pixel of the edge, straight across";
 }
 
 TEST(PickId, AnEdgeBehindTheFaceUnderTheCursorOrPastARoundReachLeavesTheFace)
@@ -176,7 +176,7 @@ TEST(PickId, AnEdgeBehindTheFaceUnderTheCursorOrPastARoundReachLeavesTheFace)
         image.ids[image.indexOf(6, y)] = edge;
         image.depths[image.indexOf(6, y)] = 0.6F;
     }
-    EXPECT_EQ(pick(), face) << "the edge lies behind the face under the cursor";
+    EXPECT_EQ(pick(), face) << "edge lies behind the face under the cursor";
     for (int y = 0; y < 9; ++y) {
         image.depths[image.indexOf(6, y)] = 0.4F;
     }
@@ -236,16 +236,16 @@ TEST(PickId, PlanesAndAxesReachLessAndTheOriginGroupComesFirst)
     for (int y = 0; y < 9; ++y) {
         put(7, y, axis);
     }
-    EXPECT_EQ(pick(axes), encodePickId(0, PickKind::Face, 1)) << "an axis three pixels off is past its reach";
+    EXPECT_EQ(pick(axes), encodePickId(0, PickKind::Face, 1)) << "axis three pixels off is past its reach";
     for (int y = 0; y < 9; ++y) {
         put(6, y, axis);
     }
     EXPECT_EQ(pick(axes), axis);
     EXPECT_EQ(pick(planes), encodePickId(0, PickKind::Face, 1)) << "axes pick only where axes are wanted";
     put(3, 4, outline);
-    EXPECT_EQ(pick(planes), outline) << "a plane outline picks the plane";
+    EXPECT_EQ(pick(planes), outline) << "plane outline picks the plane";
     put(2, 2, originPlane);
-    EXPECT_EQ(pick(planes), originPlane) << "the origin group wins over nearer items";
+    EXPECT_EQ(pick(planes), originPlane) << "origin group wins over nearer items";
     EXPECT_EQ(pick(axes), axis) << "origin planes pick only where planes are wanted";
 }
 
@@ -268,7 +268,7 @@ TEST(PickId, MarkersPickOnlyWhereWantedAndBeatEdges)
         return hit ? hit->id : 0U;
     };
     EXPECT_EQ(pick(bodies), edge) << "markers pick only where markers are wanted";
-    EXPECT_EQ(pick(withMarkers), marker) << "a point marker beats the edge under the cursor";
+    EXPECT_EQ(pick(withMarkers), marker) << "point marker beats the edge under the cursor";
     EXPECT_FALSE(withMarkers.allows(encodePickId(kMarkerChunk, PickKind::None, 0)));
     EXPECT_TRUE(withMarkers.any());
     EXPECT_TRUE((PickKinds{.faces = false, .edges = false, .markers = true}).any());
@@ -297,11 +297,11 @@ TEST(PickId, SketchItemsPickOnlyWhereWantedWithTheFullReach)
     lines.sketchLines = true;
     EXPECT_EQ(pick(faces), encodePickId(0, PickKind::Face, 1)) << "profiles pick only where profiles are wanted";
     EXPECT_EQ(pick(profiles), profile);
-    EXPECT_EQ(pick(lines), line) << "a sketch line three pixels off is in reach";
+    EXPECT_EQ(pick(lines), line) << "sketch line three pixels off is in reach";
     image.ids[image.indexOf(1, 1)] = point;
     PickKinds points = lines;
     points.sketchPoints = true;
-    EXPECT_EQ(pick(points), point) << "a sketch point beats the line";
+    EXPECT_EQ(pick(points), point) << "sketch point beats the line";
     EXPECT_FALSE(points.allows(encodePickId(kSketchChunk, PickKind::None, 0)));
     EXPECT_FALSE(faces.allows(line));
     EXPECT_TRUE((PickKinds{.faces = false, .edges = false, .profiles = true}).any());
@@ -330,14 +330,14 @@ TEST(PickId, AProfileBeatsTheSketchLineOnItsBorder)
     const PickKinds profilesAndLines{.faces = false, .edges = false, .sketchLines = true, .profiles = true};
     PickKinds lines = profilesAndLines;
     lines.profiles = false;
-    EXPECT_EQ(pick(profilesAndLines), profile) << "the line under the cursor sits on the profile's border";
+    EXPECT_EQ(pick(profilesAndLines), profile) << "line under the cursor sits on the profile's border";
     EXPECT_EQ(pick(lines), line);
     for (int y = 0; y < 9; ++y) {
         image.ids[image.indexOf(4, y)] = edge;
     }
     lines.edges = true;
     image.ids[image.indexOf(7, 4)] = line;
-    EXPECT_EQ(pick(lines), edge) << "a body edge and a sketch line still go to the nearest";
+    EXPECT_EQ(pick(lines), edge) << "body edge and a sketch line still go to the nearest";
 }
 
 TEST(PickId, AProfileWinsWithinReachUnlessItPicksOnlyUnderTheCursor)
@@ -361,7 +361,7 @@ TEST(PickId, AProfileWinsWithinReachUnlessItPicksOnlyUnderTheCursor)
         return hit ? hit->id : 0U;
     };
     const std::array exact{profile};
-    EXPECT_EQ(pick(4, {}), profile) << "a profile in reach beats a body edge under the cursor";
+    EXPECT_EQ(pick(4, {}), profile) << "profile in reach beats a body edge under the cursor";
     EXPECT_EQ(pick(4, exact), edge);
     EXPECT_EQ(pick(3, exact), edge);
     EXPECT_EQ(pick(2, exact), profile);
@@ -378,7 +378,7 @@ TEST(PickId, APointComesOnlyFromAFiniteDepthAndABodyPointOnlyFromInFrontOfTheBac
     EXPECT_FALSE(pointAtDepth(camera, viewport, 4, 4, 1.0F, DepthReach::InsideFar).has_value())
         << "depth 1 is the cleared background";
     EXPECT_TRUE(pointAtDepth(camera, viewport, 4, 4, 1.5F, DepthReach::PastFar).has_value())
-        << "a datum past the far plane keeps its depth";
+        << "datum past the far plane keeps its depth";
     for (const DepthReach reach : {DepthReach::InsideFar, DepthReach::PastFar}) {
         EXPECT_FALSE(pointAtDepth(camera, viewport, 4, 4, std::nanf(""), reach).has_value());
         EXPECT_FALSE(pointAtDepth(camera, {}, 4, 4, 0.5F, reach).has_value());
@@ -443,8 +443,8 @@ TEST(CpuIds, HiddenBodiesAndEmptySpacePickNothing)
     const Frame frame = makeFrame(lookingDownAt({20.0, 0.0, 0.0}, 90.0), kViewport, {}, kCanvas);
     const Picker picker(scene, frame);
     EXPECT_EQ(picker.at(pixelOf(frame, {0.0, 0.0, 10.0}), kEverything), item(PickKind::Face, kTopFace));
-    EXPECT_FALSE(picker.at(pixelOf(frame, {40.0, 0.0, 10.0}), kEverything)) << "the hidden box";
-    EXPECT_FALSE(picker.at({2.0, 2.0}, kEverything)) << "the corner of the view";
+    EXPECT_FALSE(picker.at(pixelOf(frame, {40.0, 0.0, 10.0}), kEverything)) << "hidden box";
+    EXPECT_FALSE(picker.at({2.0, 2.0}, kEverything)) << "corner of the view";
 }
 
 TEST(CpuIds, MapBackToTheBodyInASharedChunk)

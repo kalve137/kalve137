@@ -209,7 +209,7 @@ std::optional<Crash> takePendingCrash()
     const std::u8string utf8(base.begin(), base.end());
     std::optional<Crash> crash = crashAt(std::filesystem::path(utf8));
     if (crash) {
-        K137_WARN(App, "The previous run crashed, report at {}", base);
+        K137_WARN(App, "Previous run crashed, report at {}", base);
     }
     return crash;
 }

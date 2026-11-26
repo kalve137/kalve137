@@ -149,14 +149,14 @@ TEST_F(ParametersTest, AddsAParameterAndEditsItLiveWithOneUndoStep)
     EXPECT_EQ(cell(0, kUsedBy), QStringLiteral("Extrude1 distance"));
 
     commit(0, kExpression, QStringLiteral("12 + 3"));
-    EXPECT_FALSE(dialog->errorText().isEmpty()) << "A plain number can't drive a length";
+    EXPECT_FALSE(dialog->errorText().isEmpty()) << "Plain number can't drive a length";
     EXPECT_EQ(cell(0, kExpression), QStringLiteral("10 mm"));
 
     commit(0, kExpression, QStringLiteral("12 mm + 3"));
     EXPECT_TRUE(dialog->errorText().isEmpty()) << dialog->errorText().toStdString();
     EXPECT_EQ(cell(0, kExpression), QStringLiteral("12 mm + 3 mm"));
     EXPECT_EQ(cell(0, kValue), QStringLiteral("15 mm"));
-    EXPECT_NEAR(volume(*ui), kBlockVolume, kTolerance) << "The model follows the table";
+    EXPECT_NEAR(volume(*ui), kBlockVolume, kTolerance) << "Model follows the table";
 
     ui->session().undo();
     ui->settle();
@@ -180,7 +180,7 @@ TEST_F(ParametersTest, RenameRewritesEveryExpression)
 
     commit(1, kName, QStringLiteral("mm"));
     EXPECT_FALSE(dialog->errorText().isEmpty());
-    EXPECT_EQ(cell(1, kName), QStringLiteral("height")) << "A refused name leaves the row as it was";
+    EXPECT_EQ(cell(1, kName), QStringLiteral("height")) << "Refused name leaves the row as it was";
 }
 
 TEST_F(ParametersTest, EditThatNamesALaterRowMovesItBelow)
@@ -200,7 +200,7 @@ TEST_F(ParametersTest, EditThatNamesALaterRowMovesItBelow)
     const QStringList lines = dialog->errorText().split('\n');
     ASSERT_EQ(lines.size(), 2) << dialog->errorText().toStdString();
     EXPECT_FALSE(lines[0].isEmpty());
-    EXPECT_EQ(lines[1], QStringLiteral("Add a unit, like 5 mm2")) << "The hint sits under the message";
+    EXPECT_EQ(lines[1], QStringLiteral("Add a unit, like 5 mm2")) << "Hint sits under the message";
 }
 
 TEST_F(ParametersTest, DeleteRefusesAUsedParameter)
@@ -294,14 +294,14 @@ TEST_F(ValueNamesTest, ExtrudeFieldTakesANameAndShowsTheCanonicalText)
     ASSERT_NE(box, nullptr);
     ui->fill("Distance", "w+5", false);
     EXPECT_EQ(box->expression(), QStringLiteral("w + 5 mm"));
-    EXPECT_EQ(box->text(), QStringLiteral("15 mm")) << "An idle driven field shows the value";
+    EXPECT_EQ(box->text(), QStringLiteral("15 mm")) << "Idle driven field shows the value";
     const QLabel* mark = box->findChild<QLabel*>("fxMark");
     ASSERT_NE(mark, nullptr);
     EXPECT_TRUE(mark->isVisible());
     ui->save("driven distance");
 
     ui->click(box);
-    EXPECT_EQ(box->text(), QStringLiteral("w + 5 mm")) << "A focused driven field shows its expression";
+    EXPECT_EQ(box->text(), QStringLiteral("w + 5 mm")) << "Focused driven field shows its expression";
     EXPECT_FALSE(mark->isVisible());
     ui->key(Qt::Key_Return);
     ASSERT_FALSE(ui->state()["featurePanel"]) << ui->state().dump(2);
@@ -319,7 +319,7 @@ TEST_F(ValueNamesTest, ErrorShowsUnderTheField)
     app::ValueEdit* box = distanceField();
     ASSERT_NE(box, nullptr);
     ui->fill("Distance", "w + 5 deg");
-    ASSERT_TRUE(ui->state()["featurePanel"]) << "A refused value keeps the panel open";
+    ASSERT_TRUE(ui->state()["featurePanel"]) << "Refused value keeps the panel open";
     ASSERT_NE(box->parentWidget(), nullptr);
     const QLabel* error = visibleChild(*box->parentWidget(), QStringLiteral("fieldError"));
     ASSERT_NE(error, nullptr);
@@ -352,7 +352,7 @@ TEST_F(ValueNamesTest, APlainNumberClearsTheExpressionOfAField)
     EXPECT_NEAR(extrudeData().distance, 12.0, kTolerance);
 
     setW("30 mm");
-    EXPECT_NEAR(extrudeData().distance, 12.0, kTolerance) << "The typed number stays after a parameter edit";
+    EXPECT_NEAR(extrudeData().distance, 12.0, kTolerance) << "Typed number stays after a parameter edit";
 }
 
 TEST_F(ValueNamesTest, AnEqualPlainNumberClearsTheExpressionOfAField)
@@ -366,7 +366,7 @@ TEST_F(ValueNamesTest, AnEqualPlainNumberClearsTheExpressionOfAField)
     EXPECT_NEAR(extrudeData().distance, 20.0, kTolerance);
 
     setW("30 mm");
-    EXPECT_NEAR(extrudeData().distance, 20.0, kTolerance) << "The typed number stays after a parameter edit";
+    EXPECT_NEAR(extrudeData().distance, 20.0, kTolerance) << "Typed number stays after a parameter edit";
 }
 
 TEST_F(ValueNamesTest, PatternCountTakesAName)
@@ -378,7 +378,7 @@ TEST_F(ValueNamesTest, PatternCountTakesAName)
     ASSERT_NE(count, nullptr);
 
     ui->fill("Count", "2.5");
-    ASSERT_TRUE(ui->state()["featurePanel"]) << "A refused count keeps the panel open";
+    ASSERT_TRUE(ui->state()["featurePanel"]) << "Refused count keeps the panel open";
     EXPECT_TRUE(count->property("invalid").toBool());
     ASSERT_NE(count->parentWidget(), nullptr);
     const QLabel* error = visibleChild(*count->parentWidget(), QStringLiteral("fieldError"));
@@ -436,11 +436,11 @@ TEST_F(ValueNamesTest, DimensionEditorTakesANameAndAPlainNumberClearsIt)
     EXPECT_NEAR(constraint(id)->value, 30.0, kTolerance);
 
     editDimension(*ui, id, QStringLiteral("w + 25"));
-    EXPECT_EQ(constraint(id)->expression, "w + 25 mm") << "The stored text is canonical";
+    EXPECT_EQ(constraint(id)->expression, "w + 25 mm") << "Stored text is canonical";
     EXPECT_NEAR(constraint(id)->value, 35.0, kTolerance);
     const nlohmann::json dimensions = ui->state()["dimensions"];
     ASSERT_EQ(dimensions.size(), 1U) << dimensions.dump(2);
-    EXPECT_NEAR(dimensions[0]["value"].get<double>(), 35.0, kTolerance) << "The label shows the value";
+    EXPECT_NEAR(dimensions[0]["value"].get<double>(), 35.0, kTolerance) << "Label shows the value";
 
     setW("15 mm");
     EXPECT_EQ(constraint(id)->expression, "w + 25 mm");
@@ -455,7 +455,7 @@ TEST_F(ValueNamesTest, DimensionEditorTakesANameAndAPlainNumberClearsIt)
     ASSERT_NE(error, nullptr);
     EXPECT_TRUE(error->geometry().top() >= editor->geometry().bottom() ||
                 error->geometry().bottom() <= editor->geometry().top())
-        << "The error sits next to the editor, not over it";
+        << "Error sits next to the editor, not over it";
     ui->save("dimension error");
     EXPECT_EQ(constraint(id)->expression, "w + 25 mm");
 
@@ -463,7 +463,7 @@ TEST_F(ValueNamesTest, DimensionEditorTakesANameAndAPlainNumberClearsIt)
     EXPECT_TRUE(constraint(id)->expression.empty());
     EXPECT_NEAR(constraint(id)->value, 50.0, kTolerance);
     setW("5 mm");
-    EXPECT_NEAR(constraint(id)->value, 50.0, kTolerance) << "The typed number stays after a parameter edit";
+    EXPECT_NEAR(constraint(id)->value, 50.0, kTolerance) << "Typed number stays after a parameter edit";
 }
 
 TEST_F(ValueNamesTest, TheCompleterOffersNamesAndInsertsTheChoice)
@@ -528,15 +528,15 @@ TEST_F(ValueNamesTest, AFailedCommitOnFocusOutKeepsTheLastGoodValue)
     ui->type(QStringLiteral(" + q"));
     ui->key(Qt::Key_Return);
     ASSERT_TRUE(ui->state()["featurePanel"]);
-    EXPECT_EQ(box->text(), QStringLiteral("15 + q")) << "A refused Return leaves the text to fix";
+    EXPECT_EQ(box->text(), QStringLiteral("15 + q")) << "Refused Return leaves the text to fix";
     EXPECT_NEAR(box->value(), std::abs(before), kTolerance);
     ui->key(Qt::Key_Tab);
     ASSERT_FALSE(box->hasFocus());
-    EXPECT_NEAR(box->value(), std::abs(before), kTolerance) << "The refused text gives back the last good value";
+    EXPECT_NEAR(box->value(), std::abs(before), kTolerance) << "Refused text gives back the last good value";
     EXPECT_EQ(box->text(), shown);
     ASSERT_NE(box->parentWidget(), nullptr);
     const QLabel* error = visibleChild(*box->parentWidget(), QStringLiteral("fieldError"));
-    ASSERT_NE(error, nullptr) << "The error stays after focus out";
+    ASSERT_NE(error, nullptr) << "Error stays after focus out";
     EXPECT_TRUE(error->text().contains(QStringLiteral("q"))) << error->text().toStdString();
     ui->save("refused on focus out");
 

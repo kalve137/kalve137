@@ -89,7 +89,7 @@ void Viewport::fail()
         return;
     }
     m_failed = true;
-    K137_ERROR(Viewer, "The viewport lost its graphics device with {}", graphicsApiName(m_api));
+    K137_ERROR(Viewer, "Viewport lost its graphics device with {}", graphicsApiName(m_api));
     placeMessage();
     m_message->show();
 }

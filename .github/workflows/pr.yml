@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the version
+      - name: Check version
         shell: pwsh
         run: ./scripts/check-version.ps1
 
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install the checkers
+      - name: Install checkers
         run: |
           pipx install "reuse[charset-normalizer]"
           pipx install "clang-format==$LLVM_VERSION"
@@ -50,14 +50,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the nightly workflows
+      - name: Check nightly workflows
         run: python3 scripts/check-workflows.py
 
   source:
     name: Source
     runs-on: ubuntu-latest
     steps:
-      - name: Check the source branch
+      - name: Check source branch
         if: github.base_ref == 'main' && (github.head_ref != 'dev' || github.event.pull_request.head.repo.full_name != github.repository)
         run: |
           echo "main takes pull requests from this repo's dev only. Change the base branch of this pull request to dev."

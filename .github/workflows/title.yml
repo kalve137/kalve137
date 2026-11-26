@@ -18,7 +18,7 @@ jobs:
     name: Title
     runs-on: ubuntu-latest
     steps:
-      - name: Check the title
+      - name: Check title
         if: github.base_ref != 'main'
         shell: pwsh
         env:

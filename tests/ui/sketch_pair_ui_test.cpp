@@ -401,7 +401,7 @@ TEST_F(SketchPairTest, ProfilesFillInProfileModesAndHighlightInTheAccent)
     QTest::qWait(kSettleMs);
     const Shots lit = grab();
     savePair(lit, m_folder, "sketch profiles highlighted");
-    EXPECT_GT(gapOf(sample(lit, "highlighted", true), plain), kChange) << "a highlighted profile takes the accent";
+    EXPECT_GT(gapOf(sample(lit, "highlighted", true), plain), kChange) << "highlighted profile takes the accent";
     for (app::MainWindow* window : windows()) {
         window->scene()->setHighlightedProfiles({});
     }
@@ -425,8 +425,8 @@ TEST_F(SketchPairTest, HolePlacementPointsKeepTheOldViewsSizeAndPickThere)
     const QRect fresh = changedIn(idle.fresh, shots.fresh, crop);
     std::ofstream(m_folder / "sketch-points.tsv")
         << "old\t" << old.width() << 'x' << old.height() << "\tnew\t" << fresh.width() << 'x' << fresh.height() << '\n';
-    ASSERT_FALSE(old.isNull()) << "the point shows in the old view";
-    ASSERT_FALSE(fresh.isNull()) << "the point shows in the viewport";
+    ASSERT_FALSE(old.isNull()) << "point shows in the old view";
+    ASSERT_FALSE(fresh.isNull()) << "point shows in the viewport";
     EXPECT_NEAR(fresh.width(), old.width(), kSizeTolerance * ratio);
     EXPECT_NEAR(fresh.height(), old.height(), kSizeTolerance * ratio);
     if (drawsReferenceColors(*m_old->oldView())) {
@@ -469,7 +469,7 @@ TEST_F(SketchPairTest, HolePlacementPointsSitWhereTheSolverPutsThem)
     const sketch::Point* solved = state.solved.point(driven);
     ASSERT_NE(solved, nullptr);
     const gp_Pnt solvedAt = sketch::toWorld(state.plane, solved->pos);
-    ASSERT_GT(solvedAt.Distance(gp_Pnt(kDrivenFrom.x, kDrivenFrom.y, kDrivenFrom.z)), 1.0) << "the solver moves it";
+    ASSERT_GT(solvedAt.Distance(gp_Pnt(kDrivenFrom.x, kDrivenFrom.y, kDrivenFrom.z)), 1.0) << "solver moves it";
     const Shots shots = grab();
     auto* picker = m_new->findChild<app::ViewportPicker*>();
     ASSERT_NE(picker, nullptr);
@@ -533,7 +533,7 @@ TEST_F(SketchPairTest, LinesAndProfilesPickOnlyInTheirModes)
             } else if (std::string(probe) == "floor profile") {
                 EXPECT_EQ(fresh == floorProfile, profiles) << where << " got " << fresh;
             } else {
-                EXPECT_FALSE(fresh.starts_with("line")) << where << ": a circle never picks as a line";
+                EXPECT_FALSE(fresh.starts_with("line")) << where << ": circle never picks as a line";
                 EXPECT_FALSE(old.starts_with("line")) << where << " in the old view";
             }
         }

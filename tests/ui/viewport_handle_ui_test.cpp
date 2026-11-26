@@ -190,7 +190,7 @@ TEST_F(ViewportTest, DrawsTheHandleArrowAtItsSizeAtTwoZoomsInBothProjections)
             EXPECT_NEAR(size->shaft, render::kHandleShaftPixels, kSizeTolerance) << label;
             EXPECT_NEAR(size->head, render::kHandleHeadPixels, kSizeTolerance) << label;
             canvas->setHandles({facing});
-            EXPECT_EQ(differing(plain, grabbed(*canvas)), 0U) << label << ": the arrow hides along the line of sight";
+            EXPECT_EQ(differing(plain, grabbed(*canvas)), 0U) << label << ": arrow hides along the line of sight";
         }
     }
     canvas->setHandles({arrow});
@@ -288,13 +288,13 @@ TEST_F(HandlePairTest, DragsTheExtrudeArrowLikeTheOldViewAndGrabsItWithinTenPixe
     const QPointF side(-dragged.along.y(), dragged.along.x());
     const QPointF inside = middleOf(dragged) + side * kInsidePixels;
     ui->press(inside);
-    EXPECT_TRUE(ui->viewport()->handles().front().dragged) << "a press 9 px off the arrow grabs it";
-    EXPECT_FALSE(ui->viewport()->handles().front().guide.empty()) << "a grabbed arrow shows its guide";
+    EXPECT_TRUE(ui->viewport()->handles().front().dragged) << "press 9 px off the arrow grabs it";
+    EXPECT_FALSE(ui->viewport()->handles().front().guide.empty()) << "grabbed arrow shows its guide";
     ui->save("extrude arrow grabbed");
     ui->release(inside);
     const QPointF outside = middleOf(dragged) + side * kOutsidePixels;
     ui->press(outside);
-    EXPECT_FALSE(ui->viewport()->handles().front().dragged) << "a press 11 px off the arrow misses it";
+    EXPECT_FALSE(ui->viewport()->handles().front().dragged) << "press 11 px off the arrow misses it";
     ui->release(outside);
 }
 

@@ -63,7 +63,7 @@ try {
     )
     $missing = $expected | Where-Object { -not (Test-Path (Join-Path $top $_)) }
     if ($missing) {
-        throw "The package is missing: $($missing -join ', ')"
+        throw "Package is missing: $($missing -join ', ')"
     }
 
     function SkipPackagedDll([string]$name) {
@@ -113,11 +113,11 @@ try {
         [void]$requiredNotices.Add($name)
     }
     if ($unmapped) {
-        throw "The package has DLLs with no notice mapping: $($unmapped -join ', ')"
+        throw "Package has DLLs with no notice mapping: $($unmapped -join ', ')"
     }
     $missingNotices = $requiredNotices | Where-Object { -not (Test-Path (Join-Path $noticesDir "$_.txt")) }
     if ($missingNotices) {
-        throw "The package is missing license notices: $($missingNotices -join ', ')"
+        throw "Package is missing license notices: $($missingNotices -join ', ')"
     }
     $unwanted = 'bin\kalve137.pdb', 'bin\vc_redist.x64.exe', 'bin\opengl32sw.dll', 'bin\opengl32.dll', 'translations'
     $unwanted += 'plugins\tls', 'plugins\networkinformation', 'plugins\generic\qtuiotouchplugin.dll'
@@ -125,7 +125,7 @@ try {
         ForEach-Object { $_.FullName.Substring($top.Length + 1) }
     $present = $unwanted | Where-Object { Test-Path (Join-Path $top $_) }
     if ($present) {
-        throw "The package carries files it should not: $($present -join ', ')"
+        throw "Package carries files it should not: $($present -join ', ')"
     }
     $qtConf = Join-Path $bin 'qt.conf'
     if ((Test-Path $qtConf) -and ((Get-Content $qtConf -Raw) -match '[A-Za-z]:[\\/]')) {
@@ -156,14 +156,14 @@ try {
     $process = [System.Diagnostics.Process]::Start($start)
     if (-not $process.WaitForExit($SmokeTimeoutSeconds * 1000)) {
         $process.Kill()
-        throw "The smoke run did not finish within $SmokeTimeoutSeconds seconds"
+        throw "Smoke run did not finish within $SmokeTimeoutSeconds seconds"
     }
     $report = Join-Path $smokeOut 'smoke.txt'
     if (Test-Path $report) {
         Get-Content $report | ForEach-Object { Write-Host "  $_" }
     }
     if ($process.ExitCode -ne 0) {
-        throw "The smoke run failed with exit code $($process.ExitCode)"
+        throw "Smoke run failed with exit code $($process.ExitCode)"
     }
     Write-Host "Package verified"
 } finally {

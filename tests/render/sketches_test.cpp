@@ -84,13 +84,12 @@ TEST(Sketches, CurvesTakeTheirWidthAndDashAndOnlyLinesPickInLineModes)
     EXPECT_TRUE(idle.markers.empty());
 
     const SketchGeometry lines = buildSketches(sketches, look(true, false, false), {}, {});
-    ASSERT_EQ(lines.keys.size(), 2U) << "the circle does not pick as a line";
+    ASSERT_EQ(lines.keys.size(), 2U) << "circle does not pick as a line";
     EXPECT_EQ(lines.keys[0], (SketchKey{.item = SketchItem::Line, .feature = 4, .index = 1}));
     EXPECT_EQ(lines.keys[1], (SketchKey{.item = SketchItem::Line, .feature = 4, .index = 2}));
     ASSERT_EQ(lines.idCurves.size(), 2U);
     EXPECT_GE(lines.idCurves[1].width, static_cast<float>(kPickEdgeWidth));
-    EXPECT_FLOAT_EQ(lines.idCurves[1].pattern, static_cast<float>(kSolidPattern))
-        << "a dashed line picks along its gaps";
+    EXPECT_FLOAT_EQ(lines.idCurves[1].pattern, static_cast<float>(kSolidPattern)) << "dashed line picks along its gaps";
     EXPECT_EQ(lines.idCurves[1].color[0], 1U);
     EXPECT_EQ(lines.idCurves[1].color[2], static_cast<std::uint8_t>(PickKind::Edge));
     EXPECT_EQ(sketchAt(lines, 1), lines.keys[1]);
@@ -141,7 +140,7 @@ TEST(Sketches, PointsAreSmallTopmostRingsThatPickInTheSketchChunk)
 
     const SketchGeometry hovered =
         buildSketches(sketches, look(false, true, false), {.hovered = *key, .selected = {}}, {});
-    EXPECT_NE(hovered.markers[0].color, kFree) << "a hovered point lights up";
+    EXPECT_NE(hovered.markers[0].color, kFree) << "hovered point lights up";
 }
 
 TEST(Sketches, ItemsPastTheEntryCapDrawWithoutPickingAndMarkTheGeometryCapped)

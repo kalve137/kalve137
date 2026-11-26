@@ -149,7 +149,7 @@ TEST(Datums, AnItemFurtherAwayKeepsItsSizeAtItsOwnDepth)
             << "outline " << outline;
     }
     ASSERT_EQ(geometry.fills.size(), 12U);
-    EXPECT_FLOAT_EQ(geometry.fills.front().position[2], -100.0F) << "the far plane fills first";
+    EXPECT_FLOAT_EQ(geometry.fills.front().position[2], -100.0F) << "far plane fills first";
 }
 
 TEST(Datums, FitTakesTheAnchorsAndGrowsASmallSpanToTheEmptyView)
@@ -245,14 +245,14 @@ TEST(Datums, OriginPlanesDrawOverBodiesAndConstructionPlanesSortByDepth)
                       .axes = {},
                       .planeColor = kPlane};
     };
-    EXPECT_GT(changedOnBody(draw(scene, camera, plane(60.0))), 1000U) << "a plane in front of the body shows";
-    EXPECT_EQ(changedOnBody(draw(scene, camera, plane(-60.0))), 0U) << "a plane behind the body stays hidden";
+    EXPECT_GT(changedOnBody(draw(scene, camera, plane(60.0))), 1000U) << "plane in front of the body shows";
+    EXPECT_EQ(changedOnBody(draw(scene, camera, plane(-60.0))), 0U) << "plane behind the body stays hidden";
     const Datums origin{.originPlanes = {{.id = 0, .anchor = {}, .u = {1.0, 0.0, 0.0}, .v = {0.0, 1.0, 0.0}}},
                         .originAxes = {},
                         .planes = {},
                         .axes = {},
                         .planeColor = kPlane};
-    EXPECT_GT(changedOnBody(draw(scene, camera, origin)), 1000U) << "the origin plane inside the body still shows";
+    EXPECT_GT(changedOnBody(draw(scene, camera, origin)), 1000U) << "origin plane inside the body still shows";
 }
 
 TEST(Datums, AxesDashInTheOldViewsPatterns)
@@ -304,7 +304,7 @@ TEST(Datums, PointsBecomeTopmostMarkersAndOnlyConstructionPointsPick)
     EXPECT_EQ(origin.shape, MarkerShape::Ball);
     EXPECT_EQ(origin.scale, MarkerScale::Medium);
     EXPECT_EQ(origin.color, white);
-    EXPECT_EQ(origin.flags, kMarkerTopmost) << "the origin point never picks";
+    EXPECT_EQ(origin.flags, kMarkerTopmost) << "origin point never picks";
     for (std::size_t i = 1; i < geometry.markers.size(); ++i) {
         const MarkerItem& point = geometry.markers[i];
         EXPECT_EQ(point.shape, MarkerShape::RingPlus);
@@ -326,7 +326,7 @@ TEST(Datums, PointsBecomeTopmostMarkersAndOnlyConstructionPointsPick)
 
     const DatumGeometry hovered = buildDatums(datums, camera, kViewport, {},
                                               {.hovered = DatumKey{.kind = DatumKind::Point, .id = 4}, .selected = {}});
-    EXPECT_NE(hovered.markers[1].color, kPlane) << "a hovered point lights up";
+    EXPECT_NE(hovered.markers[1].color, kPlane) << "hovered point lights up";
     EXPECT_EQ(hovered.markers[2].color, kPlane);
 
     const Marker placed = placeMarker(hovered.markers[1], {5.0, 0.0, 0.0});

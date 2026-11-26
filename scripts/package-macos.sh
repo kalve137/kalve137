@@ -218,7 +218,7 @@ add_exec_rpath "$macos_dir/kalve137"
 fonts="$app/Contents/Resources/fonts/roboto"
 for font in Roboto-Regular.ttf Roboto-Medium.ttf; do
     if [[ ! -f "$fonts/$font" ]]; then
-        echo "The bundle is missing $fonts/$font" >&2
+        echo "Bundle is missing $fonts/$font" >&2
         exit 1
     fi
 done
@@ -270,7 +270,7 @@ static_notices=(
 missing=0
 for file in THIRD-PARTY-NOTICES.md samples/dodecahedron.k137; do
     if [[ ! -f "$resources/$file" ]]; then
-        echo "The bundle is missing $resources/$file" >&2
+        echo "Bundle is missing $resources/$file" >&2
         missing=1
     fi
 done
@@ -300,7 +300,7 @@ done
 
 for notice in $(printf '%s\n' "${required_notices[@]}" | sort -u); do
     if [[ ! -f "$notices_dir/${notice}.txt" ]]; then
-        echo "The bundle is missing $notices_dir/${notice}.txt" >&2
+        echo "Bundle is missing $notices_dir/${notice}.txt" >&2
         missing=1
     fi
 done
@@ -349,13 +349,13 @@ mkdir -p "$smoke_root"
 ditto -x -k "$zip" "$smoke_root"
 unpacked_app="$(find "$smoke_root" -maxdepth 2 -name '*.app' -print -quit)"
 if [[ -z "$unpacked_app" ]]; then
-    echo "The zip has no .app bundle" >&2
+    echo "Zip has no .app bundle" >&2
     exit 1
 fi
 
 sample="$unpacked_app/Contents/Resources/samples/dodecahedron.k137"
 if [[ ! -f "$sample" ]]; then
-    echo "The zip has no sample at $sample" >&2
+    echo "Zip has no sample at $sample" >&2
     exit 1
 fi
 

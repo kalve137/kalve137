@@ -517,9 +517,9 @@ UiDriver::UiDriver(const app::StartupOptions& options) : m_window(std::make_uniq
         while (!m_viewport->isReady() && !m_viewport->hasFailed() && clock.elapsed() < kAnimationLimitMs) {
             QTest::qWait(kFrameMs);
         }
-        EXPECT_TRUE(m_viewport->isReady()) << "The viewport did not initialize off screen";
+        EXPECT_TRUE(m_viewport->isReady()) << "Viewport did not initialize off screen";
     } else {
-        EXPECT_TRUE(m_view->isReady()) << "The view did not initialize off screen";
+        EXPECT_TRUE(m_view->isReady()) << "View did not initialize off screen";
     }
     settle();
 }

@@ -284,7 +284,7 @@ TEST_F(GridPairTest, ABodyOnTheGridPlaneHidesTheGridFromAboveAndBelow)
                 }
                 const std::size_t inside = changesInside(plain, shots.fresh, shots.background.rgb(), face);
                 table << stem << '\t' << inside << '\n';
-                EXPECT_EQ(inside, 0U) << stem << ": the grid shows through the body";
+                EXPECT_EQ(inside, 0U) << stem << ": grid shows through the body";
             }
         }
     }
@@ -324,7 +324,7 @@ TEST_F(GridPairTest, TheRimOfABodyOnTheGridLeaksOnlyAFewPixels)
         table << stem << '\t' << rim << '\t' << band << '\n';
         ASSERT_GT(band, 0U) << stem;
         EXPECT_LE(static_cast<double>(rim), static_cast<double>(band) * kRimLeakShare)
-            << stem << ": the grid changes " << rim << " of " << band << " rim pixels";
+            << stem << ": grid changes " << rim << " of " << band << " rim pixels";
         const QPointF at = screenOf(shots.camera, shots.viewport, corner) * shots.viewport.pixelRatio;
         const QRect around(static_cast<int>(at.x()) - (kRimCrop.width() / 2),
                            static_cast<int>(at.y()) - (kRimCrop.height() / 2), kRimCrop.width(), kRimCrop.height());
@@ -355,7 +355,7 @@ TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
         const QImage plain = withoutGrid(*m_new);
         ASSERT_EQ(plain.size(), shots.fresh.size()) << stem;
         EXPECT_EQ(changesInside(plain, shots.fresh, shots.background.rgb(), {}), 0U)
-            << stem << ": the back edges stay hidden and the faces whole";
+            << stem << ": back edges stay hidden and the faces whole";
         int rows = 0;
         for (int y = 0; y < plain.height(); ++y) {
             for (int x = 0; x < plain.width(); x += 2) {
@@ -365,7 +365,7 @@ TEST_F(GridPairTest, ALowOrbitRunsTheGridToTheHorizon)
                 }
             }
         }
-        EXPECT_GT(rows, plain.height() / 3) << stem << ": the grid reaches toward the horizon";
+        EXPECT_GT(rows, plain.height() / 3) << stem << ": grid reaches toward the horizon";
     }
 }
 
@@ -399,7 +399,7 @@ TEST_F(GridPairTest, GridLinesLandOnTheOldViewsLines)
         }
         const double cell = std::ranges::min(gaps);
         for (const double gap : gaps) {
-            EXPECT_NEAR(gap, cell, kLineTolerance) << stem << ": the new lines keep one step";
+            EXPECT_NEAR(gap, cell, kLineTolerance) << stem << ": new lines keep one step";
         }
     }
 }
@@ -430,7 +430,7 @@ TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
         }
         return count;
     };
-    EXPECT_GE(shownNear(plain.fresh, edge, kEdgeTolerance), 3) << "the body edge draws over the grid line";
+    EXPECT_GE(shownNear(plain.fresh, edge, kEdgeTolerance), 3) << "body edge draws over the grid line";
 
     for (QWidget* view : std::array<QWidget*, 2>{m_old->oldView(), m_new->viewport()}) {
         act(*view, at, true);
@@ -439,7 +439,7 @@ TEST_F(GridPairTest, ABodyEdgeOnAGridLineStaysInFront)
     const Shots selected = shoot([](app::MainWindow&) {}, "selected edge on a grid line");
     const render::Encoded gold = render::encodedOf(render::kSelectedGold);
     EXPECT_GE(shownNear(selected.fresh, QColor::fromRgbF(gold[0], gold[1], gold[2]).rgb(), kGoldTolerance), 3)
-        << "the selected edge draws over the grid line";
+        << "selected edge draws over the grid line";
 }
 
 } // namespace

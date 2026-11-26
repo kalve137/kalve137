@@ -271,8 +271,7 @@ int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& de
     const std::vector<double>& frames = timed.frames;
     if (frames.size() != static_cast<std::size_t>(kOrbitFrames) ||
         timed.cold.size() != static_cast<std::size_t>(kOrbitFrames)) {
-        K137_ERROR(App, "The bench timed {} warm and {} cold of {} frames", frames.size(), timed.cold.size(),
-                   kOrbitFrames);
+        K137_ERROR(App, "Bench timed {} warm and {} cold of {} frames", frames.size(), timed.cold.size(), kOrbitFrames);
         return 1;
     }
     QJsonObject result = benchHeader(window, useViewport, design, size);

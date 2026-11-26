@@ -122,12 +122,12 @@ std::optional<QSize> checkedRequest(const std::filesystem::path& design, const Q
 {
     const std::optional<QSize> requested = sizeNamed(size);
     if (!requested) {
-        K137_ERROR(App, "The bench size must look like 2560x1440, got {}", size.toStdString());
+        K137_ERROR(App, "Bench size must look like 2560x1440, got {}", size.toStdString());
         return std::nullopt;
     }
     std::error_code missing;
     if (!std::filesystem::is_regular_file(design, missing)) {
-        K137_ERROR(App, "The bench design {} does not exist", design.string());
+        K137_ERROR(App, "Bench design {} does not exist", design.string());
         return std::nullopt;
     }
     return requested;
@@ -173,7 +173,7 @@ bool showForBench(MainWindow& window, bool useViewport, QSize requested)
         window.show();
     }
     if (useViewport && window.viewport() == nullptr) {
-        K137_ERROR(App, "The bench view did not start");
+        K137_ERROR(App, "Bench view did not start");
         return false;
     }
     const bool ready = waitFor([&] {
@@ -181,7 +181,7 @@ bool showForBench(MainWindow& window, bool useViewport, QSize requested)
                            : window.oldView()->isReady();
     });
     if (!ready || (useViewport && window.viewport()->hasFailed())) {
-        K137_ERROR(App, "The bench view did not start");
+        K137_ERROR(App, "Bench view did not start");
         return false;
     }
     sizeCanvas(window, requested);
@@ -290,7 +290,7 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
         return 2;
     }
     if (options.view != ViewKind::New) {
-        K137_ERROR(App, "The change bench runs on the viewport only");
+        K137_ERROR(App, "Change bench runs on the viewport only");
         return 2;
     }
     MainWindow window(options);
@@ -302,7 +302,7 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
     auto* session = window.findChild<DesignSession*>();
     render::Viewport& view = *window.viewport();
     if (session->model().bodies.empty()) {
-        K137_ERROR(App, "The bench design {} has no bodies", design.string());
+        K137_ERROR(App, "Bench design {} has no bodies", design.string());
         return 1;
     }
 
@@ -386,7 +386,7 @@ int runBenchChange(const StartupOptions& options, const std::filesystem::path& d
     for (const auto& [name, prepare, recomputes] : plan) {
         const std::optional<QJsonObject> timed = timeChange(*session, view, prepare(), recomputes);
         if (!timed) {
-            K137_ERROR(App, "The change bench could not draw a frame after {}", name);
+            K137_ERROR(App, "Change bench could not draw a frame after {}", name);
             return 1;
         }
         changes.insert(QLatin1String(name), *timed);
@@ -410,7 +410,7 @@ int runBenchImport(const StartupOptions& options, const std::filesystem::path& s
         return 2;
     }
     if (options.view != ViewKind::New) {
-        K137_ERROR(App, "The import bench runs on the viewport only");
+        K137_ERROR(App, "Import bench runs on the viewport only");
         return 2;
     }
     MainWindow window(options);
@@ -428,7 +428,7 @@ int runBenchImport(const StartupOptions& options, const std::filesystem::path& s
     const double addMs = elapsedMs(timer);
     QApplication::processEvents();
     if (!window.viewport()->benchFrame()) {
-        K137_ERROR(App, "The import bench could not draw a frame after the import");
+        K137_ERROR(App, "Import bench could not draw a frame after the import");
         return 1;
     }
     const double firstFrameMs = elapsedMs(timer);
@@ -458,7 +458,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
         return 2;
     }
     if (options.view != ViewKind::New) {
-        K137_ERROR(App, "The hover bench runs on the viewport only");
+        K137_ERROR(App, "Hover bench runs on the viewport only");
         return 2;
     }
     MainWindow window(options);
@@ -469,7 +469,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
     QApplication::processEvents();
     render::Viewport& view = *window.viewport();
     if (!view.benchFrame()) {
-        K137_ERROR(App, "The hover bench could not draw a frame");
+        K137_ERROR(App, "Hover bench could not draw a frame");
         return 1;
     }
     const bool selected = selectForBench(window);
@@ -513,7 +513,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
     for (int i = 0; i < kHoverWarmup + kHoverMoves; ++i) {
         const std::optional<Move> move = timedMove(positionOf(i));
         if (!move) {
-            K137_ERROR(App, "The hover bench could not draw a frame after a move");
+            K137_ERROR(App, "Hover bench could not draw a frame after a move");
             return 1;
         }
         if (i < kHoverWarmup) {
@@ -534,7 +534,7 @@ int runBenchHover(const StartupOptions& options, const std::filesystem::path& de
         commands.navigate(turn);
         const std::optional<Move> move = timedMove(positionOf(i));
         if (!move) {
-            K137_ERROR(App, "The hover bench could not draw a frame after a camera change");
+            K137_ERROR(App, "Hover bench could not draw a frame after a camera change");
             return 1;
         }
         staleMs.push_back(move->total);

@@ -206,10 +206,10 @@ StartProblem checkStart(GraphicsApi api)
     case StartProblem::None:
         break;
     case StartProblem::NoDevice:
-        K137_ERROR(Viewer, "The viewport could not start its graphics device with {}", graphicsApiName(api));
+        K137_ERROR(Viewer, "Viewport could not start its graphics device with {}", graphicsApiName(api));
         break;
     case StartProblem::TooOld:
-        K137_ERROR(Viewer, "The viewport needs OpenGL 3.2 or OpenGL ES 3.0 and {} offers {}.{}{}", graphicsApiName(api),
+        K137_ERROR(Viewer, "Viewport needs OpenGL 3.2 or OpenGL ES 3.0 and {} offers {}.{}{}", graphicsApiName(api),
                    found.major, found.minor, found.openGlEs ? " ES" : "");
         break;
     }
@@ -488,7 +488,7 @@ void Viewport::refreshSketches()
 {
     SketchGeometry geometry = buildSketches(m_sketches, m_sketchLook, m_sketchMarks, m_scene.origin);
     if (geometry.capped && !m_sketchGeometry.capped) {
-        K137_WARN(Viewer, "The viewport picks only the first {} sketch items", kDatumEntries);
+        K137_WARN(Viewer, "Viewport picks only the first {} sketch items", kDatumEntries);
     }
     const bool same = geometry.drawsLike(m_sketchGeometry);
     const bool samePicks = geometry.picksLike(m_sketchGeometry);
@@ -507,7 +507,7 @@ void Viewport::refreshDatums()
 {
     DatumGeometry geometry = buildDatums(m_datums, m_camera, viewport(), m_scene.origin, m_datumMarks);
     if (geometry.capped && !m_datumGeometry.capped) {
-        K137_WARN(Viewer, "The viewport picks only the first {} planes, axes and points", kDatumEntries);
+        K137_WARN(Viewer, "Viewport picks only the first {} planes, axes and points", kDatumEntries);
     }
     const bool same = geometry.drawsLike(m_datumGeometry);
     m_datumGeometry = std::move(geometry);
@@ -630,7 +630,7 @@ bool Viewport::ensureIdTargets(QSize size)
     targets.depthStencil.reset(device->newRenderBuffer(QRhiRenderBuffer::DepthStencil, size, 1));
     if (!targets.ids->create() || !targets.depths->create() || !targets.depthStencil->create()) {
         m_idsFailed = true;
-        K137_ERROR(Viewer, "The viewport could not create its {}x{} id targets", size.width(), size.height());
+        K137_ERROR(Viewer, "Viewport could not create its {}x{} id targets", size.width(), size.height());
         return false;
     }
     QRhiTextureRenderTargetDescription description;
@@ -645,7 +645,7 @@ bool Viewport::ensureIdTargets(QSize size)
     targets.target->setRenderPassDescriptor(targets.pass.get());
     if (!targets.target->create() || (first && !m_bodies->setIdTarget(targets.pass.get()))) {
         m_idsFailed = true;
-        K137_ERROR(Viewer, "The viewport could not create its id pass");
+        K137_ERROR(Viewer, "Viewport could not create its id pass");
         return false;
     }
     targets.size = size;
@@ -876,7 +876,7 @@ void Viewport::initialize(QRhiCommandBuffer*)
         fail();
     }
     if (!m_bodies->setPostTarget(resolvedTexture())) {
-        K137_WARN(Viewer, "The viewport could not create its halo pass, highlights draw without halos");
+        K137_WARN(Viewer, "Viewport could not create its halo pass, highlights draw without halos");
     }
 }
 
