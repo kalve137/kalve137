@@ -239,8 +239,9 @@ struct HandleDraw {
     std::uint64_t revision = 0;
     std::span<const Handle> arrows;
     std::span<const DatumLine> guides;
+    std::span<const DatumLine> outlines;
 
-    bool empty() const { return arrows.empty() && guides.empty(); }
+    bool empty() const { return arrows.empty() && guides.empty() && outlines.empty(); }
 };
 
 struct SketchDraw {

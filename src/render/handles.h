@@ -36,6 +36,7 @@ struct HandleItem {
 struct HandleGeometry {
     std::vector<Handle> arrows;
     std::vector<DatumLine> guides;
+    std::vector<DatumLine> outlines;
 
     bool operator==(const HandleGeometry&) const = default;
 };
