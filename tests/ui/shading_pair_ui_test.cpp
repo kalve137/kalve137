@@ -163,7 +163,7 @@ protected:
 
 TEST_F(ShadingPairTest, EveryVisibleFaceMatchesTheOldView)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     const std::filesystem::path folder = pairFolder("ShadingPairTest");

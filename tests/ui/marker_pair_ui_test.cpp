@@ -298,7 +298,7 @@ protected:
 
 TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -358,7 +358,7 @@ TEST_F(MarkerPairTest, EveryMarkerKindKeepsTheOldViewsPixelSizeAndColor)
 
 TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;
@@ -426,7 +426,7 @@ TEST_F(MarkerPairTest, ConstructionAndOriginPointsDrawOverTheBodyLikeTheOldView)
 
 TEST_F(MarkerPairTest, ConstructionPointsPickInAxisSourcesAndTheOriginPointNever)
 {
-    if (const std::optional<std::string> missing = newViewMissing()) {
+    if (const std::optional<std::string> missing = viewportMissing()) {
         GTEST_SKIP() << *missing;
     }
     ASSERT_TRUE(start()) << kViewportDidNotStart;

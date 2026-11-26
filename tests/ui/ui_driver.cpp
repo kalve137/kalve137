@@ -411,8 +411,8 @@ bool paintsAccent(QWidget& button)
 
 bool drawsReferenceColors(const viewer::OcctViewWidget& oldView)
 {
-    static const QRegularExpression version(QStringLiteral("GLversion: (\\d+)\\.(\\d+)"));
-    const QRegularExpressionMatch found = version.match(oldView.glInfo());
+    static const QRegularExpression kVersion(QStringLiteral("GLversion: (\\d+)\\.(\\d+)"));
+    const QRegularExpressionMatch found = kVersion.match(oldView.glInfo());
     if (!found.hasMatch()) {
         return true;
     }
