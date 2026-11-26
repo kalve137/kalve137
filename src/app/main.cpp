@@ -117,6 +117,9 @@ int main(int argc, char** argv)
     QApplication::setApplicationName("Kalve 137");
     QApplication::setOrganizationName(headless ? kalve137::app::kSmokeOrganization : "Kalve 137");
     QApplication::setApplicationVersion(KALVE137_VERSION);
+#ifdef Q_OS_LINUX
+    QApplication::setDesktopFileName("kalve137");
+#endif
     if (headless) {
         kalve137::app::prepareSmoke();
     }
