@@ -56,5 +56,16 @@ TEST(StartupOptions, TheApiOverrideNeedsTheViewport)
         parseStartup({kProgram, QStringLiteral("--graphics-api"), QStringLiteral("d3d12")}, {}).error.isEmpty());
 }
 
+TEST(StartupOptions, TheApiVariableGoesThroughTheFlagParser)
+{
+    const ParsedStartup parsed = parseStartupVariables(QStringLiteral("new"), QStringLiteral("OpenGL"));
+    EXPECT_TRUE(parsed.error.isEmpty()) << parsed.error.toStdString();
+    EXPECT_EQ(parsed.options.view, ViewKind::New);
+    EXPECT_EQ(parsed.options.graphicsApi, render::GraphicsApi::OpenGL);
+    EXPECT_FALSE(parseStartupVariables(QStringLiteral("new"), {}).options.graphicsApi);
+    EXPECT_FALSE(parseStartupVariables(QStringLiteral("new"), QStringLiteral("glide")).error.isEmpty());
+    EXPECT_FALSE(parseStartupVariables({}, QStringLiteral("opengl")).error.isEmpty());
+}
+
 } // namespace
 } // namespace kalve137::app

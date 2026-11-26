@@ -60,10 +60,11 @@ std::filesystem::path pairFolder(const std::string& suite)
 
 std::optional<std::string> viewportMissing()
 {
-    if (app::startupFromEnvironment().view != app::ViewKind::New) {
+    const app::StartupOptions startup = app::startupFromEnvironment();
+    if (startup.view != app::ViewKind::New) {
         return "Runs with KALVE137_VIEW=new";
     }
-    const render::GraphicsApi api = render::platformGraphicsApi();
+    const render::GraphicsApi api = startup.graphicsApi.value_or(render::platformGraphicsApi());
     if (!render::canStart(api)) {
         return std::format("The viewport has no usable {} device here", render::graphicsApiName(api));
     }
@@ -72,7 +73,9 @@ std::optional<std::string> viewportMissing()
 
 std::unique_ptr<app::MainWindow> showPairWindow(app::ViewKind view)
 {
-    auto window = std::make_unique<app::MainWindow>(app::StartupOptions{.view = view, .graphicsApi = std::nullopt});
+    const std::optional<render::GraphicsApi> api =
+        view == app::ViewKind::New ? app::startupFromEnvironment().graphicsApi : std::nullopt;
+    auto window = std::make_unique<app::MainWindow>(app::StartupOptions{.view = view, .graphicsApi = api});
     window->setAttribute(Qt::WA_DontShowOnScreen);
     window->resize(kWindowSize);
     window->show();

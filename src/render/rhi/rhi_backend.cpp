@@ -429,6 +429,7 @@ void RhiBackend::writeUniforms(const DrawList& list, QRhiResourceUpdateBatch* up
     Uniforms origin = uniforms;
     origin.viewProjection = uniforms.wideViewProjection;
     origin.overlayBias = {};
+    origin.overlayScale.at(3) = 1.0F;
     updates->updateDynamicBuffer(m_originUniforms.get(), 0, sizeof(Uniforms), &origin);
 }
 
