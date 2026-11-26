@@ -76,6 +76,7 @@ inline constexpr int kHandleGlowAlpha = 90;
 inline constexpr int kHandleLitPercent = 125;
 inline constexpr double kHandleGuideWidth = 1.5;
 inline constexpr int kHandleGuideAlpha = 170;
+inline constexpr double kMeasureLineWidth = 2.0;
 inline constexpr std::uint32_t kSolidPattern = 0xFFFFU;
 inline constexpr std::uint32_t kDashPattern = 0xFFC0U;
 inline constexpr std::uint32_t kDotDashPattern = 0xFF18U;

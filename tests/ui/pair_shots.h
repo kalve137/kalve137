@@ -47,6 +47,7 @@ QAction* actionNamed(app::MainWindow& window, const QString& text);
 void showOnlyBodies(app::MainWindow& window, const QString& style);
 
 int gapOf(QRgb a, QRgb b);
+int markerChangeAround(const QImage& before, const QImage& after, QPointF at);
 QRgb median(const std::vector<QRgb>& colors);
 std::string hex(QRgb color);
 camera::Vec3 toVec(const snapshot::Point& point);
