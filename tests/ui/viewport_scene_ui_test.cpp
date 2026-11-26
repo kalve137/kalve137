@@ -247,7 +247,7 @@ TEST_F(ViewportTest, HideAndShowRewriteOnlyThePalette)
     expectShown(*canvas, before, "a hide");
     EXPECT_FALSE(session.rays().rays(canvas->scene()).first(above, down)) << "a hidden body takes no ray";
     EXPECT_EQ(session.rays().builds(), rayBuilds) << "a hide keeps the ray scene";
-    EXPECT_EQ(displayedObjects(old), displayed - 1) << "the old view erases only the hidden body";
+    EXPECT_EQ(displayedObjects(old), displayed) << "the hidden view draws no bodies to erase";
 
     session.setBodyVisible(second, true);
     EXPECT_EQ(canvas->scene().bodies, bodies) << "a show puts the body back in model order";

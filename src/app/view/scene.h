@@ -63,6 +63,7 @@ public:
     const core::Document& document() const { return m_document; }
     const core::Model& model() const { return m_model; }
     void setPicks(PickSource& picks) { m_source = &picks; }
+    void setDrawsBodies(bool draws);
     bool setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible);
     std::size_t displayedBodies() const { return m_bodies.size(); }
     void setPickMode(PickMode mode);
@@ -137,6 +138,7 @@ private:
     std::set<core::BodyKey> m_hiddenBodies;
     std::set<core::BodyKey> m_previewBodies;
     bool m_originVisible = false;
+    bool m_drawsBodies = true;
     PickMode m_mode = PickMode::None;
     VisualStyle m_style = VisualStyle::ShadedWithEdges;
     core::FeatureId m_editingSketch = 0;
