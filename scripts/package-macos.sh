@@ -221,7 +221,7 @@ notices_dir="$resources/notices"
 
 notice_for_name() {
     case "$1" in
-        Qt* | libQt* | libq*) echo Qt ;;
+        Qt* | libQt*) echo Qt ;;
         libTK* | TK*) echo OpenCASCADE ;;
         libplanegcs* | planegcs*) echo PlaneGCS ;;
         libfreetype* | freetype*) echo FreeType ;;
@@ -264,7 +264,11 @@ for file in THIRD-PARTY-NOTICES.md samples/dodecahedron.k137; do
     fi
 done
 
+plugins="$app/Contents/PlugIns"
 required_notices=()
+if [[ -d "$plugins" ]]; then
+    required_notices+=(Qt)
+fi
 while IFS= read -r base; do
     [[ -z "$base" ]] && continue
     if notice="$(notice_for_name "$base")"; then
@@ -274,7 +278,7 @@ while IFS= read -r base; do
         missing=1
     fi
 done < <(
-    find "$app" \( -name '*.dylib' -o -name '*.framework' \) -print | while IFS= read -r path; do
+    find "$app" -path "$plugins" -prune -o \( -name '*.dylib' -o -name '*.framework' \) -print | while IFS= read -r path; do
         shipped_name "$path"
     done | sort -u
 )
