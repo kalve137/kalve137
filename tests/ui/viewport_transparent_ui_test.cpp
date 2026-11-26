@@ -26,6 +26,7 @@ namespace {
 
 constexpr float kGhost = 0.45F;
 constexpr int kBlendTolerance = 6;
+constexpr std::size_t kGridPixelsUnderGhost = 200;
 
 struct BlendCount {
     std::size_t blended = 0;
@@ -151,6 +152,53 @@ TEST_F(ViewportTest, DrawsTransparentBodiesBehindOpaqueOnes)
         view.setViewportStyle(canvas->viewportStyle());
         expectTransparentBodiesBlend(view, std::string(render::graphicsApiName(api)), *ui);
     }
+}
+
+TEST_F(ViewportTest, TransparentBodiesTintTheGridBehindThem)
+{
+    render::Viewport* canvas = ui->viewport();
+    if (canvas == nullptr) {
+        GTEST_SKIP() << "Runs with KALVE137_VIEW=new";
+    }
+    const snapshot::Point origin{0.0, 0.0, 0.0};
+    snapshot::Body faded = render::test::bodyOf(render::test::edgedBox({-20.0, -20.0, 2.0}, {20.0, 20.0, 30.0}));
+    const auto solidGhost = render::test::shared(faded);
+    faded.opacity = kGhost;
+    const auto ghost = render::test::shared(std::move(faded));
+    canvas->setCamera(obliqueAt({0.0, 0.0, 10.0}, 90.0));
+
+    canvas->setScene({.bodies = {}, .origin = origin, .hidden = {}});
+    const QImage gridShot = grabbed(*canvas);
+    canvas->setScene({.bodies = {solidGhost}, .origin = origin, .hidden = {}});
+    const QImage solidShot = grabbed(*canvas);
+    canvas->setScene({.bodies = {ghost}, .origin = origin, .hidden = {}});
+    const QImage ghostShot = grabbed(*canvas);
+    ui->save("ghost over the grid");
+    QImage bareShot;
+    {
+        const GridHidden gridOff(*canvas);
+        canvas->setScene({.bodies = {}, .origin = origin, .hidden = {}});
+        bareShot = grabbed(*canvas);
+    }
+    canvas->setScene({.bodies = {}, .origin = origin, .hidden = {}});
+
+    std::size_t underGhost = 0;
+    std::size_t wrong = 0;
+    for (int y = 0; y < ghostShot.height(); ++y) {
+        for (int x = 0; x < ghostShot.width(); ++x) {
+            const QRgb grid = gridShot.pixel(x, y);
+            const QRgb solid = solidShot.pixel(x, y);
+            if (gapOf(grid, bareShot.pixel(x, y)) <= kBlendTolerance || gapOf(solid, grid) <= kBlendTolerance) {
+                continue;
+            }
+            ++underGhost;
+            const QRgb expected = qRgb(mixed(qRed(solid), qRed(grid)), mixed(qGreen(solid), qGreen(grid)),
+                                       mixed(qBlue(solid), qBlue(grid)));
+            wrong += gapOf(ghostShot.pixel(x, y), expected) > kBlendTolerance ? 1 : 0;
+        }
+    }
+    EXPECT_GT(underGhost, kGridPixelsUnderGhost) << "grid lines lie behind the ghost";
+    EXPECT_LT(wrong, underGhost / 10) << wrong << " of " << underGhost << " grid pixels behind the ghost miss its tint";
 }
 
 } // namespace

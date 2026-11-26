@@ -733,8 +733,9 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
             buffer->draw(kEdgeCorners, gpu->segmentCount);
         }
     }
-    drawTransparent(buffer, viewport);
     drawGrid(buffer, viewport);
+    drawFill(buffer, m_sketchProfiles.get(), m_sketches.profileBindings.get(), m_sketches.profiles, viewport);
+    drawTransparent(buffer, viewport);
     drawDatums(buffer, viewport);
     if (m_hiddenPass) {
         const std::size_t hidden = m_biased ? 1 : 0;
@@ -745,7 +746,6 @@ void RhiBackend::draw(QRhiCommandBuffer* buffer, QSize size) const
     drawLines(buffer, m_sketchCurves.get(), m_sketches.curveBindings.get(), m_sketches.curves, viewport);
     drawLines(buffer, m_markerDepth.get(), m_markers.depthBindings.get(), m_markers.depth, viewport);
     drawOrigin(buffer, viewport);
-    drawFill(buffer, m_sketchProfiles.get(), m_sketches.profileBindings.get(), m_sketches.profiles, viewport);
     drawActiveSketch(buffer, viewport);
     drawLines(buffer, m_markerTop.get(), m_markers.topBindings.get(), m_markers.top, viewport);
     drawLines(buffer, m_annotationQuads.get(), m_annotations.bindings.get(), m_annotations.quads, viewport);
