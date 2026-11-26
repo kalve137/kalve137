@@ -57,6 +57,19 @@ frameworks="$app/Contents/Frameworks"
 macos_dir="$app/Contents/MacOS"
 mkdir -p "$frameworks"
 
+cache_value() {
+    sed -n "s/^$1:[A-Z]*=//p" "$build/CMakeCache.txt"
+}
+
+vcpkg_installed="$(cache_value VCPKG_INSTALLED_DIR)"
+vcpkg_triplet="$(cache_value VCPKG_TARGET_TRIPLET)"
+if [[ -z "$vcpkg_installed" || -z "$vcpkg_triplet" ]]; then
+    echo "No vcpkg install dir or triplet in $build/CMakeCache.txt" >&2
+    exit 1
+fi
+lib_dirs=("$staging/lib" "$vcpkg_installed/$vcpkg_triplet/lib")
+copied=0
+
 is_macho() {
     file "$1" 2>/dev/null | grep -q 'Mach-O'
 }
@@ -76,8 +89,12 @@ is_bad_dep() {
     return 1
 }
 
+list_deps() {
+    otool -L "$1" | awk '/^\t/ {print $1}'
+}
+
 own_id() {
-    otool -D "$1" | sed -n 2p
+    otool -D "$1" | awk '!/:$/ && id == "" {id = $0} END {print id}'
 }
 
 is_leak() {
@@ -96,6 +113,24 @@ add_exec_rpath() {
     fi
 }
 
+bundle_rpath_dep() {
+    local name="$1"
+    local dest="$frameworks/$name"
+    if [[ -e "$dest" ]]; then
+        return
+    fi
+    local dir
+    for dir in "${lib_dirs[@]}"; do
+        if [[ -f "$dir/$name" ]]; then
+            cp -f "$dir/$name" "$dest"
+            chmod 755 "$dest"
+            install_name_tool -id "@rpath/$name" "$dest"
+            copied=1
+            return
+        fi
+    done
+}
+
 fix_dependencies() {
     local target="$1"
     local deps=()
@@ -103,9 +138,16 @@ fix_dependencies() {
     id="$(own_id "$target")"
     while IFS= read -r line; do
         deps+=("$line")
-    done < <(otool -L "$target" | tail -n +2 | awk '{print $1}')
+    done < <(list_deps "$target")
     for dep in "${deps[@]}"; do
-        if [[ "$dep" == "$id" ]] || should_skip_dep "$dep"; then
+        if [[ "$dep" == "$id" ]]; then
+            continue
+        fi
+        if [[ "$dep" == @rpath/* ]]; then
+            bundle_rpath_dep "${dep#@rpath/}"
+            continue
+        fi
+        if should_skip_dep "$dep"; then
             continue
         fi
         if [[ ! -f "$dep" ]]; then
@@ -149,8 +191,9 @@ bundle_dylibs() {
             local before
             before="$(otool -L "$macho")"
             fix_dependencies "$macho"
-            if [[ "$(otool -L "$macho")" != "$before" ]]; then
+            if [[ "$(otool -L "$macho")" != "$before" || "$copied" -eq 1 ]]; then
                 changed=1
+                copied=0
             fi
         done < <(list_machos)
     done
@@ -262,11 +305,14 @@ while IFS= read -r macho; do
     id="$(own_id "$macho")"
     while IFS= read -r dep; do
         [[ -n "$id" && "$dep" == "$id" ]] && continue
-        if is_leak "$dep"; then
+        if [[ "$dep" == @rpath/* && ! -e "$frameworks/${dep#@rpath/}" ]]; then
+            echo "Unbundled dependency in $macho: $dep" >&2
+            leaks=$((leaks + 1))
+        elif is_leak "$dep"; then
             echo "Dependency leak in $macho: $dep" >&2
             leaks=$((leaks + 1))
         fi
-    done < <(otool -L "$macho" | tail -n +2 | awk '{print $1}')
+    done < <(list_deps "$macho")
 done < <(list_machos)
 if [[ "$leaks" -ne 0 ]]; then
     echo "$leaks dependency leaks in $app" >&2
