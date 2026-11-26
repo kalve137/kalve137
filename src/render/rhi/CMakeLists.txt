@@ -12,6 +12,7 @@ add_library(kalve137_render_rhi STATIC
     rhi_handles.cpp
     rhi_ids.cpp
     rhi_pipelines.cpp
+    rhi_transparent.cpp
     viewport.cpp
     viewport.h
     viewport_handles.cpp

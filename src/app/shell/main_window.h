@@ -89,6 +89,8 @@ private:
     void updateStatus();
     void refreshScene();
     void refreshVisibility(const std::vector<core::BodyKey>& keys, bool visible);
+    void showViewportScene(snapshot::Scene scene);
+    void showPickModeOpacity();
 
     void startCreateSketch();
     void stopPickingPlane();

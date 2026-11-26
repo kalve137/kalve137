@@ -90,7 +90,9 @@ private:
         std::uint64_t meshRevision = 0;
         std::uint64_t paletteRevision = 0;
         bool closed = false;
+        float opacity = 1.0F;
         std::map<Key, Slot> members;
+        std::vector<BodyRange> ranges;
         std::vector<Vertex> vertices;
         std::vector<std::uint32_t> indices;
         std::vector<Entry> palette;

@@ -105,6 +105,23 @@ std::uint32_t pickOf(const Marker& marker)
     return pick;
 }
 
+double farness(const Position& center, const Frame& frame)
+{
+    if (frame.perspective) {
+        const double x = static_cast<double>(center[0]) - frame.eyePosition[0];
+        const double y = static_cast<double>(center[1]) - frame.eyePosition[1];
+        const double z = static_cast<double>(center[2]) - frame.eyePosition[2];
+        return (x * x) + (y * y) + (z * z);
+    }
+    return -((static_cast<double>(center[0]) * frame.eye[0]) + (static_cast<double>(center[1]) * frame.eye[1]) +
+             (static_cast<double>(center[2]) * frame.eye[2]));
+}
+
+float opacityOf(const snapshot::Body& body)
+{
+    return std::isfinite(body.opacity) ? std::clamp(body.opacity, 0.0F, 1.0F) : 1.0F;
+}
+
 std::vector<camera::Box> bodyBounds(const snapshot::Scene& scene)
 {
     std::vector<camera::Box> boxes;

@@ -1,0 +1,45 @@
+// SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "app/view/body_opacity.h"
+
+#include "viewer/style.h"
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+namespace kalve137::app {
+
+namespace {
+
+constexpr float kPlanesModeOpacity = 1.0F - static_cast<float>(viewer::style::kTintHalf);
+
+void setOpacity(std::vector<std::shared_ptr<const snapshot::Body>>& bodies, float opacity)
+{
+    for (std::shared_ptr<const snapshot::Body>& body : bodies) {
+        if (body == nullptr || body->opacity == opacity) {
+            continue;
+        }
+        snapshot::Body changed = *body;
+        changed.opacity = opacity;
+        body = std::make_shared<const snapshot::Body>(std::move(changed));
+    }
+}
+
+} // namespace
+
+float bodyOpacity(PickMode mode)
+{
+    return mode == PickMode::Planes ? kPlanesModeOpacity : 1.0F;
+}
+
+snapshot::Scene withBodyOpacity(snapshot::Scene scene, PickMode mode)
+{
+    const float opacity = bodyOpacity(mode);
+    setOpacity(scene.bodies, opacity);
+    setOpacity(scene.hidden, opacity);
+    return scene;
+}
+
+} // namespace kalve137::app

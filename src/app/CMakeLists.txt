@@ -113,6 +113,8 @@ add_library(kalve137_app STATIC
     theme/theme_tokens.h
     view/band_overlay.cpp
     view/band_overlay.h
+    view/body_opacity.cpp
+    view/body_opacity.h
     view/camera_commands.cpp
     view/camera_commands.h
     view/grid_settings.cpp
