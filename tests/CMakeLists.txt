@@ -5,6 +5,8 @@ find_package(GTest CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 include(GoogleTest)
 
+set(font_dir "${PROJECT_SOURCE_DIR}/third_party/roboto")
+
 add_executable(kalve137_tests
     app/badge_placement_test.cpp
     app/batch_import_test.cpp
@@ -97,6 +99,7 @@ qt_add_shaders(kalve137_tests "kalve137_test_shaders"
 )
 kalve137_set_warnings(kalve137_tests)
 kalve137_copy_runtime_dlls(kalve137_tests)
+kalve137_stage_fonts(kalve137_tests FONT_DIRS ${font_dir})
 gtest_discover_tests(kalve137_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60)
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -173,6 +176,7 @@ target_link_libraries(kalve137_uitests PRIVATE
 )
 kalve137_set_warnings(kalve137_uitests)
 kalve137_copy_runtime_dlls(kalve137_uitests)
+kalve137_stage_fonts(kalve137_uitests FONT_DIRS ${font_dir})
 gtest_discover_tests(kalve137_uitests
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
