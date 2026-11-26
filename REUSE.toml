@@ -10,6 +10,8 @@ path = [
     "**/*.gif",
     "**/*.ico",
     "**/*.k137",
+    "assets/linux/kalve137.desktop",
+    "assets/linux/kalve137.xml",
 ]
 SPDX-FileCopyrightText = "2026 Danius Kalvaitis"
 SPDX-License-Identifier = "GPL-3.0-or-later"
