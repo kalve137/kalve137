@@ -5,7 +5,7 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "37 1 * * *"
   workflow_dispatch:
     inputs:
       force:
