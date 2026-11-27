@@ -20,6 +20,7 @@ if (-not $env:QT_ROOT_DIR) {
 }
 
 $cmakeDir = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake"
-$env:PATH = "$cmakeDir\CMake\bin;$cmakeDir\Ninja;$env:PATH"
+$cmakeBin = if ($env:KALVE137_CMAKE_DIR) { $env:KALVE137_CMAKE_DIR } else { "$cmakeDir\CMake\bin" }
+$env:PATH = "$cmakeBin;$cmakeDir\Ninja;$env:PATH"
 
 Write-Host "Kalve 137 dev shell: VCPKG_ROOT=$env:VCPKG_ROOT QT_ROOT_DIR=$env:QT_ROOT_DIR"

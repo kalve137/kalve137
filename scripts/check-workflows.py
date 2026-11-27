@@ -12,6 +12,14 @@ pinned_ref = re.compile(r"^\s+ref: \$\{\{ inputs\.ref \}\}\s*$")
 caller_context = re.compile(r"github\.(sha|ref|event_name)")
 vcpkg_cache_step = re.compile(r"^\s*- name: (.*vcpkg binary cache|Install LLVM)")
 vcpkg_env = re.compile(r"^\s*(VCPKG|LLVM)_\w+: ")
+cmake_version = re.compile(r"^  CMAKE_VERSION: ")
+configure = re.compile(r"cmake --preset|scripts/package")
+pinned_cmake_step = (
+    "- name: Install CMake",
+    "uses: lukka/get-cmake@",
+    "cmakeVersion: ${{ env.CMAKE_VERSION }}",
+    "scripts/ci-check-cmake.py",
+)
 
 
 def read_lines(path):
@@ -65,7 +73,33 @@ def vcpkg_cache_setup(path, job):
     return env, steps
 
 
+def cmake_versions():
+    versions = {}
+    for path in sorted(workflows.glob("*.yml")):
+        for line in read_lines(path):
+            if cmake_version.match(line):
+                versions[path.name] = line.split(":", 1)[1].strip()
+    return versions
+
+
+def jobs_configuring_without_pinned_cmake(path):
+    lines = read_lines(path)
+    missing = []
+    for number, line in enumerate(lines):
+        if indent_of(line) == 2 and line.rstrip().endswith(":"):
+            job = "\n".join(body(lines, number))
+            if configure.search(job) and not all(entry in job for entry in pinned_cmake_step):
+                missing.append(line.strip().rstrip(":"))
+    return missing
+
+
 failures = []
+versions = cmake_versions()
+if set(versions) != {"ci.yml", "packages.yml"} or len(set(versions.values())) != 1:
+    failures.append(f"CMAKE_VERSION differs or is missing across workflows: {versions}")
+for name in ("ci.yml", "packages.yml"):
+    for job in jobs_configuring_without_pinned_cmake(workflows / name):
+        failures.append(f"{name}: {job} configures without the pinned Install CMake step")
 for number in checkouts_without_ref(workflows / "packages.yml"):
     failures.append(f"packages.yml:{number}: actions/checkout lacks ref: ${{{{ inputs.ref }}}}")
 for number in caller_context_uses(workflows / "nightly-build.yml"):
@@ -84,4 +118,4 @@ for failure in failures:
     print(failure, file=sys.stderr)
 if failures:
     sys.exit(1)
-print("Workflows check out the planned commit and share the vcpkg cache and LLVM with CI")
+print("Workflows check out the planned commit and share the vcpkg cache, LLVM and CMake with CI")

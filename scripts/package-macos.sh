@@ -206,8 +206,15 @@ for dir in "${lib_dirs[@]}"; do
     fi
 done
 deploy_log="$package_dir/macdeployqt.log"
-"$macdeployqt" "${deploy_args[@]}" 2>&1 | tee "$deploy_log"
-deploy_errors="$(grep -c '^ERROR' "$deploy_log" || true)"
+rpath_miss='^ERROR: Cannot resolve rpath "@rpath/[^"]+\.dylib"$'
+rpath_search='^ERROR: +using QList\("[^"]*/Contents/Frameworks"\)$'
+if ! "$macdeployqt" "${deploy_args[@]}" > "$deploy_log" 2>&1; then
+    cat "$deploy_log"
+    exit 1
+fi
+grep -Ev "$rpath_miss|$rpath_search" "$deploy_log" || true
+echo "macdeployqt: $(grep -Ec "$rpath_miss" "$deploy_log" || true) rpath misses resolved later by bundling"
+deploy_errors="$(grep -Ev "$rpath_miss|$rpath_search" "$deploy_log" | grep -c '^ERROR' || true)"
 if [[ "$deploy_errors" -ne 0 && -n "${GITHUB_ACTIONS:-}" ]]; then
     echo "::warning title=macdeployqt::$deploy_errors ERROR lines from macdeployqt, see the Package step"
 fi
