@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Kalve 137
+GenericName=3D CAD
+Comment=Parametric 3D CAD modeling
+Exec=kalve137 %f
+Icon=kalve137
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=CAD;3D;Sketch;Modeling;STEP;
+MimeType=application/x-kalve137;
+StartupWMClass=kalve137

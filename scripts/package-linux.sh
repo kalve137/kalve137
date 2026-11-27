@@ -90,12 +90,23 @@ bin="$top/bin"
 notices_dir="$bin/notices"
 plugins="$top/plugins"
 missing=0
-for file in bin/THIRD-PARTY-NOTICES.md bin/samples/dodecahedron.k137; do
+desktop_files=(
+    share/applications/kalve137.desktop
+    share/mime/packages/kalve137.xml
+    share/icons/hicolor/scalable/apps/kalve137.svg
+)
+for size in 16 24 32 48 64 128 256 512; do
+    desktop_files+=("share/icons/hicolor/${size}x${size}/apps/kalve137.png")
+done
+for file in bin/THIRD-PARTY-NOTICES.md bin/samples/dodecahedron.k137 "${desktop_files[@]}"; do
     if [[ ! -f "$top/$file" ]]; then
         echo "Package is missing $top/$file" >&2
         missing=1
     fi
 done
+if command -v desktop-file-validate > /dev/null; then
+    desktop-file-validate "$top/share/applications/kalve137.desktop" || missing=1
+fi
 
 required=()
 if [[ -d "$plugins" ]]; then
