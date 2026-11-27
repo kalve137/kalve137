@@ -245,7 +245,6 @@ set(viewport_tests
 list(JOIN ui_serial ":" ui_serial_filter)
 list(JOIN viewport_tests ":" viewport_filter)
 set(viewport_env "KALVE137_VIEW=new;KALVE137_UI_SHOTS=$<TARGET_FILE_DIR:kalve137_uitests>/ui-shots/new")
-string(REPLACE ";" "\\;" viewport_env_escaped "${viewport_env}")
 gtest_discover_tests(kalve137_uitests
     TEST_FILTER -${ui_serial_filter}
     DISCOVERY_MODE PRE_TEST
@@ -257,7 +256,7 @@ gtest_discover_tests(kalve137_uitests
     TEST_FILTER ${viewport_filter}-${ui_serial_filter}
     DISCOVERY_MODE PRE_TEST
     DISCOVERY_TIMEOUT 60
-    PROPERTIES LABELS ui ENVIRONMENT "${viewport_env_escaped}"
+    PROPERTIES LABELS ui ENVIRONMENT "${viewport_env}"
 )
 foreach(test IN LISTS ui_serial)
     set(names ${test})
