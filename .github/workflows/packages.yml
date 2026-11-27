@@ -57,7 +57,7 @@ jobs:
           cmakeVersion: ${{ env.CMAKE_VERSION }}
           ninjaVersion: ${{ env.NINJA_VERSION }}
 
-      - name: Put CMake ahead of Visual Studio's
+      - name: Put pinned CMake ahead of Visual Studio CMake
         run: Add-Content $env:GITHUB_ENV "KALVE137_CMAKE_DIR=$(Split-Path '${{ steps.cmake.outputs.cmake-path }}')"
 
       - name: Install Qt
