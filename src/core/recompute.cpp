@@ -4,6 +4,7 @@
 #include "core/recompute.h"
 
 #include "core/naming.h"
+#include "core/projection.h"
 
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
@@ -59,6 +60,15 @@ void reshape(Body& body, const TopoDS_Shape& shape, const BRepTools_History& his
     body.shape = shape;
 }
 
+std::string sentences(const std::vector<std::string>& parts)
+{
+    std::string text;
+    for (const std::string& part : parts) {
+        text += text.empty() ? part : ". " + part;
+    }
+    return text;
+}
+
 bool touches(const TopoDS_Shape& a, const TopoDS_Shape& b)
 {
     BRepExtrema_DistShapeShape distance(a, b);
@@ -67,7 +77,7 @@ bool touches(const TopoDS_Shape& a, const TopoDS_Shape& b)
 
 class Builder {
 public:
-    explicit Builder(Model& model) : m_model(model) {}
+    explicit Builder(Model& model, FaceLookup* lookup = nullptr) : m_model(model), m_lookup(lookup) {}
 
     void build(const Feature& feature)
     {
@@ -88,7 +98,7 @@ private:
         }
         bool faceLost = false;
         if (data.face) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, *data.face);
+            const std::optional<FaceHit> hit = faceOf(*data.face);
             const std::optional<gp_Ax3> frame = hit ? geometry::planarFrame(hit->face) : std::nullopt;
             if (frame) {
                 state.plane = *frame;
@@ -97,13 +107,24 @@ private:
             }
         }
         state.solved = data.sketch;
-        state.solve = sketch::solve(state.solved);
+        state.lostProjections = followProjections(state.solved, data.projections, m_model.bodies, state.plane);
+        state.solve = sketch::solveMoved(state.solved, data.sketch);
         state.profiles = sketch::findProfiles(state.solved, state.plane);
-        m_model.sketches.insert_or_assign(feature.id, std::move(state));
+        std::vector<std::string> problems;
         if (faceLost) {
-            warn(feature.id, "The face this sketch is on is gone, so the sketch stays where it was");
-        } else if (!m_model.sketches.at(feature.id).solve.conflicting.empty()) {
-            warn(feature.id, "The sketch has conflicting constraints");
+            problems.emplace_back("The face this sketch is on is gone, so the sketch stays where it was");
+        }
+        if (!state.lostProjections.empty()) {
+            problems.push_back(brokenProjectionsMessage(state.lostProjections.size()));
+        }
+        if (!state.solve.conflicting.empty()) {
+            problems.emplace_back("The sketch has conflicting constraints");
+        } else if (!state.solve.solved) {
+            problems.emplace_back("The sketch can't be solved");
+        }
+        m_model.sketches.insert_or_assign(feature.id, std::move(state));
+        if (!problems.empty()) {
+            warn(feature.id, sentences(problems));
         }
     }
 
@@ -144,7 +165,10 @@ private:
             break;
         }
         }
-        const TopoDS_Shape tool = geometry::extrude(faces, from, to, data.taperDegrees * std::numbers::pi / 180.0);
+        std::vector<TopoDS_Shape> caps;
+        const TopoDS_Shape tool =
+            geometry::extrude(faces, from, to, data.taperDegrees * std::numbers::pi / 180.0, &caps);
+        m_model.tool = {.feature = feature.id, .shape = tool, .caps = std::move(caps)};
         applyOperation(feature.id, data.bodyName, data.operation, tool,
                        nameExtrusion(tool, feature.id, state, faces, from, to));
     }
@@ -159,7 +183,7 @@ private:
             }
             target = plane->second.frame;
         } else if (data.toFace) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, *data.toFace);
+            const std::optional<FaceHit> hit = faceOf(*data.toFace);
             if (!hit) {
                 throw FeatureError("The face this extrude goes to is gone");
             }
@@ -427,7 +451,7 @@ private:
             body->faceColors.clear();
         }
         for (const TopoRef& ref : data.faces) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, ref);
+            const std::optional<FaceHit> hit = faceOf(ref);
             if (!hit) {
                 ++lost;
                 continue;
@@ -701,7 +725,7 @@ private:
         std::map<std::size_t, std::vector<TopoDS_Face>> facesByBody;
         std::size_t lost = 0;
         for (const TopoRef& ref : refs) {
-            const std::optional<FaceHit> hit = resolveFace(m_model.bodies, ref);
+            const std::optional<FaceHit> hit = faceOf(ref);
             if (!hit) {
                 ++lost;
                 continue;
@@ -726,17 +750,21 @@ private:
 
     void warn(FeatureId id, std::string message) { m_model.status[id] = {FeatureHealth::Warning, std::move(message)}; }
 
+    std::optional<FaceHit> faceOf(const TopoRef& ref) const { return resolveFace(m_model.bodies, ref, m_lookup); }
+
     Model& m_model;
+    FaceLookup* m_lookup = nullptr;
 };
 
 bool buildOne(Builder& builder, Model& model, const Feature& feature)
 {
+    model.tool = {};
     if (feature.suppressed) {
         model.status[feature.id] = {FeatureHealth::Suppressed, {}};
         return false;
     }
     model.status[feature.id] = {FeatureHealth::Ok, {}};
-    const auto start = std::chrono::steady_clock::now();
+    [[maybe_unused]] const auto start = std::chrono::steady_clock::now();
     std::vector<Body> bodiesBefore = model.bodies;
     std::string failure;
     try {
@@ -749,6 +777,7 @@ bool buildOne(Builder& builder, Model& model, const Feature& feature)
     const bool failed = !failure.empty();
     if (failed) {
         model.bodies = std::move(bodiesBefore);
+        model.tool = {};
         model.sketches.erase(feature.id);
         model.planes.erase(feature.id);
         model.axes.erase(feature.id);
@@ -789,11 +818,11 @@ std::vector<geometry::StepPart> Model::stepParts() const
     return result;
 }
 
-Model recompute(const Document& document)
+Model recompute(const Document& document, FaceLookup* lookup)
 {
     const auto start = std::chrono::steady_clock::now();
     Model model;
-    Builder builder(model);
+    Builder builder(model, lookup);
     const auto& features = document.features();
     std::size_t failed = 0;
     for (std::size_t i = 0; i < features.size(); ++i) {

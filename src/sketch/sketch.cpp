@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <map>
 #include <utility>
 
 namespace kalve137::sketch {
@@ -30,6 +31,7 @@ constexpr std::array kConstraintNames = {
     std::pair{ConstraintKind::Diameter, std::string_view("diameter")},
     std::pair{ConstraintKind::Angle, std::string_view("angle")},
     std::pair{ConstraintKind::Symmetric, std::string_view("symmetric")},
+    std::pair{ConstraintKind::Offset, std::string_view("offset")},
 };
 
 constexpr std::array kCurveNames = {
@@ -96,6 +98,7 @@ bool isDimension(ConstraintKind kind)
     case ConstraintKind::Radius:
     case ConstraintKind::Diameter:
     case ConstraintKind::Angle:
+    case ConstraintKind::Offset:
         return true;
     case ConstraintKind::Coincident:
     case ConstraintKind::Horizontal:
@@ -110,6 +113,54 @@ bool isDimension(ConstraintKind kind)
         return false;
     }
     return false;
+}
+
+std::vector<OffsetPair> offsetPairs(const Constraint& constraint)
+{
+    std::vector<OffsetPair> pairs;
+    const std::size_t count = constraint.sides.size();
+    if (constraint.kind != ConstraintKind::Offset || constraint.refs.size() != 2 * count) {
+        return pairs;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        pairs.push_back({constraint.refs[i], constraint.refs[count + i], constraint.sides[i]});
+    }
+    return pairs;
+}
+
+Constraint offsetConstraint(const std::vector<OffsetPair>& pairs, double distance, std::vector<OffsetJoint> joints)
+{
+    Constraint constraint{.kind = ConstraintKind::Offset, .value = distance, .joints = std::move(joints)};
+    for (const OffsetPair& pair : pairs) {
+        constraint.refs.push_back(pair.source);
+        constraint.sides.push_back(pair.side);
+    }
+    for (const OffsetPair& pair : pairs) {
+        constraint.refs.push_back(pair.offset);
+    }
+    return constraint;
+}
+
+std::vector<Id> offsetJointPoints(const Sketch& sketch, const std::vector<OffsetPair>& pairs)
+{
+    std::map<Id, int> touching;
+    for (const OffsetPair& pair : pairs) {
+        const Curve* curve = sketch.curve(pair.offset);
+        if (curve == nullptr || curve->kind == CurveKind::Circle) {
+            continue;
+        }
+        const std::size_t first = curve->kind == CurveKind::Arc ? 1 : 0;
+        for (std::size_t i = first; i < first + 2 && i < curve->points.size(); ++i) {
+            ++touching[curve->points[i]];
+        }
+    }
+    std::vector<Id> joints;
+    for (const auto& [point, count] : touching) {
+        if (count == 2) {
+            joints.push_back(point);
+        }
+    }
+    return joints;
 }
 
 Sketch::Sketch()
@@ -207,6 +258,9 @@ void Sketch::remove(Id id)
         return;
     }
 
+    for (const Id curve : removedCurves) {
+        dropOffsetPairs(curve);
+    }
     std::erase_if(m_constraints, [&](const auto& entry) {
         return std::ranges::any_of(
             entry.second.refs, [&](Id ref) { return std::ranges::find(removedCurves, ref) != removedCurves.end(); });
@@ -214,10 +268,38 @@ void Sketch::remove(Id id)
     dropUnusedPoints(orphanCandidates);
 }
 
+void Sketch::dropOffsetPairs(Id curve)
+{
+    for (auto it = m_constraints.begin(); it != m_constraints.end();) {
+        Constraint& constraint = it->second;
+        if (constraint.kind != ConstraintKind::Offset ||
+            std::ranges::find(constraint.refs, curve) == constraint.refs.end()) {
+            ++it;
+            continue;
+        }
+        std::vector<OffsetPair> pairs = offsetPairs(constraint);
+        std::erase_if(pairs, [&](const OffsetPair& pair) { return pair.source == curve || pair.offset == curve; });
+        if (pairs.empty()) {
+            it = m_constraints.erase(it);
+            continue;
+        }
+        const std::vector<Id> still = offsetJointPoints(*this, pairs);
+        std::vector<OffsetJoint> joints = constraint.joints;
+        std::erase_if(joints,
+                      [&](const OffsetJoint& joint) { return std::ranges::find(still, joint.point) == still.end(); });
+        Constraint kept = offsetConstraint(pairs, constraint.value, std::move(joints));
+        kept.labelOffset = constraint.labelOffset;
+        kept.expression = constraint.expression;
+        constraint = std::move(kept);
+        ++it;
+    }
+}
+
 void Sketch::dropUnusedPoints(const std::vector<Id>& candidates)
 {
     for (Id point : candidates) {
-        if (point == kOriginId || !m_points.contains(point) || !curvesUsing(point).empty()) {
+        const auto it = m_points.find(point);
+        if (point == kOriginId || it == m_points.end() || it->second.projected || !curvesUsing(point).empty()) {
             continue;
         }
         m_points.erase(point);
@@ -319,7 +401,8 @@ std::optional<std::string> validate(const Sketch& sketch)
                 return std::format("{} {} uses missing point {}", toString(curve.kind), id, point);
             }
         }
-        if (!std::isfinite(curve.radius) || curve.radius < 0.0) {
+        if (!std::isfinite(curve.radius) || curve.radius < 0.0 ||
+            (curve.kind != CurveKind::Line && curve.radius <= 0.0)) {
             return std::format("{} {} has no valid radius", toString(curve.kind), id);
         }
     }
@@ -334,6 +417,44 @@ std::optional<std::string> validate(const Sketch& sketch)
         }
         if (!std::isfinite(constraint.value)) {
             return std::format("{} constraint {} has no valid value", toString(constraint.kind), id);
+        }
+        if (constraint.kind != ConstraintKind::Offset) {
+            if (!constraint.sides.empty() || !constraint.joints.empty()) {
+                return std::format("{} constraint {} has offset sides or joints", toString(constraint.kind), id);
+            }
+            continue;
+        }
+        if (constraint.sides.empty() || constraint.refs.size() != 2 * constraint.sides.size()) {
+            return std::format("offset constraint {} has unpaired curves", id);
+        }
+        if (!(constraint.value > 0.0)) {
+            return std::format("offset constraint {} has no valid distance", id);
+        }
+        std::vector<Id> seen;
+        for (const OffsetPair& pair : offsetPairs(constraint)) {
+            const Curve* source = sketch.curve(pair.source);
+            const Curve* offset = sketch.curve(pair.offset);
+            if (source == nullptr || offset == nullptr || source->kind != offset->kind) {
+                return std::format("offset constraint {} pairs {} with {}", id, pair.source, pair.offset);
+            }
+            if (pair.side != 1 && pair.side != -1) {
+                return std::format("offset constraint {} has no valid side", id);
+            }
+            for (const Id curve : {pair.source, pair.offset}) {
+                if (std::ranges::find(seen, curve) != seen.end()) {
+                    return std::format("offset constraint {} uses curve {} twice", id, curve);
+                }
+                seen.push_back(curve);
+            }
+        }
+        std::vector<Id> joints;
+        joints.reserve(constraint.joints.size());
+        for (const OffsetJoint& joint : constraint.joints) {
+            joints.push_back(joint.point);
+        }
+        std::ranges::sort(joints);
+        if (joints != offsetJointPoints(sketch, offsetPairs(constraint))) {
+            return std::format("offset constraint {} doesn't list one entry per joint", id);
         }
     }
     return std::nullopt;

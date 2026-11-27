@@ -52,7 +52,7 @@ void showShortcuts(QWidget* window)
 
     QDialog dialog(window);
     dialog.setWindowTitle(QDialog::tr("Keyboard Shortcuts"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
     auto* filter = new QLineEdit(&dialog);
     filter->setPlaceholderText(QDialog::tr("Filter"));

@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Pull request title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check title
+        if: github.base_ref != 'main'
+        shell: pwsh
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          $problems = @()
+          if ($env:TITLE -match '^\w+(\([^)]*\))?!?: ') {
+              $problems += 'Drop the type prefix, labels carry the type and area.'
+          } elseif ($env:TITLE -cnotmatch '^[A-Z]') {
+              $problems += 'Start with a capital letter and an imperative verb, as in Add taper to revolve.'
+          }
+          if ($env:TITLE.Length -gt 65) {
+              $problems += "Keep it within 65 characters, it has $($env:TITLE.Length)."
+          }
+          if ($env:TITLE.EndsWith('.')) {
+              $problems += 'Drop the trailing period.'
+          }
+          foreach ($problem in $problems) {
+              Write-Output "::error::$problem"
+          }
+          if ($problems) {
+              Write-Output "Title: $env:TITLE"
+              Write-Output 'See Pull requests in CONTRIBUTING.md.'
+              exit 1
+          }

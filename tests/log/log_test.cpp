@@ -91,6 +91,23 @@ TEST(LogRing, HoldsAtMostTheRingSize)
     EXPECT_NE(lines.back().find("filler " + std::to_string(kRingLines + 9)), std::string::npos);
 }
 
+TEST(LogRing, RepeatsCollapseIntoOneInfoNotice)
+{
+    setLevel(Channel::Io, Level::info);
+    for (int i = 0; i < 4; ++i) {
+        channel(Channel::Io).error("repeated failure 137");
+    }
+    channel(Channel::Io).info("next line 137");
+    const std::vector<std::string> lines = recentLines();
+    ASSERT_GE(lines.size(), 3U);
+    const std::size_t last = lines.size() - 1;
+    EXPECT_NE(lines[last - 2].find("repeated failure 137"), std::string::npos);
+    EXPECT_NE(lines[last - 1].find("Skipped 3 repeats"), std::string::npos);
+    EXPECT_NE(lines[last - 1].find(" info "), std::string::npos) << lines[last - 1];
+    EXPECT_NE(lines[last - 1].find(" io "), std::string::npos) << lines[last - 1];
+    EXPECT_NE(lines[last].find("next line 137"), std::string::npos);
+}
+
 TEST(LogOcct, MessagesLandInTheChannel)
 {
     routeOcctMessages(Channel::Geometry);
@@ -105,7 +122,8 @@ class ReportZip : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        m_folder = std::filesystem::temp_directory_path() / "kalve137-zip-test";
+        m_folder = std::filesystem::temp_directory_path() / "kalve137-zip-test" /
+                   ::testing::UnitTest::GetInstance()->current_test_info()->name();
         std::filesystem::remove_all(m_folder);
         std::filesystem::create_directories(m_folder);
     }

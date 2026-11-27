@@ -13,6 +13,7 @@ namespace kalve137::sketch {
 std::optional<std::pair<Vec2, Vec2>> measuredPoints(const Sketch& sketch, const Constraint& constraint);
 std::optional<Vec2> dimensionAnchor(const Sketch& sketch, const Constraint& constraint);
 std::optional<Vec2> labelPosition(const Sketch& sketch, const Constraint& constraint);
+std::optional<Vec2> lineCorner(Vec2 firstFrom, Vec2 firstTo, Vec2 secondFrom, Vec2 secondTo);
 ConstraintKind pointDistanceKind(Vec2 a, Vec2 b, Vec2 cursor);
 
 } // namespace kalve137::sketch

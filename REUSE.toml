@@ -15,6 +15,11 @@ SPDX-FileCopyrightText = "2026 Danius Kalvaitis"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
 [[annotations]]
+path = "third_party/icu/Unicode-DFS-2016.txt"
+SPDX-FileCopyrightText = "1991-2023 Unicode, Inc."
+SPDX-License-Identifier = "Unicode-DFS-2016"
+
+[[annotations]]
 path = ["third_party/occt_qt/OcctGlTools.*", "third_party/occt_qt/OcctQtTools.*"]
 precedence = "aggregate"
 SPDX-License-Identifier = "MIT"
@@ -33,6 +38,21 @@ SPDX-License-Identifier = "LGPL-2.0-or-later"
 path = "third_party/planegcs/LICENSE"
 SPDX-FileCopyrightText = "1991, 1999 Free Software Foundation, Inc."
 SPDX-License-Identifier = "LGPL-2.1-or-later"
+
+[[annotations]]
+path = "third_party/qt/LGPL-3.0-only.txt"
+SPDX-FileCopyrightText = "2007 Free Software Foundation, Inc."
+SPDX-License-Identifier = "LGPL-3.0-only"
+
+[[annotations]]
+path = "third_party/tinybvh/tiny_bvh*.h"
+SPDX-FileCopyrightText = "2024 Jacco Bikker"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "third_party/tinybvh/LICENSE"
+SPDX-FileCopyrightText = "2024 Jacco Bikker"
+SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = ["third_party/roboto/*.ttf", "third_party/roboto/OFL.txt"]

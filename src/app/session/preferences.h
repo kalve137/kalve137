@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/theme/theme.h"
 #include "app/view/scene.h"
 
 #include "viewer/navigation.h"
@@ -13,6 +14,7 @@ namespace kalve137::app {
 
 struct Preferences {
     bool reopenLastProject = true;
+    theme::Scheme colorScheme = theme::Scheme::System;
 
     viewer::Navigation navigation;
 
@@ -43,6 +45,7 @@ struct Preferences {
 
 QString displayName(viewer::NavigationPreset preset);
 QString displayName(VisualStyle style);
+QString displayName(theme::Scheme scheme);
 QString navigationHint(viewer::NavigationPreset preset);
 
 } // namespace kalve137::app

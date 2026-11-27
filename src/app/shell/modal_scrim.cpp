@@ -70,7 +70,7 @@ void ModalScrim::refresh()
 
 void ModalScrim::paintEvent(QPaintEvent*)
 {
-    QPainter(this).fillRect(rect(), theme::kScrim);
+    QPainter(this).fillRect(rect(), theme::palette().chrome.scrim);
 }
 
 ScopedDim::ScopedDim(QWidget* parent)

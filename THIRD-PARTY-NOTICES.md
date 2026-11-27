@@ -4,10 +4,12 @@ Kalve 137 is free software under GPL-3.0-or-later. It is built on the components
 
 | Component | Version | License | Role |
 | --- | --- | --- | --- |
-| [Qt](https://www.qt.io/download-open-source) | 6.10.2 | LGPL-3.0-only | UI toolkit |
+| [Qt](https://www.qt.io/download-open-source) | 6.12.0 | LGPL-3.0-only | UI toolkit |
+| [ICU](https://icu.unicode.org) | 73.2 | Unicode-DFS-2016 | Unicode text support in Qt on Linux |
 | [Open CASCADE Technology](https://github.com/Open-Cascade-SAS/OCCT) | 8.0.1 | LGPL-2.1-only with the OCCT exception | Modeling kernel and 3D view |
 | [PlaneGCS](third_party/planegcs/README.md) | 1.1.4 | LGPL-2.0-or-later | Sketch constraint solver |
 | [occt-qt-tools](third_party/occt_qt/README.md) | 72e32d3 | MIT | OpenGL glue between the kernel and Qt |
+| [tinybvh](third_party/tinybvh/README.md) | 769343f | MIT | Ray casting for box selection |
 | [Boost](https://www.boost.org) | 1.92.0 | BSL-1.0 | Used by the solver |
 | [Eigen](https://eigen.tuxfamily.org) | 5.0.1 | MPL-2.0 | Used by the solver |
 | [spdlog](https://github.com/gabime/spdlog) | 1.17.0 | MIT | Logging |
@@ -24,3 +26,17 @@ Kalve 137 is free software under GPL-3.0-or-later. It is built on the components
 ## LGPL libraries
 
 Qt, Open CASCADE Technology and PlaneGCS are linked dynamically. You may replace their DLLs in the install folder with your own builds of a compatible version. Their source code is available from the links above, and the PlaneGCS sources used here are in this repository under `third_party/planegcs`.
+
+## Code adapted from Open CASCADE Technology
+
+The viewportport's camera moves exactly like the 3D view built on Open CASCADE Technology 8.0.1, so parts of the files below are translated from its source. That code stays under LGPL-2.1-only with the Open CASCADE exception 1.0 and is carried under GPL-3.0-or-later as section 3 of the LGPL allows. Each file names both in its SPDX header.
+
+| File | Follows |
+| --- | --- |
+| `src/camera/camera.h`, `src/camera/camera.cpp` | `Graphic3d_Camera` (defaults, setters, view dimensions, FitMinMax, ZFitAll) and the pixel conversion of `V3d_View` |
+| `src/camera/gravity.cpp` | `V3d_View::GravityPoint` |
+| `src/camera/navigator.cpp` | `AIS_ViewController` (orbit, pan, zoom and their constants) |
+| `src/camera/transition.cpp` | The camera interpolation in `Graphic3d_Camera.cxx` and `gp_Quaternion::SetMatrix` |
+| `src/camera/views.cpp` | `V3d_View::SetProj` |
+| `src/render/draw_list.cpp` | The default material in `Graphic3d_MaterialAspect.cxx` and the Phong lighting of `Graphic3d_ShaderManager.cxx` |
+| `src/viewer/occt_view_widget_camera.cpp` | `V3d_View::GravityPoint`, `V3d_View::ConvertWithProj` and `V3d_View::Convert` |

@@ -240,6 +240,7 @@ void FeaturePanel::buildOffsetFaceForm(core::OffsetFaceFeature& f, QFormLayout* 
 {
     m_size = makeLengthBox(f.distance, -kMaxLength, m_form);
     m_size->setToolTip(tr("Negative distances remove material"));
+    bindField(m_size, "distance");
     auto* clear = new QPushButton(tr("Clear faces"), m_form);
     fields->addRow(tr("Distance"), m_size);
     fields->addRow(QString(), clear);
@@ -269,10 +270,16 @@ void FeaturePanel::buildHoleForm(core::HoleFeature& f, QFormLayout* fields)
     auto* headDepth = makeLengthBox(f.headDepth, kMinSize, m_form);
     auto* sinkAngle = makeAngleBox(f.countersinkAngle, kMinConeAngle, kMaxConeAngle, m_form);
     auto* tipAngle = makeAngleBox(f.tipAngle, 0.0, kMaxConeAngle, m_form);
-    tipAngle->setToolTip(tr("0 for a flat bottom"));
+    tipAngle->setToolTip(tr("0 for flat bottom"));
+    bindField(diameter, "diameter");
+    bindField(m_size, "depth");
+    bindField(headDiameter, "head_diameter");
+    bindField(headDepth, "head_depth");
+    bindField(sinkAngle, "countersink_angle");
+    bindField(tipAngle, "tip_angle");
     auto* flip = new QCheckBox(tr("Flip direction"), m_form);
     flip->setChecked(f.flip);
-    flip->setToolTip(tr("Drills along the sketch normal, for holes on sketch points"));
+    flip->setToolTip(tr("Drills along sketch normal, for holes on sketch points"));
     fields->addRow(tr("Type"), kind);
     fields->addRow(tr("Diameter"), diameter);
     fields->addRow(tr("Depth"), m_size);
@@ -328,7 +335,7 @@ void FeaturePanel::buildMoveForm(core::MoveFeature& f, QFormLayout* fields)
     auto* angle = makeAngleBox(f.angleDegrees, -360.0, 360.0, m_form);
     auto* copy = new QCheckBox(tr("Create copy"), m_form);
     copy->setChecked(f.copy);
-    copy->setToolTip(tr("Leaves the bodies where they are and moves new copies"));
+    copy->setToolTip(tr("Leaves bodies where they are and moves new copies"));
     fields->addRow(tr("Rotate about"), axis);
     fields->addRow(tr("Angle"), angle);
     fields->addRow(QString(), copy);
@@ -374,7 +381,7 @@ void FeaturePanel::buildAppearanceForm(core::AppearanceFeature& f, QFormLayout* 
     auto* target = new QComboBox(m_form);
     target->addItems({tr("Bodies"), tr("Faces")});
     target->setCurrentIndex(m_appearanceFaces ? 1 : 0);
-    target->setToolTip(tr("A color on a body replaces the colors of its faces"));
+    target->setToolTip(tr("Body color replaces colors of its faces"));
 
     auto* swatches = new QWidget(m_form);
     auto* row = new QGridLayout(swatches);
@@ -382,7 +389,7 @@ void FeaturePanel::buildAppearanceForm(core::AppearanceFeature& f, QFormLayout* 
     row->setSpacing(theme::kSpaceS);
     auto* custom = new QPushButton(tr("Custom..."), m_form);
     auto* clear = new QPushButton(tr("Default"), m_form);
-    clear->setToolTip(tr("Puts the bodies and faces back to the color they came with"));
+    clear->setToolTip(tr("Puts bodies and faces back to their original color"));
 
     fields->addRow(tr("Apply to"), target);
     fields->addRow(tr("Color"), swatches);
@@ -410,8 +417,8 @@ void FeaturePanel::buildAppearanceForm(core::AppearanceFeature& f, QFormLayout* 
     }
     connect(custom, &QPushButton::clicked, this, [this, setColor] {
         const auto& data = std::get<core::AppearanceFeature>(*m_data);
-        const QColor picked =
-            QColorDialog::getColor(data.color ? toQColor(*data.color) : theme::kTitanium, this, tr("Appearance"));
+        const QColor picked = QColorDialog::getColor(
+            data.color ? toQColor(*data.color) : theme::palette().viewport.body, this, tr("Appearance"));
         if (picked.isValid()) {
             setColor(toColor(picked));
         }

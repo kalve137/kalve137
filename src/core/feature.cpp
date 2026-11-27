@@ -142,6 +142,22 @@ std::optional<PlaneKind> planeKindFromString(std::string_view name)
     return enumFromString(name, {PlaneKind::Offset, PlaneKind::Angle, PlaneKind::Midplane});
 }
 
+std::string_view toString(ProjectionKind kind)
+{
+    switch (kind) {
+    case ProjectionKind::Edge:
+        return "edge";
+    case ProjectionKind::Vertex:
+        return "vertex";
+    }
+    return {};
+}
+
+std::optional<ProjectionKind> projectionKindFromString(std::string_view name)
+{
+    return enumFromString(name, {ProjectionKind::Edge, ProjectionKind::Vertex});
+}
+
 std::string_view toString(AxisSource source)
 {
     switch (source) {
@@ -277,6 +293,28 @@ std::string_view typeName(const FeatureData& data)
                           [](const AxisFeature&) { return std::string_view("axis"); },
                           [](const PointFeature&) { return std::string_view("point"); },
                           [](const AppearanceFeature&) { return std::string_view("appearance"); },
+                      },
+                      data);
+}
+
+FeatureId profileSketchOf(const FeatureData& data)
+{
+    return std::visit(Overloaded{
+                          [](const SketchFeature&) -> FeatureId { return 0; },
+                          [](const ExtrudeFeature& f) { return f.profiles.sketch; },
+                          [](const RevolveFeature& f) { return f.profiles.sketch; },
+                          [](const FilletFeature&) -> FeatureId { return 0; },
+                          [](const ChamferFeature&) -> FeatureId { return 0; },
+                          [](const ShellFeature&) -> FeatureId { return 0; },
+                          [](const PatternFeature&) -> FeatureId { return 0; },
+                          [](const ImportFeature&) -> FeatureId { return 0; },
+                          [](const PlaneFeature&) -> FeatureId { return 0; },
+                          [](const OffsetFaceFeature&) -> FeatureId { return 0; },
+                          [](const HoleFeature& f) { return f.sketch; },
+                          [](const MoveFeature&) -> FeatureId { return 0; },
+                          [](const AxisFeature&) -> FeatureId { return 0; },
+                          [](const PointFeature&) -> FeatureId { return 0; },
+                          [](const AppearanceFeature&) -> FeatureId { return 0; },
                       },
                       data);
 }

@@ -10,8 +10,16 @@
 
 #include <gtest/gtest.h>
 
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
+#include <BRep_Tool.hxx>
 #include <GProp_GProps.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <gp_Trsf.hxx>
 
 #include <nlohmann/json.hpp>
 
@@ -149,6 +157,29 @@ TopoRef faceAt(const Model& model, const gp_Pnt& point)
     return ref;
 }
 
+TopoRef vertexAt(const Model& model, const gp_Pnt& point)
+{
+    const Body& body = model.bodies.at(0);
+    for (TopExp_Explorer it(body.shape, TopAbs_VERTEX); it.More(); it.Next()) {
+        const TopoDS_Vertex& vertex = TopoDS::Vertex(it.Current());
+        if (BRep_Tool::Pnt(vertex).Distance(point) < 1e-6) {
+            TopoRef ref = vertexRef(body, vertex);
+            EXPECT_EQ(ref.names.size(), 3u);
+            return ref;
+        }
+    }
+    ADD_FAILURE() << "No vertex at " << point.X() << " " << point.Y() << " " << point.Z();
+    return point;
+}
+
+void expectVertexAt(const Model& model, const TopoRef& ref, const gp_Pnt& expected)
+{
+    const std::optional<VertexHit> hit = resolveVertex(model.bodies, ref);
+    ASSERT_TRUE(hit.has_value());
+    const gp_Pnt at = BRep_Tool::Pnt(hit->vertex);
+    EXPECT_LT(at.Distance(expected), 1e-6) << at.X() << " " << at.Y() << " " << at.Z();
+}
+
 void expectFollows(Block& b, FeatureId id, const std::function<double(Size)>& expected)
 {
     for (const Size size : {Size{}, Size{60.0, 15.0}, Size{80.0, 10.0}}) {
@@ -164,6 +195,47 @@ void expectFollows(Block& b, FeatureId id, const std::function<double(Size)>& ex
 double roundOff(double radius, double length)
 {
     return (1.0 - kPi / 4.0) * radius * radius * length;
+}
+
+std::optional<FaceHit> everyFaceAt(const std::vector<Body>& bodies, const gp_Pnt& point)
+{
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(point);
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
+        std::optional<FaceHit> best;
+        double bestDistance = kRefTolerance;
+        for (TopExp_Explorer it(bodies[i].shape, TopAbs_FACE); it.More(); it.Next()) {
+            BRepExtrema_DistShapeShape distance(probe, it.Current());
+            if (distance.IsDone() && distance.Value() <= bestDistance) {
+                bestDistance = distance.Value();
+                best = FaceHit{i, TopoDS::Face(it.Current())};
+            }
+        }
+        if (best) {
+            return best;
+        }
+    }
+    return std::nullopt;
+}
+
+Model threeBodies()
+{
+    Document doc;
+    addExtrude(doc, addRectangle(doc, 0, 0, 20, 10), {5, 5}, 8.0, Operation::NewBody);
+    addExtrude(doc, addRectangle(doc, 40, 0, 60, 10), {45, 5}, 8.0, Operation::NewBody);
+    SketchFeature round;
+    round.sketch.addCircle(round.sketch.addPoint({80, 5}), 6.0);
+    const FeatureId sketchId = doc.add(std::move(round));
+    addExtrude(doc, sketchId, {80, 5}, 8.0, Operation::NewBody);
+    return recompute(doc);
+}
+
+void expectSameHit(const std::optional<FaceHit>& actual, const std::optional<FaceHit>& expected)
+{
+    ASSERT_EQ(actual.has_value(), expected.has_value());
+    if (expected) {
+        EXPECT_EQ(actual->body, expected->body);
+        EXPECT_TRUE(actual->face.IsSame(expected->face));
+    }
 }
 
 } // namespace
@@ -206,6 +278,25 @@ TEST(Naming, FacesAndEdgesKnowTheFeatureThatMadeThem)
     EXPECT_EQ(featureOfName("F12/side/3"), 12);
     EXPECT_EQ(featureOfName("Fx"), 0);
     EXPECT_EQ(featureOfName(""), 0);
+}
+
+TEST(Naming, BodiesOfFindWhatEachFeatureShaped)
+{
+    Block b = block();
+    const FeatureId fillet = b.doc.add(FilletFeature{{FilletSet{{edgeAt(recompute(b.doc), gp_Pnt(30, 0, 10))}, 2.0}}});
+    const FeatureId other =
+        addExtrude(b.doc, addRectangle(b.doc, 100, 0, 120, 20), {110, 10}, 10.0, Operation::NewBody);
+    const FeatureId slot = addExtrude(b.doc, addRectangle(b.doc, 40, 5, 110, 15), {50, 10}, 10.0, Operation::Cut);
+    const Model model = recompute(b.doc);
+    ASSERT_EQ(model.status.at(slot).health, FeatureHealth::Ok) << model.status.at(slot).message;
+    const BodyKey padBody{b.pad, 0};
+    const BodyKey otherBody{other, 0};
+
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(b.pad)), std::vector{padBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(fillet)), std::vector{padBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(other)), std::vector{otherBody});
+    EXPECT_EQ(bodiesOf(model, *b.doc.find(slot)), (std::vector{padBody, otherBody}));
+    EXPECT_TRUE(bodiesOf(model, *b.doc.find(b.sketch)).empty());
 }
 
 TEST(Naming, ChamferFollowsTopEdge)
@@ -333,6 +424,71 @@ TEST(Naming, MergedFaceCarriesBothNames)
     EXPECT_NEAR(area(hit->face), 80.0 * kDepth, kTolerance);
 }
 
+TEST(Naming, VertexFollowsTheBoxCorner)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef corner = vertexAt(base, gp_Pnt(60, 30, 10));
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    EXPECT_NE(corner.names, origin.names);
+    expectVertexAt(base, corner, gp_Pnt(60, 30, 10));
+    expectVertexAt(base, origin, gp_Pnt(0, 0, 0));
+
+    resize(b, Size{80.0, 15.0});
+    const Model moved = recompute(b.doc);
+    expectVertexAt(moved, corner, gp_Pnt(80, 30, 15));
+    expectVertexAt(moved, origin, gp_Pnt(0, 0, 0));
+
+    expectVertexAt(moved, TopoRef{gp_Pnt(80, 30, 15.0005), {}}, gp_Pnt(80, 30, 15));
+    EXPECT_FALSE(resolveVertex(moved.bodies, TopoRef{gp_Pnt(60, 30, 10), {}}).has_value());
+    EXPECT_FALSE(resolveVertex(moved.bodies, TopoRef{gp_Pnt(60, 30, 10), {"F99/start"}}).has_value());
+}
+
+TEST(Naming, VertexFollowsAfterAFilletOnAnotherEdge)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef corner = vertexAt(base, gp_Pnt(60, 30, 10));
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    b.doc.add(FilletFeature{{FilletSet{{edgeAt(base, gp_Pnt(30, 0, 10))}, 2.0}}});
+
+    const Model filleted = recompute(b.doc);
+    expectVertexAt(filleted, corner, gp_Pnt(60, 30, 10));
+    expectVertexAt(filleted, origin, gp_Pnt(0, 0, 0));
+
+    resize(b, Size{80.0, 15.0});
+    const Model moved = recompute(b.doc);
+    expectVertexAt(moved, corner, gp_Pnt(80, 30, 15));
+    expectVertexAt(moved, origin, gp_Pnt(0, 0, 0));
+}
+
+TEST(Naming, VertexFollowsAfterACutSplitsAFace)
+{
+    Block b = block();
+    const Model base = recompute(b.doc);
+    const TopoRef origin = vertexAt(base, gp_Pnt(0, 0, 0));
+    const TopoRef far = vertexAt(base, gp_Pnt(60, 0, 0));
+    const FeatureId groove = addRectangle(b.doc, 28, -5, 32, 35);
+    const FeatureId cut = addExtrude(b.doc, groove, {30, 15}, 3.0, Operation::Cut);
+
+    const Model grooved = recompute(b.doc);
+    ASSERT_EQ(grooved.status.at(cut).health, FeatureHealth::Ok) << grooved.status.at(cut).message;
+    expectVertexAt(grooved, origin, gp_Pnt(0, 0, 0));
+    expectVertexAt(grooved, far, gp_Pnt(60, 0, 0));
+    const TopoRef left = vertexAt(grooved, gp_Pnt(28, 0, 0));
+    const TopoRef right = vertexAt(grooved, gp_Pnt(32, 0, 0));
+    EXPECT_NE(left.names, right.names);
+    expectVertexAt(grooved, left, gp_Pnt(28, 0, 0));
+    expectVertexAt(grooved, right, gp_Pnt(32, 0, 0));
+
+    resize(b, Size{80.0, 10.0});
+    const Model wider = recompute(b.doc);
+    expectVertexAt(wider, origin, gp_Pnt(0, 0, 0));
+    expectVertexAt(wider, far, gp_Pnt(80, 0, 0));
+    expectVertexAt(wider, left, gp_Pnt(28, 0, 0));
+    expectVertexAt(wider, right, gp_Pnt(32, 0, 0));
+}
+
 TEST(Naming, RefsRoundTripAndOlderFilesLoad)
 {
     Block b = block();
@@ -374,4 +530,93 @@ TEST(Naming, RefsRoundTripAndOlderFilesLoad)
     const Model model = recompute(legacy);
     EXPECT_EQ(model.status.at(fillet).health, FeatureHealth::Ok);
     EXPECT_EQ(model.status.at(pull).health, FeatureHealth::Ok) << model.status.at(pull).message;
+}
+
+TEST(FaceLookup, FindsTheSameFaceAsCheckingEveryFace)
+{
+    const Model model = threeBodies();
+    ASSERT_EQ(model.bodies.size(), 3u);
+    std::vector<gp_Pnt> points{gp_Pnt(30, 5, 4), gp_Pnt(500, 500, 500)};
+    for (const Body& body : model.bodies) {
+        for (TopExp_Explorer it(body.shape, TopAbs_FACE); it.More(); it.Next()) {
+            points.push_back(geometry::facePoint(TopoDS::Face(it.Current())));
+        }
+    }
+    FaceLookup lookup;
+    for (const gp_Pnt& point : points) {
+        SCOPED_TRACE(std::to_string(point.X()) + " " + std::to_string(point.Y()) + " " + std::to_string(point.Z()));
+        const std::optional<FaceHit> expected = everyFaceAt(model.bodies, point);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}), expected);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}, &lookup), expected);
+        expectSameHit(resolveFace(model.bodies, TopoRef{point, {}}, &lookup), expected);
+    }
+}
+
+TEST(FaceLookup, LooksAgainWhenABodyUpToTheHitChanges)
+{
+    const Model model = threeBodies();
+    const gp_Pnt onSecond(50, 5, 8);
+    FaceLookup lookup;
+    const std::optional<FaceHit> first = lookup.atPoint(model.bodies, onSecond);
+    ASSERT_TRUE(first.has_value());
+    EXPECT_EQ(first->body, 1u);
+
+    std::vector<Body> movedAway = model.bodies;
+    gp_Trsf away;
+    away.SetTranslation(gp_Vec(0, 0, 100));
+    movedAway[1].shape = movedAway[1].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(movedAway, onSecond), everyFaceAt(movedAway, onSecond));
+    EXPECT_FALSE(lookup.atPoint(movedAway, onSecond).has_value());
+
+    std::vector<Body> movedOnto = model.bodies;
+    gp_Trsf onto;
+    onto.SetTranslation(gp_Vec(40, 0, 0));
+    movedOnto[0].shape = movedOnto[0].shape.Moved(TopLoc_Location(onto));
+    const std::optional<FaceHit> hit = lookup.atPoint(movedOnto, onSecond);
+    expectSameHit(hit, everyFaceAt(movedOnto, onSecond));
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->body, 0u);
+
+    std::vector<Body> laterMoved = model.bodies;
+    laterMoved[2].shape = laterMoved[2].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(laterMoved, onSecond), first);
+
+    std::vector<Body> earlierMoved = model.bodies;
+    earlierMoved[0].shape = earlierMoved[0].shape.Moved(TopLoc_Location(away));
+    expectSameHit(lookup.atPoint(earlierMoved, onSecond), first);
+}
+
+TEST(FaceLookup, FaceIndexIsNothingForAFaceTheShapeDoesntHold)
+{
+    const Model model = threeBodies();
+    const TopoDS_Shape& first = model.bodies[0].shape;
+    int index = 0;
+    for (TopExp_Explorer it(first, TopAbs_FACE); it.More(); it.Next(), ++index) {
+        EXPECT_EQ(faceIndexOf(first, TopoDS::Face(it.Current())), index);
+    }
+    const TopExp_Explorer other(model.bodies[1].shape, TopAbs_FACE);
+    EXPECT_FALSE(faceIndexOf(first, TopoDS::Face(other.Current())).has_value());
+}
+
+TEST(FaceLookup, GivesTheCurrentFaceWhenAMoveRepeatsTheSamePlace)
+{
+    const Model model = threeBodies();
+    const auto movedAgain = [&]() {
+        std::vector<Body> bodies = model.bodies;
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(5, 0, 0));
+        bodies[0].shape = bodies[0].shape.Moved(TopLoc_Location(shift));
+        return bodies;
+    };
+    const gp_Pnt onFirst(15, 5, 8);
+    const gp_Pnt onSecond(50, 5, 8);
+    FaceLookup lookup;
+    const std::vector<Body> once = movedAgain();
+    expectSameHit(lookup.atPoint(once, onFirst), everyFaceAt(once, onFirst));
+    expectSameHit(lookup.atPoint(once, onSecond), everyFaceAt(once, onSecond));
+
+    const std::vector<Body> twice = movedAgain();
+    ASSERT_FALSE(twice[0].shape.IsEqual(once[0].shape));
+    expectSameHit(lookup.atPoint(twice, onFirst), everyFaceAt(twice, onFirst));
+    expectSameHit(lookup.atPoint(twice, onSecond), everyFaceAt(twice, onSecond));
 }

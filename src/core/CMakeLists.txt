@@ -14,14 +14,23 @@ add_library(kalve137_core STATIC
     history.h
     naming.cpp
     naming.h
+    parameter_table.cpp
+    parameter_table.h
+    parameters.cpp
+    parameters_expression.cpp
+    parameters.h
     project.cpp
     project.h
+    projection.cpp
+    projection.h
     recompute.cpp
     recompute.h
     serialization.cpp
     serialization.h
     shape_store.cpp
     shape_store.h
+    snapshot_cache.cpp
+    snapshot_cache.h
     undo_stack.cpp
     undo_stack.h
 )

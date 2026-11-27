@@ -32,17 +32,19 @@ struct Rendered {
     QSize pixels;
 };
 
-Rendered render(const QString& text, const QColor& color, bool selected, double textPixels, double ratio)
+QFont labelFont(double textPixels, double ratio)
 {
     QFont font(fonts::families().qt);
     font.setPixelSize(static_cast<int>(std::lround(textPixels * ratio)));
-    const QFontMetricsF metrics(font);
-    const double padX = theme::kSpaceS * ratio;
-    const double padY = theme::kSpaceXs * ratio;
-    int width = static_cast<int>(std::ceil(metrics.horizontalAdvance(text) + 2.0 * padX));
-    int height = static_cast<int>(std::ceil(metrics.height() + 2.0 * padY));
-    width += width % 2;
-    height += height % 2;
+    return font;
+}
+
+Rendered render(const QString& text, const QColor& color, bool selected, double textPixels, double ratio)
+{
+    const QFont font = labelFont(textPixels, ratio);
+    const QSize size = dimensionLabelPixels(text, textPixels, ratio);
+    const int width = size.width();
+    const int height = size.height();
 
     QImage image(width, height, QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
@@ -51,8 +53,8 @@ Rendered render(const QString& text, const QColor& color, bool selected, double 
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::TextAntialiasing);
         const QRectF box = QRectF(image.rect()).adjusted(ratio * 0.5, ratio * 0.5, -ratio * 0.5, -ratio * 0.5);
-        painter.setPen(QPen(selected ? theme::kGold : theme::kSlateEdge, ratio));
-        painter.setBrush(theme::kCanvas);
+        painter.setPen(QPen(selected ? theme::palette().chrome.accent : theme::palette().chrome.border, ratio));
+        painter.setBrush(theme::palette().viewport.canvas);
         painter.drawRoundedRect(box, theme::kRadiusControl * ratio, theme::kRadiusControl * ratio);
         painter.setFont(font);
         painter.setPen(color);
@@ -71,12 +73,24 @@ Rendered render(const QString& text, const QColor& color, bool selected, double 
 
 } // namespace
 
+QSize dimensionLabelPixels(const QString& text, double textPixels, double devicePixelRatio)
+{
+    const QFontMetricsF metrics(labelFont(textPixels, devicePixelRatio));
+    const double padX = theme::kSpaceS * devicePixelRatio;
+    const double padY = theme::kSpaceXs * devicePixelRatio;
+    int width = static_cast<int>(std::ceil(metrics.horizontalAdvance(text) + 2.0 * padX));
+    int height = static_cast<int>(std::ceil(metrics.height() + 2.0 * padY));
+    width += width % 2;
+    height += height % 2;
+    return {width, height};
+}
+
 DimensionLabel makeDimensionLabel(const gp_Pnt& at, const QString& text, const QColor& color, bool selected,
                                   double textPixels, double devicePixelRatio)
 {
-    using Key = std::tuple<QString, QRgb, bool, double, double>;
+    using Key = std::tuple<QString, QRgb, bool, double, double, bool>;
     static std::map<Key, Rendered> cache;
-    const Key key{text, color.rgba(), selected, textPixels, devicePixelRatio};
+    const Key key{text, color.rgba(), selected, textPixels, devicePixelRatio, theme::isDark()};
     auto it = cache.find(key);
     if (it == cache.end()) {
         it = cache.emplace(key, render(text, color, selected, textPixels, devicePixelRatio)).first;

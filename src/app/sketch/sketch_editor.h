@@ -3,16 +3,25 @@
 
 #pragma once
 
+#include "app/feature/field_names.h"
+#include "app/view/view_projection.h"
+#include "camera/camera.h"
 #include "core/document.h"
 #include "core/expression.h"
+#include "core/recompute.h"
+#include "render/annotations.h"
+#include "render/sketches.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "sketch/solver.h"
+#include "snapshot/sketch.h"
 
 #include <AIS_InteractiveObject.hxx>
 #include <gp_Ax3.hxx>
 
 #include <QObject>
 #include <QPointF>
+#include <QRectF>
 #include <QString>
 
 #include <cstddef>
@@ -20,19 +29,30 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
+#include <utility>
 #include <vector>
 
 class QLineEdit;
 class QTimer;
+class QWidget;
 
 namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class Viewport;
+}
+
 namespace kalve137::app {
 
+class BandOverlay;
 class DesignSession;
+class RecentValuesMenu;
+class Scene;
 class SketchInputs;
+struct Pick;
 
 class SketchEditor : public QObject {
     Q_OBJECT
@@ -47,10 +67,15 @@ public:
         Arc,
         ArcThrough,
         Polygon,
+        Slot,
+        CenterSlot,
+        OverallSlot,
         Point,
         Trim,
         Fillet,
         Mirror,
+        Offset,
+        Project,
         Dimension,
         Coincident,
         Horizontal,
@@ -58,13 +83,22 @@ public:
         Parallel,
         Perpendicular,
         Tangent,
+        Concentric,
         Equal,
         Midpoint,
         Symmetric,
         Fix,
     };
 
-    SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, QObject* parent = nullptr);
+    struct Hit {
+        enum class Kind { None, Point, Curve, Constraint };
+        Kind kind = Kind::None;
+        sketch::Id id = 0;
+
+        bool operator==(const Hit&) const = default;
+    };
+
+    SketchEditor(DesignSession& session, const Scene& scene, ViewProjection& projection, QObject* parent = nullptr);
     ~SketchEditor() override;
 
     void begin(core::FeatureId sketch);
@@ -75,8 +109,13 @@ public:
     void setTool(Tool tool);
     Tool tool() const { return m_tool; }
     void cancel();
+    void startTypedMove();
     void deleteSelection();
     void toggleConstruction();
+    void projectPick(const Pick& pick);
+    void breakLinks();
+    void pickAgain();
+    bool picksModel() const { return isActive() && m_tool == Tool::Project; }
 
     QString hint() const;
     QString solveSummary() const;
@@ -94,6 +133,10 @@ public:
     void setDisplay(const Display& display);
     void setGridSnap(bool snap) { m_gridSnap = snap; }
     void setMoveIncrement(double increment) { m_moveIncrement = increment; }
+    void setCameraInput(bool camera) { m_projection.setCameraInput(camera); }
+    bool hasCameraInput() const { return m_projection.hasCameraInput(); }
+    Hit hitAt(QPointF pos) const;
+    void redraw();
 
 signals:
     void toolChanged();
@@ -113,10 +156,28 @@ private:
         std::optional<sketch::Vec2> extendedFrom;
     };
 
-    struct Hit {
-        enum class Kind { None, Point, Curve, Constraint };
-        Kind kind = Kind::None;
-        sketch::Id id = 0;
+    struct ViewItems {
+        snapshot::SketchProfiles profiles;
+        std::vector<render::SketchStroke> halos;
+        std::vector<render::SketchStroke> lines;
+        std::vector<render::MarkerItem> markers;
+    };
+
+    struct ConstraintItems {
+        std::vector<render::SketchStroke> halos;
+        std::vector<render::SketchStroke> lines;
+        std::vector<render::SketchTriangle> arrows;
+        render::Annotations annotations;
+    };
+
+    struct DrawCache {
+        sketch::Sketch sketch;
+        core::FeatureId feature = 0;
+        sketch::SolveResult solve;
+        std::set<sketch::Id> conflicted;
+        std::optional<snapshot::Sketch> snapshot;
+        gp_Ax3 plane;
+        bool profiles = false;
     };
 
     struct PendingDimension {
@@ -136,7 +197,19 @@ private:
 
     const core::SketchFeature* feature() const;
     const sketch::Sketch& current() const;
+    void seed();
+    void setModelPicking(bool picking);
+    const core::Model& modelBefore();
+    std::optional<QString> project(const Pick& pick);
+    std::optional<QString> repick(const Pick& pick);
+    void commitFeature(const QString& label, core::SketchFeature data);
+    std::vector<std::size_t> linksOf(const std::set<sketch::Id>& ids) const;
+    std::set<sketch::Id> lostProjections() const;
     gp_Ax3 plane() const;
+    QWidget* canvas() const;
+    double worldPerPixel() const;
+    QPointF toScreen(const gp_Pnt& point) const;
+    double gridStep() const;
     std::optional<sketch::Vec2> toSketch(QPointF pos) const;
     double tolerance() const;
 
@@ -146,14 +219,17 @@ private:
     Hit geometryAt(sketch::Vec2 pos) const;
     Hit curveAt(sketch::Vec2 pos) const;
     std::optional<sketch::Id> cornerAt(sketch::Vec2 pos) const;
-    Hit hitAt(QPointF pos) const;
+    std::optional<sketch::Id> constraintAt(QPointF pos) const;
     std::optional<sketch::Id> detectedConstraint() const;
+    std::optional<sketch::Id> constraintOnScreen(QPointF pos) const;
+    QRectF labelRect(const sketch::DimensionLayout& layout) const;
 
     void clickLine(Snap snap);
     void clickRectangle(Snap snap);
     void clickCenterRectangle(Snap snap);
     void clickCircle(Snap snap);
     void clickPolygon(Snap snap);
+    void clickSlot(Snap snap);
     void clickArcThrough(const Snap& snap);
     void clickPoint(const Snap& snap);
 
@@ -168,17 +244,31 @@ private:
     sketch::Vec2 draftCenterCorner(sketch::Vec2 cursor) const;
     sketch::Vec2 draftPolygonCorner(sketch::Vec2 cursor) const;
     int polygonSides() const;
+    sketch::Vec2 draftSlotEnd(sketch::Vec2 cursor) const;
+    double draftSlotWidth(sketch::Vec2 cursor) const;
+    std::optional<std::pair<sketch::Vec2, sketch::Vec2>> slotCenters(sketch::Vec2 end, double width) const;
     double draftRadius(sketch::Vec2 cursor) const;
     void placeInputs(sketch::Vec2 cursor);
     void clickArc(const Snap& snap);
     void clickTrim(sketch::Vec2 pos);
     void clickFillet(QPointF screen, sketch::Vec2 pos);
     void clickMirror(sketch::Vec2 pos);
+    void clickOffset(QPointF screen, sketch::Vec2 pos);
     void clickDimension(QPointF pos, const Hit& hit);
     void clickConstraint(const Hit& hit);
     void clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers);
+    void startLabelDrag(sketch::Id constraint, QPointF pos, sketch::Vec2 at);
+    void dragLabel(QPointF pos, sketch::Vec2 at);
+    std::optional<QPointF> labelOnScreen(sketch::Id constraint) const;
     void selectInBox(QPointF from, QPointF to);
     void dropBox();
+    std::vector<sketch::Id> movablePoints() const;
+    void startGroupDrag(QPointF pos, sketch::Vec2 at, std::vector<sketch::Id> points);
+    void dragGroup(QPointF pos, sketch::Vec2 at);
+    bool moveBy(sketch::Vec2 delta);
+    void placeMoveInputs(const sketch::Sketch& s);
+    void previewTypedMove();
+    void acceptTypedMove();
 
     bool commit(const QString& label, sketch::Sketch candidate);
     void startDimension(sketch::ConstraintKind kind, std::vector<sketch::Id> refs, double value,
@@ -187,25 +277,45 @@ private:
     void placeDimension(QPointF pos, sketch::Vec2 at);
     void addDimension(sketch::Constraint constraint, QPointF pos);
     void editDimension(sketch::Id constraint, QPointF pos);
-    void promptValue(QPointF pos, double initial, core::Quantity quantity, bool centered,
-                     std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview = {});
+    void promptValue(QPointF pos, double initial, core::Quantity quantity, sketch::Id label,
+                     std::function<void(double, const std::string&)> apply,
+                     std::function<sketch::Sketch(double)> preview = {},
+                     std::optional<QString> expression = std::nullopt);
+    ParameterSource valueNames() const;
     void previewValue(const QString& text);
     void closeValueEditor();
     void resetProgress();
     void dropDrag();
 
-    void redraw();
     void redrawPreview();
     void clearObjects(std::vector<Handle(AIS_InteractiveObject)>& objects);
+    void showUnder(const Handle(AIS_InteractiveObject)& halo);
+    void drawSketch(const sketch::Sketch& sketch, const std::set<sketch::Id>& conflicted);
     void drawConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
+    void drawViewSketch(const sketch::Sketch& sketch, const std::set<sketch::Id>& conflicted);
+    void drawViewConstraints(const sketch::Sketch& sketch, const sketch::SolveResult& solve);
+    DrawCache& drawCache(const sketch::Sketch& shown);
+    const snapshot::Sketch& cachedSnapshot(const sketch::Sketch& shown);
+    const DrawCache* shownCache(const sketch::Sketch& shown) const;
+    void redrawHover();
+    void relayoutView();
+    void clearView();
+    void publish();
+    void publishPreview();
+    void onCameraChanged();
     void show(const Handle(AIS_InteractiveObject)& object, std::vector<Handle(AIS_InteractiveObject)>& into,
               bool selectable);
 
     DesignSession& m_session;
+    const Scene& m_scene;
+    ViewProjection& m_projection;
     viewer::OcctViewWidget* m_view;
+    render::Viewport* m_viewport;
+    BandOverlay* m_band = nullptr;
     core::FeatureId m_sketchId = 0;
     Tool m_tool = Tool::Select;
     sketch::SolveResult m_solve;
+    std::optional<DrawCache> m_drawCache;
     double m_drawnScale = 0.0;
     QTimer* m_rescale = nullptr;
     Display m_display;
@@ -225,21 +335,42 @@ private:
     double m_filletRadius = 2.0;
     int m_polygonSides = 6;
     sketch::Id m_mirrorAxis = 0;
+    std::vector<sketch::Id> m_offsetChain;
+    int m_offsetSide = 1;
+    double m_offsetDistance = 2.0;
     std::vector<Hit> m_picks;
     std::optional<PendingDimension> m_pending;
 
     std::optional<QPointF> m_boxStart;
     bool m_boxing = false;
 
-    sketch::Id m_dragPoint = 0;
+    std::vector<sketch::Id> m_dragPoints;
+    QPointF m_dragPress;
+    sketch::Vec2 m_dragGrab;
+    bool m_draggingGroup = false;
+    bool m_typedMove = false;
+    sketch::Id m_dragLabel = 0;
+    QPointF m_dragLabelPress;
+    sketch::Vec2 m_dragLabelGrab;
+    sketch::Vec2 m_dragLabelStart;
+    bool m_draggingLabel = false;
+    sketch::Sketch m_current;
+    std::optional<core::Model> m_before;
+    sketch::Id m_repick = 0;
     std::optional<sketch::Sketch> m_dragStart;
     std::optional<sketch::Sketch> m_dragPreview;
     bool m_committing = false;
 
     QLineEdit* m_valueEditor = nullptr;
-    std::function<void(double)> m_valueApply;
+    RecentValuesMenu* m_recentValues = nullptr;
+    NameCompleter* m_valueNames = nullptr;
+    FieldError* m_valueError = nullptr;
+    bool m_valueTakesNames = false;
+    std::function<void(double, const std::string&)> m_valueApply;
     std::function<sketch::Sketch(double)> m_valuePreview;
     bool m_previewingValue = false;
+    sketch::Id m_editingLabel = 0;
+    std::optional<QRectF> m_editedLabel;
     core::Quantity m_valueQuantity = core::Quantity::Length;
     SketchInputs* m_inputs = nullptr;
     sketch::Id m_chainLine = 0;
@@ -247,6 +378,10 @@ private:
     std::vector<Handle(AIS_InteractiveObject)> m_objects;
     std::vector<Handle(AIS_InteractiveObject)> m_preview;
     std::map<const AIS_InteractiveObject*, sketch::Id> m_constraintObjects;
+    ViewItems m_viewItems;
+    ConstraintItems m_viewConstraints;
+    std::vector<render::SketchStroke> m_viewPreview;
+    std::vector<render::MarkerItem> m_viewPreviewMarkers;
 };
 
 } // namespace kalve137::app

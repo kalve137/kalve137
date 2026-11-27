@@ -4,7 +4,7 @@
 #include "log/log.h"
 
 #include <spdlog/sinks/base_sink.h>
-#include <spdlog/sinks/dup_filter_sink.h>
+#include <spdlog/sinks/dist_sink.h>
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
@@ -12,7 +12,9 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <mutex>
+#include <string>
 #include <utility>
 
 namespace kalve137::log {
@@ -41,11 +43,43 @@ private:
     std::function<void(std::string_view)> m_output;
 };
 
+class RepeatFilterSink final : public spdlog::sinks::dist_sink<std::mutex> {
+public:
+    explicit RepeatFilterSink(std::chrono::microseconds window) : m_window(window) {}
+
+protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override
+    {
+        const std::string_view payload(msg.payload.data(), msg.payload.size());
+        if (msg.time - m_lastTime <= m_window && payload == m_lastPayload) {
+            ++m_skipped;
+            return;
+        }
+        if (m_skipped > 0) {
+            const std::string text = "Skipped " + std::to_string(m_skipped) + " repeats of the previous message";
+            const spdlog::details::log_msg notice(msg.time, msg.source, m_lastLogger, Level::info, text);
+            dist_sink::sink_it_(notice);
+        }
+        dist_sink::sink_it_(msg);
+        m_lastTime = msg.time;
+        m_lastPayload.assign(payload);
+        m_lastLogger.assign(msg.logger_name.data(), msg.logger_name.size());
+        m_skipped = 0;
+    }
+
+private:
+    std::chrono::microseconds m_window;
+    spdlog::log_clock::time_point m_lastTime;
+    std::string m_lastPayload;
+    std::string m_lastLogger;
+    std::size_t m_skipped = 0;
+};
+
 struct State {
     State()
     {
         ring = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(kRingLines);
-        filter = std::make_shared<spdlog::sinks::dup_filter_sink_mt>(kDuplicateWindow);
+        filter = std::make_shared<RepeatFilterSink>(kDuplicateWindow);
         filter->add_sink(ring);
         for (std::size_t i = 0; i < loggers.size(); ++i) {
             loggers[i] = std::make_shared<spdlog::logger>(std::string(toString(kChannels[i])), filter);
@@ -55,7 +89,7 @@ struct State {
     }
 
     std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> ring;
-    std::shared_ptr<spdlog::sinks::dup_filter_sink_mt> filter;
+    std::shared_ptr<RepeatFilterSink> filter;
     std::array<std::shared_ptr<spdlog::logger>, std::size(kChannels)> loggers;
     std::filesystem::path file;
 };

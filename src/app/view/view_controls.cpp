@@ -77,7 +77,7 @@ ViewControls::ViewControls(Preferences& preferences, QAction* showOrigin, QWidge
 
     m_snapToGrid = new QAction(icons::tinted("snap_grid"), tr("S&nap to Grid"), parent);
     m_snapToGrid->setCheckable(true);
-    m_snapToGrid->setToolTip(tr("Snap sketch points to the visible grid"));
+    m_snapToGrid->setToolTip(tr("Snap sketch points to visible grid"));
     connect(m_snapToGrid, &QAction::toggled, this, [this](bool on) {
         m_preferences.sketchGridSnap = on;
         emit preferencesEdited();

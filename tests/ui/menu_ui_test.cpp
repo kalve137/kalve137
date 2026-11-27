@@ -4,14 +4,29 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/panels/browser_panel.h"
+#include "app/session/design_session.h"
+#include "app/shell/main_window.h"
+#include "core/parameter_table.h"
+#include "viewer/occt_view_widget.h"
+
+#include <AIS_InteractiveContext.hxx>
+#include <AIS_InteractiveObject.hxx>
+
+#include <QAction>
+#include <QColor>
+#include <QTreeWidget>
+
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <variant>
 
 namespace kalve137::uitest {
 namespace {
 
 constexpr double kTolerance = 1e-3;
+constexpr int kColorShift = 30;
 constexpr core::FeatureId kExtrude = 2;
 const gp_Pnt kTopFace(5, 3, kBlockHeight);
 
@@ -35,6 +50,29 @@ protected:
     }
 };
 
+TEST_F(MenuTest, RepeatSkipsCommandsUnavailableHere)
+{
+    EXPECT_EQ(ui->action("Repeat")->text(), QStringLiteral("Repeat Extrude"));
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XY));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->trigger("Circle");
+    ui->click(gp_Pnt(0, 0, 0));
+    ui->click(gp_Pnt(5, 0, 0));
+    ui->trigger("Finish Sketch");
+
+    QAction* repeat = ui->action("Repeat");
+    EXPECT_EQ(repeat->text(), QStringLiteral("Repeat Create Sketch")) << "Circle only works inside a sketch";
+    EXPECT_TRUE(repeat->isEnabled());
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XY));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    EXPECT_EQ(repeat->text(), QStringLiteral("Repeat Circle"));
+    EXPECT_TRUE(repeat->isEnabled());
+}
+
 TEST_F(MenuTest, TimelineSuppressesAndUnsuppresses)
 {
     ui->contextMenu(ui->timelineChip(kExtrude), "Suppress");
@@ -53,6 +91,16 @@ TEST_F(MenuTest, TimelineRenames)
     EXPECT_EQ(ui->state()["features"][1]["name"], "Base") << ui->state().dump(2);
     ui->trigger("Undo");
     EXPECT_EQ(ui->state()["features"][1]["name"], "Extrude1");
+}
+
+TEST_F(MenuTest, TimelineRenameRefusesAParameterName)
+{
+    ui->session().edit(QStringLiteral("Add w"),
+                       [](core::Document& document) { EXPECT_FALSE(core::addParameter(document, "w", "10 mm")); });
+    answerText("w");
+    ui->contextMenu(ui->timelineChip(kExtrude), "Rename...");
+    EXPECT_EQ(ui->state()["features"][1]["name"], "Extrude1") << ui->state().dump(2);
+    EXPECT_TRUE(ui->statusText().contains(QStringLiteral("'w' is already defined"))) << ui->statusText().toStdString();
 }
 
 TEST_F(MenuTest, TimelineRollsBackAndToTheEnd)
@@ -82,13 +130,82 @@ TEST_F(MenuTest, TimelineEditsTheExtrude)
     EXPECT_NEAR(volume(*ui), kBlockWidth * kBlockDepth * 20.0, kTolerance) << ui->state().dump(2);
 }
 
+TEST_F(MenuTest, TimelineEditsTheProfileSketch)
+{
+    ui->contextMenu(ui->timelineChip(kExtrude), "Edit Profile Sketch");
+    EXPECT_EQ(ui->state()["sketch"], 1) << ui->state().dump(2);
+    ui->trigger("Finish Sketch");
+    EXPECT_NEAR(volume(*ui), kBlockVolume, kTolerance) << ui->state().dump(2);
+}
+
+TEST_F(MenuTest, TimelineFindsTheBodyInTheBrowser)
+{
+    ui->contextMenu(ui->timelineChip(kExtrude), "Find in Browser");
+    const auto* browser = ui->window().findChild<app::BrowserPanel*>();
+    ASSERT_NE(browser, nullptr);
+    EXPECT_TRUE(browser->isVisible());
+    const QList<QTreeWidgetItem*> selected = browser->selectedItems();
+    ASSERT_EQ(selected.size(), 1);
+    EXPECT_EQ(selected.front()->text(0), QStringLiteral("Body1"));
+    ui->save("found");
+}
+
+TEST_F(MenuTest, TimelineHoverHighlightsTheBody)
+{
+    const auto shift = [](const QColor& a, const QColor& b) {
+        return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
+    };
+    const QPoint top = ui->canvas()->mapTo(&ui->window(), ui->at(kTopFace).toPoint());
+    const QColor plain = ui->shot().pixelColor(top);
+    ui->move(ui->timelineChip(kExtrude));
+    const QColor lit = ui->shot().pixelColor(top);
+    ui->save("hovered");
+    EXPECT_GT(shift(lit, plain), kColorShift) << plain.name().toStdString() << " " << lit.name().toStdString();
+    ui->move(ui->timelineChip(1));
+    EXPECT_LT(shift(ui->shot().pixelColor(top), plain), kColorShift) << "Sketch shapes no body";
+}
+
 TEST_F(MenuTest, BrowserHidesAndShowsABody)
 {
+    const auto displayed = [this] {
+        NCollection_List<Handle(AIS_InteractiveObject)> shown;
+        ui->window().oldView()->aisContext()->DisplayedObjects(shown);
+        return shown.Size();
+    };
+    const auto before = displayed();
+    const auto erased = ui->viewport() == nullptr ? 1 : 0;
     ui->contextMenu(ui->browserItem("Body1"), "Hide");
     EXPECT_FALSE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
+    EXPECT_EQ(displayed(), before - erased) << "old view erases only the body";
     ui->save("hidden");
     ui->contextMenu(ui->browserItem("Body1"), "Show");
     EXPECT_TRUE(ui->state()["bodies"][0]["visible"]) << ui->state().dump(2);
+    EXPECT_EQ(displayed(), before);
+}
+
+TEST_F(MenuTest, BrowserRebuildsOncePerEditUndoAndRedo)
+{
+    const auto* browser = ui->window().findChild<app::BrowserPanel*>();
+    ASSERT_NE(browser, nullptr);
+    ui->settle();
+    std::size_t rebuilds = browser->rebuilds();
+    const auto expectOne = [&](const char* step) {
+        ui->settle();
+        EXPECT_EQ(browser->rebuilds(), rebuilds + 1) << step;
+        rebuilds = browser->rebuilds();
+    };
+    const auto shows = [&](const QString& name) {
+        return !browser->findItems(name, Qt::MatchExactly | Qt::MatchRecursive).isEmpty();
+    };
+    ui->session().edit(QStringLiteral("Rename"), [](core::Document& document) { document.find(1)->name = "Renamed"; });
+    expectOne("edit");
+    EXPECT_TRUE(shows("Renamed"));
+    ui->trigger("Undo");
+    expectOne("undo");
+    EXPECT_TRUE(shows("Sketch1"));
+    ui->trigger("Redo");
+    expectOne("redo");
+    EXPECT_TRUE(shows("Renamed"));
 }
 
 TEST_F(MenuTest, BrowserEditsTheSketch)

@@ -6,10 +6,13 @@
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
 #include "app/view/scene_detail.h"
+#include "core/snapshot_cache.h"
+#include "geometry/meshing.h"
 #include "geometry/modeling.h"
 #include "geometry/topology.h"
 
 #include "log/log.h"
+#include "pick/scene_rays.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
 #include "viewer/style.h"
@@ -20,10 +23,12 @@
 #include <AIS_Point.hxx>
 #include <AIS_Shape.hxx>
 #include <Geom_CartesianPoint.hxx>
+#include <OSD_Parallel.hxx>
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Prs3d_PointAspect.hxx>
 #include <Prs3d_ShadingAspect.hxx>
+#include <Standard_Failure.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <StdSelect_ViewerSelector3d.hxx>
 #include <TopAbs_ShapeEnum.hxx>
@@ -33,7 +38,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <initializer_list>
+#include <memory>
 #include <utility>
 #include <variant>
 
@@ -70,7 +77,7 @@ void paintFaces(const Handle(AIS_ColoredShape)& object, const core::Body& body)
 std::pair<Handle(AIS_ColoredShape), int> makeBody(const core::Body& body, VisualStyle style)
 {
     Handle(AIS_ColoredShape) object = new AIS_ColoredShape(body.shape);
-    const Quantity_Color surface = body.color ? occt(*body.color) : occt(theme::kTitanium);
+    const Quantity_Color surface = body.color ? occt(*body.color) : occt(theme::palette().viewport.body);
     int displayMode = AIS_Shaded;
     switch (style) {
     case VisualStyle::Shaded:
@@ -82,20 +89,20 @@ std::pair<Handle(AIS_ColoredShape), int> makeBody(const core::Body& body, Visual
         paintFaces(object, body);
         object->Attributes()->SetFaceBoundaryDraw(true);
         object->Attributes()->SetFaceBoundaryAspect(
-            new Prs3d_LineAspect(occt(theme::kSlateDeep), Aspect_TOL_SOLID, kBodyEdgeWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.bodyEdge), Aspect_TOL_SOLID, kBodyEdgeWidth));
         break;
     case VisualStyle::Wireframe:
         displayMode = AIS_WireFrame;
-        object->SetColor(occt(theme::kTitaniumLight));
+        object->SetColor(occt(theme::palette().viewport.wire));
         object->Attributes()->SetWireAspect(
-            new Prs3d_LineAspect(occt(theme::kTitaniumLight), Aspect_TOL_SOLID, kWireWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.wire), Aspect_TOL_SOLID, kWireWidth));
         break;
     case VisualStyle::VisibleEdges:
-        object->SetColor(occt(theme::kCanvas));
+        object->SetColor(occt(theme::palette().viewport.canvas));
         object->Attributes()->SetShadingModel(Graphic3d_TypeOfShadingModel_Unlit);
         object->Attributes()->SetFaceBoundaryDraw(true);
         object->Attributes()->SetFaceBoundaryAspect(
-            new Prs3d_LineAspect(occt(theme::kTitaniumLight), Aspect_TOL_SOLID, kBodyEdgeWidth));
+            new Prs3d_LineAspect(occt(theme::palette().viewport.wire), Aspect_TOL_SOLID, kBodyEdgeWidth));
         break;
     }
     return {object, displayMode};
@@ -118,6 +125,8 @@ const char* toString(PickMode mode)
         return "faces";
     case PickMode::Measure:
         return "measure";
+    case PickMode::Project:
+        return "project";
     case PickMode::PressPull:
         return "press pull";
     case PickMode::HolePlacement:
@@ -131,6 +140,8 @@ const char* toString(PickMode mode)
     }
     return "none";
 }
+
+} // namespace
 
 std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
 {
@@ -153,6 +164,7 @@ std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
     case PickMode::PressPull:
         return {TopAbs_FACE, TopAbs_EDGE};
     case PickMode::Measure:
+    case PickMode::Project:
     case PickMode::AxisSources:
     case PickMode::PointSources:
         return {TopAbs_VERTEX, TopAbs_EDGE, TopAbs_FACE};
@@ -160,7 +172,15 @@ std::vector<TopAbs_ShapeEnum> bodySelection(PickMode mode, bool sketching)
     return {};
 }
 
-} // namespace
+bool planesPickable(PickMode mode)
+{
+    return mode == PickMode::Planes;
+}
+
+bool axesPickable(PickMode mode)
+{
+    return mode == PickMode::Lines || mode == PickMode::ProfilesAndLines || mode == PickMode::Faces;
+}
 
 Quantity_Color scene_detail::occt(const geometry::Color& color)
 {
@@ -232,9 +252,16 @@ std::optional<gp_Ax3> sketchPlaneOf(const Pick& pick)
     return std::nullopt;
 }
 
-Scene::Scene(viewer::OcctViewWidget* view) : m_view(view)
+Scene::Scene(viewer::OcctViewWidget* view, core::SnapshotCache& snapshots, pick::SceneRays& rays)
+    : m_view(view), m_snapshots(&snapshots), m_rays(&rays)
 {
+    const Handle(Prs3d_Drawer)& drawer = m_view->aisContext()->DefaultDrawer();
+    drawer->SetTypeOfDeflection(Aspect_TOD_RELATIVE);
+    drawer->SetDeviationCoefficient(geometry::kDisplayDeviationCoefficient);
+    drawer->SetDeviationAngle(geometry::kDisplayDeviationAngle);
     updateBoxSelection();
+    connect(m_view, &viewer::OcctViewWidget::selectionChanged, this, &PickSource::selectionChanged);
+    connect(m_view, &viewer::OcctViewWidget::hoverChanged, this, &PickSource::hoverChanged);
 }
 
 Scene::~Scene()
@@ -249,23 +276,42 @@ void Scene::updateBoxSelection()
         return;
     }
     m_view->setBoxSelection([this](const std::vector<Handle(SelectMgr_EntityOwner)>& owners) {
-        std::vector<TopoDS_Shape> shown;
+        pick::Meshes all;
+        pick::Meshes shown;
         for (const core::Body& body : m_model.bodies) {
+            all.push_back(m_snapshots->body(body)->mesh);
             if (!m_hiddenBodies.contains(body.key())) {
-                shown.push_back(body.shape);
+                shown.push_back(all.back());
             }
         }
-        const geometry::ViewBlockers blockers(shown);
-        std::vector<bool> keep;
-        keep.reserve(owners.size());
-        for (const Handle(SelectMgr_EntityOwner)& owner : owners) {
-            const std::optional<Pick> pick = pickOf(owner);
-            keep.push_back(pick && !pick->shape.IsNull() &&
-                           (pick->kind == Pick::Kind::Face || pick->kind == Pick::Kind::Edge ||
-                            pick->kind == Pick::Kind::Vertex) &&
-                           isVisible(pick->shape, blockers));
+        pick::VisibleRays rays = m_rays->rays(all, shown);
+        std::vector<const snapshot::Mesh*> meshes;
+        meshes.reserve(rays.meshes.size());
+        for (const auto& mesh : rays.meshes) {
+            meshes.push_back(mesh.get());
         }
-        return keep;
+        const geometry::ViewBlockers blockers(rays.scene, meshes, std::move(rays.shown));
+        std::vector<TopoDS_Shape> shapes(owners.size());
+        for (std::size_t i = 0; i < owners.size(); ++i) {
+            const std::optional<Pick> pick = pickOf(owners[i]);
+            if (pick && (pick->kind == Pick::Kind::Face || pick->kind == Pick::Kind::Edge ||
+                         pick->kind == Pick::Kind::Vertex)) {
+                shapes[i] = pick->shape;
+            }
+        }
+        std::vector<char> visible(shapes.size(), 0);
+        OSD_Parallel::For(0, static_cast<int>(shapes.size()), [&](int i) {
+            const TopoDS_Shape& shape = shapes[static_cast<std::size_t>(i)];
+            if (shape.IsNull()) {
+                return;
+            }
+            try {
+                visible[static_cast<std::size_t>(i)] = isVisible(shape, blockers) ? 1 : 0;
+            } catch (const Standard_Failure&) {
+                visible[static_cast<std::size_t>(i)] = 1;
+            }
+        });
+        return std::vector<bool>(visible.begin(), visible.end());
     });
 }
 
@@ -296,18 +342,28 @@ void Scene::show(const core::Document& document, const core::Model& model, const
     rebuild();
 }
 
+void Scene::setDrawsBodies(bool draws)
+{
+    if (m_drawsBodies == draws) {
+        return;
+    }
+    m_drawsBodies = draws;
+    dropBodies();
+}
+
 void Scene::setPickMode(PickMode mode)
 {
     if (m_mode == mode) {
         return;
     }
     K137_DEBUG(Viewer, "Pick mode {} to {}", toString(m_mode), toString(mode));
-    m_preselection = m_mode == PickMode::None ? selected() : std::vector<Pick>{};
+    m_preselection = m_mode == PickMode::None ? m_source->selected() : std::vector<Pick>{};
     m_view->aisContext()->ClearSelected(false);
     m_mode = mode;
     updateBoxSelection();
     dropBodies();
     rebuild();
+    emit pickModeChanged();
 }
 
 void Scene::setEditingSketch(core::FeatureId sketch)
@@ -317,6 +373,7 @@ void Scene::setEditingSketch(core::FeatureId sketch)
     }
     m_editingSketch = sketch;
     rebuild();
+    emit pickModeChanged();
 }
 
 void Scene::setVisualStyle(VisualStyle style)
@@ -325,6 +382,12 @@ void Scene::setVisualStyle(VisualStyle style)
         return;
     }
     m_style = style;
+    dropBodies();
+    rebuild();
+}
+
+void Scene::restyle()
+{
     dropBodies();
     rebuild();
 }
@@ -376,16 +439,28 @@ std::optional<Pick> Scene::pickOf(const Handle(SelectMgr_EntityOwner)& owner) co
             pick.kind = Pick::Kind::Vertex;
         }
     }
-    if (!pick.point) {
-        const Handle(StdSelect_ViewerSelector3d)& selector = m_view->aisContext()->MainSelector();
-        for (int i = 1; i <= selector->NbPicked(); ++i) {
-            if (selector->Picked(i) == owner) {
-                pick.point = selector->PickedPoint(i);
-                break;
-            }
+    return pick;
+}
+
+std::optional<Pick> Scene::pickWithPoint(const Handle(SelectMgr_EntityOwner)& owner, const PickedPoints& points) const
+{
+    std::optional<Pick> pick = pickOf(owner);
+    if (pick && !pick->point) {
+        if (auto it = points.find(owner.get()); it != points.end()) {
+            pick->point = it->second;
         }
     }
     return pick;
+}
+
+Scene::PickedPoints Scene::pickedPoints() const
+{
+    PickedPoints points;
+    const Handle(StdSelect_ViewerSelector3d)& selector = m_view->aisContext()->MainSelector();
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        points.try_emplace(selector->Picked(i).get(), selector->PickedPoint(i));
+    }
+    return points;
 }
 
 std::vector<Pick> Scene::takePicks()
@@ -401,8 +476,9 @@ std::vector<Pick> Scene::selected() const
 {
     std::vector<Pick> picks;
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
+    const PickedPoints points = pickedPoints();
     for (context->InitSelected(); context->MoreSelected(); context->NextSelected()) {
-        if (std::optional<Pick> pick = pickOf(context->SelectedOwner())) {
+        if (std::optional<Pick> pick = pickWithPoint(context->SelectedOwner(), points)) {
             picks.push_back(std::move(*pick));
         }
     }
@@ -426,13 +502,18 @@ void Scene::clearSelection()
     m_view->redraw();
 }
 
+bool Scene::selectedByBox() const
+{
+    return m_view->selectedByBox();
+}
+
 std::optional<Pick> Scene::hovered() const
 {
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
     if (!context->HasDetected()) {
         return std::nullopt;
     }
-    return pickOf(context->DetectedOwner());
+    return pickWithPoint(context->DetectedOwner(), pickedPoints());
 }
 
 void Scene::display(const Handle(AIS_InteractiveObject)& object, int selectionMode, std::optional<Pick> pick,
@@ -451,11 +532,74 @@ void Scene::dropBodies()
         m_view->aisContext()->Remove(body.object, false);
     }
     m_bodies.clear();
+    dropErased();
+}
+
+void Scene::dropErased()
+{
+    for (const BodyObject& body : m_erased) {
+        m_view->aisContext()->Remove(body.object, false);
+    }
+    m_erased.clear();
+}
+
+void Scene::displayBody(const BodyObject& body)
+{
+    const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
+    context->Display(body.object, body.displayMode,
+                     m_bodySelection.empty() ? kNotSelectable : AIS_Shape::SelectionMode(m_bodySelection.front()),
+                     false);
+    for (std::size_t i = 1; i < m_bodySelection.size(); ++i) {
+        context->Activate(body.object, AIS_Shape::SelectionMode(m_bodySelection[i]));
+    }
+}
+
+bool Scene::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible)
+{
+    if (!m_drawsBodies) {
+        for (const core::BodyKey& key : keys) {
+            if (visible) {
+                m_hiddenBodies.erase(key);
+            } else {
+                m_hiddenBodies.insert(key);
+            }
+        }
+        return true;
+    }
+    const auto byKey = [](const core::BodyKey& key) {
+        return [&key](const BodyObject& body) { return body.key == key; };
+    };
+    if (visible && std::ranges::any_of(keys, [&](const core::BodyKey& key) {
+            return m_hiddenBodies.contains(key) && std::ranges::none_of(m_erased, byKey(key));
+        })) {
+        return false;
+    }
+    for (const core::BodyKey& key : keys) {
+        if (visible) {
+            if (m_hiddenBodies.erase(key) == 0) {
+                continue;
+            }
+            const auto erased = std::ranges::find_if(m_erased, byKey(key));
+            displayBody(*erased);
+            m_bodies.push_back(std::move(*erased));
+            m_erased.erase(erased);
+        } else if (m_hiddenBodies.insert(key).second) {
+            const auto shown = std::ranges::find_if(m_bodies, byKey(key));
+            if (shown == m_bodies.end()) {
+                continue;
+            }
+            m_view->aisContext()->Erase(shown->object, false);
+            m_erased.push_back(std::move(*shown));
+            m_bodies.erase(shown);
+        }
+    }
+    m_view->redraw();
+    return true;
 }
 
 void Scene::rebuild()
 {
-    const auto start = std::chrono::steady_clock::now();
+    [[maybe_unused]] const auto start = std::chrono::steady_clock::now();
     const Handle(AIS_InteractiveContext)& context = m_view->aisContext();
     for (const Handle(AIS_InteractiveObject)& object : m_objects) {
         context->Remove(object, false);
@@ -475,6 +619,7 @@ void Scene::rebuild()
                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count(),
                m_objects.size(), m_bodies.size(), reused, toString(m_mode));
     m_view->redraw();
+    emit rebuilt();
 }
 
 void Scene::showSketches()
@@ -496,8 +641,11 @@ void Scene::showSketches()
                 continue;
             }
             Handle(AIS_Shape) object =
-                makeWire(*edge, curve.construction ? theme::kSketchConstruction : theme::kSketchFree,
+                makeWire(*edge,
+                         curve.construction ? theme::palette().viewport.sketchConstruction
+                                            : theme::palette().viewport.sketchFree,
                          curve.construction ? 1.0 : 1.5, curve.construction ? Aspect_TOL_DASH : Aspect_TOL_SOLID);
+            object->SetZLayer(m_view->linesLayer());
             const bool pickable = linesPickable && curve.kind == sketch::CurveKind::Line;
             Pick pick;
             pick.kind = Pick::Kind::SketchLine;
@@ -510,7 +658,7 @@ void Scene::showSketches()
                 const gp_Pnt world = sketch::toWorld(state->second.plane, point.pos);
                 Handle(AIS_Point) marker = new AIS_Point(new Geom_CartesianPoint(world));
                 marker->SetMarker(Aspect_TOM_O_POINT);
-                marker->SetColor(occt(theme::kSketchFree));
+                marker->SetColor(occt(theme::palette().viewport.sketchFree));
                 marker->Attributes()->PointAspect()->SetScale(kSketchPointScale);
                 marker->SetZLayer(Graphic3d_ZLayerId_Topmost);
                 Pick pick;
@@ -527,8 +675,9 @@ void Scene::showSketches()
         const std::vector<TopoDS_Face>& profiles = state->second.profiles;
         for (std::size_t i = 0; i < profiles.size(); ++i) {
             const bool highlighted = m_highlightedProfiles.contains({feature.id, i});
-            Handle(AIS_Shape) object = makeSurface(profiles[i], highlighted ? theme::kGold : theme::kPlane,
-                                                   highlighted ? kHighlightTransparency : kProfileTransparency);
+            Handle(AIS_Shape) object =
+                makeSurface(profiles[i], highlighted ? theme::palette().chrome.accent : theme::palette().viewport.plane,
+                            highlighted ? kHighlightTransparency : kProfileTransparency);
             if (highlighted) {
                 object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
             } else {
@@ -552,6 +701,10 @@ std::size_t Scene::showBodies()
         dropBodies();
         m_bodySelection = selection;
     }
+    dropErased();
+    if (!m_drawsBodies) {
+        return 0;
+    }
     std::vector<BodyObject> previous = std::exchange(m_bodies, {});
     std::size_t reused = 0;
     for (const core::Body& body : m_model.bodies) {
@@ -568,6 +721,7 @@ std::size_t Scene::showBodies()
                    b.preview == preview;
         });
         if (cached != previous.end()) {
+            cached->key = body.key();
             m_picks.emplace(cached->object.get(), pick);
             m_bodies.push_back(std::move(*cached));
             previous.erase(cached);
@@ -580,13 +734,10 @@ std::size_t Scene::showBodies()
         } else if (preview) {
             object->SetTransparency(kPreviewBodyTransparency);
         }
-        context->Display(object, displayMode,
-                         selection.empty() ? kNotSelectable : AIS_Shape::SelectionMode(selection.front()), false);
-        for (std::size_t i = 1; i < selection.size(); ++i) {
-            context->Activate(object, AIS_Shape::SelectionMode(selection[i]));
-        }
         m_picks.emplace(object.get(), pick);
-        m_bodies.push_back({body.shape, object, body.color, body.faceColors, preview});
+        m_bodies.push_back({body.key(), body.shape, Handle(AIS_InteractiveObject)(object), body.color, body.faceColors,
+                            preview, displayMode});
+        displayBody(m_bodies.back());
     }
     for (const BodyObject& stale : previous) {
         context->Remove(stale.object, false);
@@ -597,21 +748,24 @@ std::size_t Scene::showBodies()
 void Scene::showHighlights()
 {
     for (const TopoDS_Edge& edge : m_highlightedEdges) {
-        Handle(AIS_Shape) object = makeWire(edge, theme::kGold, kHighlightEdgeWidth);
+        Handle(AIS_Shape) object = makeWire(edge, theme::palette().chrome.accent, kHighlightEdgeWidth);
         object->SetZLayer(Graphic3d_ZLayerId_Topmost);
         Pick pick;
         pick.kind = Pick::Kind::Edge;
         display(object, kWholeObject, pick);
     }
     for (const TopoDS_Face& face : m_highlightedFaces) {
-        Handle(AIS_Shape) object = makeSurface(face, theme::kGold, kHighlightTransparency);
+        Handle(AIS_Shape) object = makeSurface(face, theme::palette().chrome.accent, kHighlightTransparency);
         object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
         Pick pick;
         pick.kind = Pick::Kind::Face;
         display(object, kWholeObject, pick);
     }
+    if (!m_drawsBodies) {
+        return;
+    }
     for (const TopoDS_Shape& body : m_highlightedBodies) {
-        Handle(AIS_Shape) object = makeSurface(body, theme::kGold, kHighlightTransparency);
+        Handle(AIS_Shape) object = makeSurface(body, theme::palette().chrome.accent, kHighlightTransparency);
         object->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
         display(object, kNotSelectable, std::nullopt);
     }

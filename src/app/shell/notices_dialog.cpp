@@ -20,10 +20,17 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr int kDialogWidth = theme::kWidthRegular;
-constexpr int kDialogHeight = 560;
+constexpr int kDialogWidth = theme::kWidthWide;
+constexpr int kDialogHeight = 640;
 constexpr const char* kNoticesResource = ":/kalve137/THIRD-PARTY-NOTICES.md";
 constexpr const char* kNoticesFolder = "notices";
+
+QDir noticesFolder()
+{
+    const QString appDir = QApplication::applicationDirPath();
+    const QDir bundled(appDir + QLatin1String("/../Resources/") + QLatin1String(kNoticesFolder));
+    return bundled.exists() ? bundled : QDir(appDir + QLatin1Char('/') + QLatin1String(kNoticesFolder));
+}
 
 } // namespace
 
@@ -31,7 +38,7 @@ void showThirdPartyNotices(QWidget* window)
 {
     QDialog dialog(window);
     dialog.setWindowTitle(QDialog::tr("Third-Party Notices"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
 
     auto* text = new QTextBrowser(&dialog);
@@ -49,7 +56,7 @@ void showThirdPartyNotices(QWidget* window)
     layout->addWidget(text);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    const QDir folder(QApplication::applicationDirPath() + QLatin1Char('/') + QLatin1String(kNoticesFolder));
+    const QDir folder = noticesFolder();
     if (folder.exists()) {
         QPushButton* open = buttons->addButton(QDialog::tr("Open License Texts"), QDialogButtonBox::ActionRole);
         QObject::connect(open, &QPushButton::clicked, &dialog,

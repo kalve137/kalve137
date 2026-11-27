@@ -6,6 +6,7 @@
 
 #include "viewer/camera_guard.h"
 #include "viewer/style.h"
+#include "viewer/view_cube.h"
 #include "viewer/view_turn.h"
 
 #include "log/log.h"
@@ -15,15 +16,19 @@
 
 #include <Standard_WarningsDisable.hxx>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
 #include <Standard_WarningsRestore.hxx>
 
 #include <AIS_AnimationCamera.hxx>
-#include <AIS_ViewCube.hxx>
 #include <Aspect_DisplayConnection.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <Bnd_Box.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Graphic3d_MaterialAspect.hxx>
 #include <Graphic3d_TransformPers.hxx>
 #include <Graphic3d_ZLayerSettings.hxx>
 #include <Message.hxx>
@@ -36,8 +41,11 @@
 #include <TCollection_AsciiString.hxx>
 #include <V3d_AmbientLight.hxx>
 #include <V3d_DirectionalLight.hxx>
+#include <gp_Ax1.hxx>
 #include <gp_Dir.hxx>
+#include <gp_Trsf.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <format>
@@ -60,20 +68,19 @@ constexpr double kPickTolerancePixels = 4.0;
 constexpr double kRecoveryHalfSize = 100.0;
 constexpr int kMaxFailedFrames = 3;
 
-constexpr double kViewCubeSize = 64.0;
+constexpr double kViewCubeSize = 47.0;
 constexpr int kViewCubeOffsetX = 100;
 constexpr int kViewCubeOffsetY = 150;
-constexpr double kViewCubeRoundness = 0.12;
-constexpr double kViewCubeFacetFraction = 0.12;
+constexpr double kViewCubeFacetFraction = 0.55;
 constexpr double kViewCubeAxesPadding = 6.0;
 constexpr double kViewCubeAxisRadius = 1.4;
 constexpr double kViewCubeAxisConeRadius = 3.2;
-constexpr double kViewCubeFontHeight = 13.0;
+constexpr double kViewCubeFontHeight = 12.0;
 constexpr double kViewCubeAxisFontHeight = 15.0;
 constexpr double kViewTransitionSeconds = 0.5;
 constexpr double kInstantTransitionSeconds = 0.001;
 constexpr float kHoverTransparency = static_cast<float>(style::kTintStrong);
-constexpr double kViewCubeHoverTransparency = style::kTintFaint;
+constexpr double kViewCubeHoverTransparency = style::kTintOpaque;
 
 template <typename Drawable = Aspect_Drawable>
 Drawable toDrawable(WId id)
@@ -107,35 +114,40 @@ OcctViewWidget::OcctViewWidget(QWidget* parent) : QOpenGLWidget(parent)
     m_viewer->AddLight(keyLight);
     m_viewer->SetLightOn();
 
+    BRepMesh_IncrementalMesh::SetParallelDefault(true);
     m_context = new AIS_InteractiveContext(m_viewer);
     m_grid = new GridObject(GridObject::Part::Lines);
     m_gridWash = new GridObject(GridObject::Part::Wash);
-    const auto addGridLayer = [this](const char* name, Graphic3d_ZLayerId after) {
+    const auto addLayer = [this](const char* name, Graphic3d_ZLayerId after, bool depthWrite) {
         Graphic3d_ZLayerSettings settings;
         settings.SetName(name);
         settings.SetClearDepth(false);
         settings.SetEnableDepthTest(true);
-        settings.SetEnableDepthWrite(false);
+        settings.SetEnableDepthWrite(depthWrite);
         Graphic3d_ZLayerId id = Graphic3d_ZLayerId_UNKNOWN;
         return m_viewer->InsertLayerAfter(id, settings, after) ? id : Graphic3d_ZLayerId_UNKNOWN;
     };
-    const Graphic3d_ZLayerId washLayer = addGridLayer("GridWash", Graphic3d_ZLayerId_Default);
+    const Graphic3d_ZLayerId washLayer = addLayer("GridWash", Graphic3d_ZLayerId_Default, false);
     const Graphic3d_ZLayerId gridLayer =
-        washLayer != Graphic3d_ZLayerId_UNKNOWN ? addGridLayer("Grid", washLayer) : Graphic3d_ZLayerId_UNKNOWN;
+        washLayer != Graphic3d_ZLayerId_UNKNOWN ? addLayer("Grid", washLayer, false) : Graphic3d_ZLayerId_UNKNOWN;
     if (gridLayer != Graphic3d_ZLayerId_UNKNOWN) {
         m_gridWash->SetZLayer(washLayer);
         m_grid->SetZLayer(gridLayer);
+        if (const Graphic3d_ZLayerId lines = addLayer("Lines", gridLayer, true); lines != Graphic3d_ZLayerId_UNKNOWN) {
+            m_linesLayer = lines;
+        } else {
+            K137_WARN(Viewer, "No lines layer, edges in grid plane can flicker against it");
+        }
     } else {
         K137_WARN(Viewer, "No grid layer, the grid draws under everything");
         m_gridWash->SetZLayer(Graphic3d_ZLayerId_BotOSD);
         m_grid->SetZLayer(Graphic3d_ZLayerId_BotOSD);
     }
 
-    m_viewCube = new AIS_ViewCube();
+    m_viewCube = new ViewCube();
     m_viewCube->SetViewAnimation(myViewAnimation);
     m_viewCube->SetFixedAnimationLoop(false);
     m_viewCube->SetAutoStartAnimation(true);
-    m_viewCube->SetRoundRadius(kViewCubeRoundness);
     scaleViewCube();
 
     setNavigation(Navigation{});
@@ -234,6 +246,7 @@ void OcctViewWidget::setNavigation(const Navigation& navigation)
 {
     m_navigation = navigation;
     const unsigned int middle = Aspect_VKeyMouse_MiddleButton;
+    const unsigned int right = Aspect_VKeyMouse_RightButton;
     const unsigned int ctrl = Aspect_VKeyFlags_CTRL;
     const unsigned int shift = Aspect_VKeyFlags_SHIFT;
     NCollection_DataMap<unsigned int, AIS_MouseGesture>& gestures = ChangeMouseGestureMap();
@@ -255,6 +268,11 @@ void OcctViewWidget::setNavigation(const Navigation& navigation)
         gestures.Bind(middle, AIS_MouseGesture_RotateOrbit);
         gestures.Bind(middle | shift, AIS_MouseGesture_Pan);
         gestures.Bind(middle | ctrl, AIS_MouseGesture_Zoom);
+        break;
+    case NavigationPreset::RightOrbitsCtrlPans:
+        gestures.Bind(right, AIS_MouseGesture_RotateOrbit);
+        gestures.Bind(right | ctrl, AIS_MouseGesture_Pan);
+        gestures.Bind(right | shift, AIS_MouseGesture_Zoom);
         break;
     }
     SetRotationMode(navigation.orbitAroundCursor ? AIS_RotationMode_PickLast : AIS_RotationMode_BndBoxActive);
@@ -285,16 +303,37 @@ void OcctViewWidget::setHighlightColors(const QColor& hover, const QColor& selec
 void OcctViewWidget::setViewCubeStyle(const ViewCubeStyle& style)
 {
     const auto occt = [](const QColor& color) { return OcctQtTools::qtColorToOcct(color); };
-    m_viewCube->SetBoxColor(occt(style.face));
-    m_viewCube->SetInnerColor(occt(style.edge));
+    const auto lit = [&style, &occt](const QColor& color) {
+        const Quantity_Color base = occt(color);
+        const auto scaled = [&base](double factor) {
+            return Quantity_Color(std::min(1.0, base.Red() * factor), std::min(1.0, base.Green() * factor),
+                                  std::min(1.0, base.Blue() * factor), Quantity_TOC_RGB);
+        };
+        Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
+        material.SetMaterialType(Graphic3d_MATERIAL_PHYSIC);
+        material.SetAmbientColor(Quantity_Color(Quantity_NOC_BLACK));
+        material.SetSpecularColor(Quantity_Color(Quantity_NOC_BLACK));
+        material.SetEmissiveColor(scaled(style.shading.glow));
+        material.SetDiffuseColor(scaled(style.shading.diffuse));
+        return material;
+    };
+    m_viewCube->SetBoxColor(occt(style.side));
     m_viewCube->BoxEdgeStyle()->SetColor(occt(style.edge));
-    m_viewCube->BoxCornerStyle()->SetColor(occt(style.edge));
-    m_viewCube->SetTextColor(occt(style.label));
-    m_viewCube->SetFont(style.labelFont.toUtf8().constData());
-    for (const Handle(Prs3d_ShadingAspect)& aspect :
-         {m_viewCube->Attributes()->ShadingAspect(), m_viewCube->BoxEdgeStyle(), m_viewCube->BoxCornerStyle()}) {
-        aspect->Aspect()->SetShadingModel(Graphic3d_TypeOfShadingModel_Unlit);
+    m_viewCube->BoxCornerStyle()->SetColor(occt(style.corner));
+    const std::pair<Handle(Prs3d_ShadingAspect), QColor> tones[] = {
+        {m_viewCube->Attributes()->ShadingAspect(), style.side},
+        {m_viewCube->BoxEdgeStyle(), style.edge},
+        {m_viewCube->BoxCornerStyle(), style.corner},
+    };
+    for (const auto& [aspect, color] : tones) {
+        const Graphic3d_MaterialAspect material = lit(color);
+        aspect->Aspect()->SetShadingModel(Graphic3d_TypeOfShadingModel_Phong);
+        aspect->Aspect()->SetFrontMaterial(material);
+        aspect->Aspect()->SetBackMaterial(material);
     }
+    m_viewCube->SetTextColor(occt(style.label));
+    m_viewCube->setHoverLabelColor(occt(style.hoverLabel));
+    m_viewCube->SetFont(style.labelFont.toUtf8().constData());
     const Handle(Prs3d_Drawer)& hover = m_viewCube->DynamicHilightAttributes();
     hover->SetColor(occt(style.hover));
     if (hover->HasOwnShadingAspect()) {
@@ -331,11 +370,11 @@ void OcctViewWidget::scaleViewCube()
     m_viewCube->SetAxesRadius(kViewCubeAxisRadius * ratio);
     m_viewCube->SetAxesConeRadius(kViewCubeAxisConeRadius * ratio);
     m_viewCube->SetAxesSphereRadius(kViewCubeAxisConeRadius * ratio);
-    m_viewCube->SetFontHeight(kViewCubeFontHeight * ratio);
+    m_viewCube->SetFontHeight(kViewCubeFontHeight);
     if (m_viewCube->Attributes()->HasOwnDatumAspect()) {
         const Handle(Prs3d_DatumAspect)& datum = m_viewCube->Attributes()->DatumAspect();
         for (const Prs3d_DatumParts part : {Prs3d_DatumParts_XAxis, Prs3d_DatumParts_YAxis, Prs3d_DatumParts_ZAxis}) {
-            datum->TextAspect(part)->SetHeight(kViewCubeAxisFontHeight * ratio);
+            datum->TextAspect(part)->SetHeight(kViewCubeAxisFontHeight);
         }
     }
     const Vec2i offset(static_cast<int>(std::lround(kViewCubeOffsetX * ratio)),
@@ -402,6 +441,55 @@ void OcctViewWidget::animateCamera(const std::function<void()>& change)
     startCameraAnimation(start, end);
 }
 
+void OcctViewWidget::saveView()
+{
+    if (!isReady()) {
+        return;
+    }
+    m_savedView = new Graphic3d_Camera();
+    m_savedView->Copy(targetCamera());
+}
+
+void OcctViewWidget::restoreSavedView()
+{
+    if (m_savedView.IsNull()) {
+        return;
+    }
+    const Handle(Graphic3d_Camera) saved = m_savedView;
+    m_savedView.Nullify();
+    if (!isReady() || !isUsable(*saved)) {
+        return;
+    }
+    animateCamera([this, &saved] {
+        m_view->Camera()->Copy(saved);
+        syncAspect(*m_view);
+        m_view->Invalidate();
+    });
+    updateView();
+}
+
+void OcctViewWidget::dropSavedView()
+{
+    m_savedView.Nullify();
+}
+
+void OcctViewWidget::syncAspect(V3d_View& view)
+{
+    int width = 0;
+    int height = 0;
+    view.Window()->Size(width, height);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    const double aspect = static_cast<double>(width) / height;
+    for (const Handle(Graphic3d_Camera)& camera :
+         {view.Camera(), myViewAnimation->CameraStart(), myViewAnimation->CameraEnd()}) {
+        if (!camera.IsNull() && camera->Aspect() != aspect) {
+            camera->SetAspect(aspect);
+        }
+    }
+}
+
 void OcctViewWidget::startCameraAnimation(const Handle(Graphic3d_Camera)& start, const Handle(Graphic3d_Camera)& end)
 {
     myViewAnimation->Stop();
@@ -440,7 +528,7 @@ void OcctViewWidget::setLeftButtonCaptured(bool captured)
 std::optional<gp_Pnt> OcctViewWidget::pickOnPlane(const QPointF& pos, const gp_Ax3& plane) const
 {
     if (!isReady()) {
-        return std::nullopt;
+        return pickOnPlaneWithoutWindow(pos, plane);
     }
     const Vec2d point(pos.x(), pos.y());
     const Vec2i pixel(m_view->Window()->ConvertPointToBacking(point) + Vec2d(0.5));
@@ -475,7 +563,7 @@ void OcctViewWidget::detectAt(const QPointF& pos)
 double OcctViewWidget::worldPerPixel() const
 {
     if (!isReady()) {
-        return 1.0;
+        return worldPerPixelWithoutWindow();
     }
     return m_view->Convert(1) * m_view->Window()->DevicePixelRatio();
 }
@@ -483,7 +571,7 @@ double OcctViewWidget::worldPerPixel() const
 QPointF OcctViewWidget::toScreen(const gp_Pnt& point) const
 {
     if (!isReady()) {
-        return {};
+        return toScreenWithoutWindow(point);
     }
     int x = 0;
     int y = 0;
@@ -589,6 +677,8 @@ void OcctViewWidget::initializeGL()
         return;
     }
     m_context->SetPixelTolerance(static_cast<int>(std::lround(kPickTolerancePixels * devicePixelRatioF())));
+    m_view->ChangeRenderingParams().Resolution =
+        static_cast<unsigned int>(std::lround(Graphic3d_RenderingParams::THE_DEFAULT_RESOLUTION * devicePixelRatioF()));
     scaleViewCube();
 
     makeCurrent();
@@ -617,6 +707,8 @@ void OcctViewWidget::paintGL()
     if (m_view.IsNull() || m_view->Window().IsNull()) {
         return;
     }
+    QElapsedTimer frameTimer;
+    frameTimer.start();
 
     const double oldPixelRatio = m_view->Window()->DevicePixelRatio();
     if (m_view->Window()->NativeHandle() != OcctGlTools::GetGlNativeWindow(toDrawable(effectiveWinId()))) {
@@ -639,6 +731,7 @@ void OcctViewWidget::paintGL()
     view->InvalidateImmediate();
     try {
         repairUp(*view->Camera());
+        syncAspect(*view);
         AIS_ViewController::FlushViewEvents(m_context, view, true);
         if (isUsable(*view->Camera())) {
             m_lastGoodCamera->Copy(view->Camera());
@@ -652,7 +745,37 @@ void OcctViewWidget::paintGL()
     }
 
     OcctGlTools::ResetGlStateAfterOcct(m_view);
+    if (m_frameTiming) {
+        context()->functions()->glFinish();
+        m_lastFrameMs = static_cast<double>(frameTimer.nsecsElapsed()) / 1e6;
+    }
     emit rendered();
+}
+
+void OcctViewWidget::orbitBy(double radians)
+{
+    const Handle(Graphic3d_Camera)& camera = m_view->Camera();
+    gp_Trsf turn;
+    turn.SetRotation(gp_Ax1(camera->Center(), camera->Up()), radians);
+    camera->Transform(turn);
+    m_view->Invalidate();
+}
+
+QString OcctViewWidget::deviceName()
+{
+    if (!isReady()) {
+        return {};
+    }
+    makeCurrent();
+    const auto* renderer = reinterpret_cast<const char*>(context()->functions()->glGetString(GL_RENDERER));
+    QString name = renderer != nullptr ? QString::fromUtf8(renderer) : QString();
+    doneCurrent();
+    return name;
+}
+
+int OcctViewWidget::sampleCount() const
+{
+    return m_view.IsNull() ? 0 : m_view->RenderingParams().NbMsaaSamples;
 }
 
 bool OcctViewWidget::event(QEvent* event)
@@ -710,7 +833,9 @@ void OcctViewWidget::mousePressEvent(QMouseEvent* event)
             return;
         }
     }
-    if (event->button() == Qt::RightButton) {
+    const Qt::MouseButton menuButton =
+        m_navigation.preset == NavigationPreset::RightOrbitsCtrlPans ? Qt::MiddleButton : Qt::RightButton;
+    if (event->button() == menuButton) {
         emit menuRequested(event->globalPosition().toPoint());
         return;
     }

@@ -8,13 +8,22 @@
 #include "app/session/design_session.h"
 #include "app/shell/main_window.h"
 #include "app/sketch/sketch_editor.h"
+#include "app/theme/theme.h"
+#include "app/view/camera_commands.h"
+#include "app/view/pick.h"
+#include "app/view/pick_source.h"
+#include "camera/camera.h"
 #include "core/recompute.h"
 #include "geometry/shapes.h"
 #include "log/log.h"
+#include "render/rhi/viewport.h"
 #include "sketch/dimension.h"
 #include "sketch/profiles.h"
 #include "viewer/occt_view_widget.h"
 
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_Printer.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
@@ -37,6 +46,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -54,7 +64,9 @@
 #include <fstream>
 #include <mutex>
 #include <numbers>
+#include <optional>
 #include <ranges>
+#include <string_view>
 
 namespace kalve137::uitest {
 
@@ -69,6 +81,10 @@ constexpr int kOriginPlanePixels = 80;
 constexpr int kPlaneSearchStep = 8;
 constexpr int kPlaneSearchDirections = 24;
 constexpr double kParallelTolerance = 1e-6;
+constexpr int kAccentTolerance = 24;
+constexpr int kReferenceOpenGlMajor = 3;
+constexpr int kReferenceOpenGlMinor = 2;
+constexpr std::string_view kDisplayProfileCategory = "qt.gui.icc";
 
 struct Problems {
     std::mutex mutex;
@@ -110,6 +126,8 @@ void recordLog(std::string_view line)
         while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
             text.pop_back();
         }
+        std::fprintf(stderr, "%s\n", text.c_str());
+        std::fflush(stderr);
         record(std::move(text));
     }
 }
@@ -119,7 +137,10 @@ QtMessageHandler g_previousHandler = nullptr;
 void onQtMessage(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
     if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg) {
-        record("qt: " + message.toStdString());
+        const bool displayProfile = context.category != nullptr && context.category == kDisplayProfileCategory;
+        if (!displayProfile) {
+            record("qt: " + message.toStdString());
+        }
         std::fprintf(stderr, "qt %s: %s\n", type == QtFatalMsg ? "fatal" : "warning", qPrintable(message));
         std::fflush(stderr);
     }
@@ -179,7 +200,7 @@ protected:
             return false;
         }
         if (event->type() == QEvent::Polish) {
-            widget->setAttribute(Qt::WA_DontShowOnScreen);
+            widget->setAttribute(Qt::WA_DontShowOnScreen, !m_onScreen);
         } else if (auto* menu = qobject_cast<QMenu*>(widget); menu != nullptr && event->type() == QEvent::Show) {
             answerMenu(*menu);
         } else if (event->type() == QEvent::Show && widget->isModal() && !answers().empty()) {
@@ -202,19 +223,58 @@ protected:
         }
         return false;
     }
+
+private:
+    bool m_onScreen = qEnvironmentVariableIsSet("KALVE137_ON_SCREEN");
 };
 
-std::filesystem::path shotFolder()
+QString testKey()
 {
-    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
-    std::filesystem::path root =
-        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
-                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
-    if (const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info()) {
-        root /= std::format("{}.{}", test->test_suite_name(), test->name());
+    QString pid = QString::number(QCoreApplication::applicationPid());
+    const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info();
+    if (test == nullptr) {
+        return pid;
     }
-    return root;
+    return QStringLiteral("%1.%2-%3")
+        .arg(QString::fromUtf8(test->test_suite_name()), QString::fromUtf8(test->name()), pid);
 }
+
+QString isolatedName()
+{
+    return QStringLiteral("kalve137-uitests/") + testKey();
+}
+
+QString testRoot()
+{
+    return QDir::tempPath() + u'/' + isolatedName();
+}
+
+class Isolation : public testing::EmptyTestEventListener {
+public:
+    void OnTestStart(const testing::TestInfo&) override
+    {
+        m_organization = QCoreApplication::organizationName();
+        QCoreApplication::setOrganizationName(isolatedName());
+        resetSettings();
+    }
+
+    void OnTestEnd(const testing::TestInfo&) override
+    {
+        const QString key = testKey();
+        for (const QStandardPaths::StandardLocation location :
+             {QStandardPaths::AppLocalDataLocation, QStandardPaths::AppDataLocation}) {
+            QDir folder(QStandardPaths::writableLocation(location));
+            if (folder.cdUp() && folder.dirName() == key) {
+                folder.removeRecursively();
+            }
+        }
+        QDir(testRoot()).removeRecursively();
+        QCoreApplication::setOrganizationName(m_organization);
+    }
+
+private:
+    QString m_organization;
+};
 
 std::string healthName(core::FeatureHealth health)
 {
@@ -280,19 +340,44 @@ nlohmann::json dimensionsOf(const sketch::Sketch& s, const gp_Ax3& plane)
 
 } // namespace
 
+std::filesystem::path shotFolder()
+{
+    const QByteArray custom = qgetenv("KALVE137_UI_SHOTS");
+    std::filesystem::path root =
+        custom.isEmpty() ? std::filesystem::path(QCoreApplication::applicationDirPath().toStdU16String()) / "ui-shots"
+                         : std::filesystem::path(QString::fromLocal8Bit(custom).toStdU16String());
+    if (const testing::TestInfo* test = testing::UnitTest::GetInstance()->current_test_info()) {
+        root /= std::format("{}.{}", test->test_suite_name(), test->name());
+    }
+    return root;
+}
+
+std::filesystem::path scratchFolder()
+{
+    return std::filesystem::path(testRoot().toStdU16String()) / "scratch";
+}
+
 void installHarness()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir::tempPath());
+    testing::UnitTest::GetInstance()->listeners().Append(new Isolation);
     g_previousHandler = qInstallMessageHandler(onQtMessage);
     log::Options options;
     options.debuggerOutput = recordLog;
     log::init(options);
+    for (const occ::handle<Message_Printer>& printer : Message::DefaultMessenger()->Printers()) {
+        printer->SetTraceLevel(Message_Warning);
+    }
     qApp->installEventFilter(new OffScreen(qApp));
 }
 
 void resetSettings()
 {
-    QSettings().clear();
+    QSettings settings;
+    settings.clear();
+    settings.setValue("preferences/appearance/theme", "dark");
     for (const QStandardPaths::StandardLocation location :
          {QStandardPaths::AppLocalDataLocation, QStandardPaths::AppDataLocation}) {
         if (const QString folder = QStandardPaths::writableLocation(location); !folder.isEmpty()) {
@@ -378,7 +463,41 @@ std::size_t pendingAnswers()
     return count;
 }
 
-UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>())
+bool paintsAccent(QWidget& button)
+{
+    const QImage image = button.grab().toImage();
+    const QColor fill = image.pixelColor(image.width() / 6, image.height() / 2);
+    const QColor accent = app::theme::palette().chrome.accent;
+    return std::abs(fill.red() - accent.red()) + std::abs(fill.green() - accent.green()) +
+               std::abs(fill.blue() - accent.blue()) <
+           kAccentTolerance;
+}
+
+bool drawsReferenceColors(const viewer::OcctViewWidget& oldView)
+{
+    static const QRegularExpression kVersion(QStringLiteral("GLversion: (\\d+)\\.(\\d+)"));
+    const QRegularExpressionMatch found = kVersion.match(oldView.glInfo());
+    if (!found.hasMatch()) {
+        return true;
+    }
+    const int major = found.captured(1).toInt();
+    const int minor = found.captured(2).toInt();
+    return major > kReferenceOpenGlMajor || (major == kReferenceOpenGlMajor && minor >= kReferenceOpenGlMinor);
+}
+
+qint64 timeBudgetMs(qint64 baseMs)
+{
+    bool valid = false;
+    const double scale = qEnvironmentVariable("KALVE137_TIME_BUDGET_SCALE").toDouble(&valid);
+    if (!valid || !std::isfinite(scale) || scale < 1.0) {
+        return baseMs;
+    }
+    return std::llround(static_cast<double>(baseMs) * scale);
+}
+
+UiDriver::UiDriver() : UiDriver(app::startupFromEnvironment()) {}
+
+UiDriver::UiDriver(const app::StartupOptions& options) : m_window(std::make_unique<app::MainWindow>(options))
 {
     std::error_code ignored;
     std::filesystem::remove_all(shotFolder(), ignored);
@@ -386,12 +505,22 @@ UiDriver::UiDriver() : m_window(std::make_unique<app::MainWindow>())
     m_window->resize(kWindowSize);
     m_window->show();
     keepActive();
-    m_view = m_window->findChild<viewer::OcctViewWidget*>();
+    m_viewport = m_window->viewport();
+    m_view = m_viewport == nullptr ? m_window->oldView() : nullptr;
     m_session = m_window->findChild<app::DesignSession*>();
-    EXPECT_NE(m_view, nullptr);
+    EXPECT_TRUE(m_view != nullptr || m_viewport != nullptr);
     EXPECT_NE(m_session, nullptr);
     settle();
-    EXPECT_TRUE(m_view->isReady()) << "The view did not initialize off screen";
+    if (m_viewport != nullptr) {
+        QElapsedTimer clock;
+        clock.start();
+        while (!m_viewport->isReady() && !m_viewport->hasFailed() && clock.elapsed() < kAnimationLimitMs) {
+            QTest::qWait(kFrameMs);
+        }
+        EXPECT_TRUE(m_viewport->isReady()) << "Viewport did not initialize off screen";
+    } else {
+        EXPECT_TRUE(m_view->isReady()) << "View did not initialize off screen";
+    }
     settle();
 }
 
@@ -454,6 +583,9 @@ void UiDriver::frame()
     if (m_view != nullptr) {
         m_view->grabFramebuffer();
     }
+    if (m_viewport != nullptr && m_viewport->isReady()) {
+        m_viewport->grabFramebuffer();
+    }
     QCoreApplication::processEvents();
 }
 
@@ -465,7 +597,10 @@ void UiDriver::settle(int milliseconds)
     frame();
     QElapsedTimer clock;
     clock.start();
-    while (m_view != nullptr && m_view->isAnimating() && clock.elapsed() < kAnimationLimitMs) {
+    const auto animating = [this] {
+        return m_view != nullptr ? m_view->isAnimating() : m_window->cameraCommands()->isAnimating();
+    };
+    while (animating() && clock.elapsed() < kAnimationLimitMs) {
         QTest::qWait(kFrameMs);
         frame();
     }
@@ -476,13 +611,20 @@ QPointF UiDriver::originPlane(core::OriginPlane plane)
 {
     const gp_Dir normal = core::originPlane(plane).Direction();
     const QPointF origin = at(gp::Origin());
+    const auto hovers = [&] {
+        if (m_view != nullptr) {
+            return m_view->gridPlane().Direction().IsParallel(normal, kParallelTolerance) &&
+                   m_view->aisContext()->HasDetected();
+        }
+        const std::optional<app::Pick> hovered = m_window->picks()->hovered();
+        return hovered && hovered->kind == app::Pick::Kind::OriginPlane && hovered->plane == plane;
+    };
     for (int radius = kPlaneSearchStep; radius <= kOriginPlanePixels; radius += kPlaneSearchStep) {
         for (int step = 0; step < kPlaneSearchDirections; ++step) {
             const double angle = 2.0 * std::numbers::pi * step / kPlaneSearchDirections;
             const QPointF candidate = origin + QPointF(std::cos(angle), std::sin(angle)) * radius;
             move(candidate);
-            if (m_view->gridPlane().Direction().IsParallel(normal, kParallelTolerance) &&
-                m_view->aisContext()->HasDetected()) {
+            if (hovers()) {
                 return candidate;
             }
         }
@@ -493,19 +635,38 @@ QPointF UiDriver::originPlane(core::OriginPlane plane)
 
 QPointF UiDriver::at(const gp_Pnt& world) const
 {
-    return m_view->toScreen(world);
+    if (m_view != nullptr) {
+        return m_view->toScreen(world);
+    }
+    const camera::ScreenPoint point =
+        m_viewport->camera().project({world.X(), world.Y(), world.Z()}, m_viewport->viewport());
+    return {point.x, point.y};
+}
+
+QWidget* UiDriver::canvas() const
+{
+    if (m_view != nullptr) {
+        return m_view;
+    }
+    return m_viewport;
+}
+
+QImage UiDriver::canvasImage()
+{
+    settle();
+    return m_view != nullptr ? m_view->grabFramebuffer() : m_viewport->grabFramebuffer();
 }
 
 void UiDriver::sendMouse(QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons,
                          Qt::KeyboardModifiers modifiers)
 {
-    const QPoint inWindow = m_view->mapTo(m_window.get(), pos.toPoint());
+    const QPoint inWindow = canvas()->mapTo(m_window.get(), pos.toPoint());
     QWidget* target = m_grab;
     if (target == nullptr) {
         target = m_window->childAt(inWindow);
     }
     if (target == nullptr) {
-        target = m_view;
+        target = canvas();
     }
     if (type == QEvent::MouseButtonPress) {
         m_grab = target;
@@ -535,7 +696,7 @@ QPointF UiDriver::centerOf(const QWidget* widget) const
 
 QPointF UiDriver::inView(const QWidget* widget, QPoint local) const
 {
-    return m_view->mapFrom(m_window.get(), widget->mapTo(m_window.get(), local));
+    return canvas()->mapFrom(m_window.get(), widget->mapTo(m_window.get(), local));
 }
 
 QPointF UiDriver::timelineChip(core::FeatureId id) const
@@ -574,7 +735,7 @@ void UiDriver::contextMenu(QPointF pos, const QString& item)
 {
     chooseFromMenu(item);
     move(pos);
-    const QPoint inWindow = m_view->mapTo(m_window.get(), pos.toPoint());
+    const QPoint inWindow = canvas()->mapTo(m_window.get(), pos.toPoint());
     QWidget* target = m_window->childAt(inWindow);
     if (target == nullptr) {
         ADD_FAILURE() << "Nothing to right-click at " << pos.x() << "," << pos.y();
@@ -737,7 +898,9 @@ void UiDriver::drag(QPointF from, QPointF to, Qt::MouseButton button, Qt::Keyboa
     move(from);
     press(from, button, modifiers);
     for (int i = 1; i <= steps; ++i) {
-        move(from + (to - from) * (static_cast<double>(i) / steps), m_buttons);
+        sendMouse(QEvent::MouseMove, from + (to - from) * (static_cast<double>(i) / steps), Qt::NoButton, m_buttons,
+                  modifiers);
+        frame();
     }
     release(to, button, modifiers);
     settle();
@@ -745,16 +908,16 @@ void UiDriver::drag(QPointF from, QPointF to, Qt::MouseButton button, Qt::Keyboa
 
 void UiDriver::wheel(QPointF pos, int notches)
 {
-    QWheelEvent event(pos, m_view->mapToGlobal(pos), QPoint(), QPoint(0, kWheelStep * notches), m_buttons, {},
+    QWheelEvent event(pos, canvas()->mapToGlobal(pos), QPoint(), QPoint(0, kWheelStep * notches), m_buttons, {},
                       Qt::NoScrollPhase, false);
-    QApplication::sendEvent(m_view, &event);
+    QApplication::sendEvent(canvas(), &event);
     settle();
 }
 
 QWidget* UiDriver::focused() const
 {
     QWidget* widget = m_window->focusWidget();
-    return widget != nullptr ? widget : m_view;
+    return widget != nullptr ? widget : canvas();
 }
 
 void UiDriver::key(int key, Qt::KeyboardModifiers modifiers)
@@ -784,7 +947,12 @@ void UiDriver::enterValue(const QString& text, bool accept)
 
 QString UiDriver::statusText() const
 {
-    return m_window->statusBar()->currentMessage();
+    QString message = m_window->statusBar()->currentMessage();
+    if (!message.isEmpty()) {
+        return message;
+    }
+    const auto* hint = m_window->statusBar()->findChild<QLabel*>(QStringLiteral("statusHint"));
+    return hint != nullptr ? hint->text() : QString();
 }
 
 QString UiDriver::selectionText() const

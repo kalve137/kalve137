@@ -75,6 +75,9 @@ QToolButton {
     border: 1px solid transparent;
     border-radius: @radiusControl;
 }
+QToolBar[compact="true"] QToolButton {
+    padding: @spaceS;
+}
 QToolButton:hover {
     background: @raised;
 }
@@ -89,7 +92,8 @@ QToolButton:checked {
 QToolButton:disabled {
     color: @textDisabled;
 }
-QToolButton[popupMode="1"] {
+QToolButton[popupMode="1"],
+QToolBar[compact="true"] QToolButton[popupMode="1"] {
     padding-right: 18px;
 }
 QToolButton::menu-button {
@@ -105,17 +109,17 @@ QToolButton::menu-button:hover {
     border-radius: @radiusSmall;
 }
 QToolButton::menu-arrow {
-    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    image: url(:/kalve137/icons/qss/@scheme/chevron_down.svg);
     width: 10px;
     height: 10px;
 }
 QToolButton#finishSketch {
-    color: @base;
-    background: @accent;
+    color: @onAccentFill;
+    background: @accentFill;
     font-weight: 500;
 }
 QToolButton#finishSketch:hover {
-    background: @accentHover;
+    background: @accentFillHover;
 }
 
 QDockWidget {
@@ -166,6 +170,10 @@ QScrollArea#timelineArea {
     border: none;
     border-top: 1px solid @raised;
 }
+QScrollArea#selectionItems,
+QScrollArea#selectionItems > QWidget > QWidget {
+    background: transparent;
+}
 
 QLabel#panelTitle {
     color: @accent;
@@ -175,8 +183,21 @@ QLabel#panelTitle {
 QLabel#panelHint {
     color: @textDim;
 }
-QLabel#panelError {
+QLabel#panelError,
+QLabel#parametersError {
     color: @conflictText;
+}
+QLabel#fieldError {
+    color: @conflictText;
+}
+QLabel#fieldError[floating="true"] {
+    background: @surface;
+    border: 1px solid @conflict;
+    border-radius: @radiusSmall;
+    padding: @spaceXs @spaceS;
+}
+QLabel#fxMark {
+    font-weight: 500;
 }
 
 QFrame#floatingPanel {
@@ -226,14 +247,16 @@ QPushButton:checked {
     border-color: @accent;
     color: @accent;
 }
-QPushButton#primaryButton {
-    background: @accent;
-    color: @base;
-    border-color: @accent;
+QPushButton#primaryButton,
+QMessageBox QPushButton:default {
+    background: @accentFill;
+    color: @onAccentFill;
+    border-color: @accentFill;
     font-weight: 500;
 }
-QPushButton#primaryButton:hover {
-    background: @accentHover;
+QPushButton#primaryButton:hover,
+QMessageBox QPushButton:default:hover {
+    background: @accentFillHover;
 }
 QPushButton#primaryButton:disabled {
     background: @textDisabled;
@@ -273,7 +296,7 @@ QComboBox::drop-down {
     width: 20px;
 }
 QComboBox::down-arrow {
-    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    image: url(:/kalve137/icons/qss/@scheme/chevron_down.svg);
     width: 12px;
     height: 12px;
 }
@@ -291,12 +314,12 @@ QAbstractSpinBox::down-button {
     width: 16px;
 }
 QAbstractSpinBox::up-arrow {
-    image: url(:/kalve137/icons/qss/chevron_up.svg);
+    image: url(:/kalve137/icons/qss/@scheme/chevron_up.svg);
     width: 10px;
     height: 10px;
 }
 QAbstractSpinBox::down-arrow {
-    image: url(:/kalve137/icons/qss/chevron_down.svg);
+    image: url(:/kalve137/icons/qss/@scheme/chevron_down.svg);
     width: 10px;
     height: 10px;
 }
@@ -330,11 +353,11 @@ QAbstractItemView::indicator:indeterminate {
 }
 QCheckBox::indicator:checked,
 QAbstractItemView::indicator:checked {
-    image: url(:/kalve137/icons/qss/check.svg);
+    image: url(:/kalve137/icons/qss/@scheme/check.svg);
 }
 QCheckBox::indicator:indeterminate,
 QAbstractItemView::indicator:indeterminate {
-    image: url(:/kalve137/icons/qss/partial.svg);
+    image: url(:/kalve137/icons/qss/@scheme/partial.svg);
 }
 QRadioButton::indicator:checked {
     background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5, stop: 0 @accent, stop: 0.55 @accent, stop: 0.6 @base, stop: 1 @base);
@@ -347,11 +370,11 @@ QAbstractItemView::indicator:disabled {
 }
 QCheckBox::indicator:checked:disabled,
 QAbstractItemView::indicator:checked:disabled {
-    image: url(:/kalve137/icons/qss/check_disabled.svg);
+    image: url(:/kalve137/icons/qss/@scheme/check_disabled.svg);
 }
 QCheckBox::indicator:indeterminate:disabled,
 QAbstractItemView::indicator:indeterminate:disabled {
-    image: url(:/kalve137/icons/qss/partial_disabled.svg);
+    image: url(:/kalve137/icons/qss/@scheme/partial_disabled.svg);
 }
 QRadioButton::indicator:checked:disabled {
     background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5, stop: 0 @textDisabled, stop: 0.55 @textDisabled, stop: 0.6 @inputDisabled, stop: 1 @inputDisabled);

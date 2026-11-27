@@ -10,21 +10,26 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRep_Tool.hxx>
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <NCollection_List.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <gp_Pln.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <limits>
 #include <map>
+#include <ranges>
+#include <variant>
 
 namespace kalve137::core {
 
@@ -32,8 +37,9 @@ namespace {
 
 constexpr double kParallel = 1e-6;
 constexpr double kOnPlane = 1e-6;
-
-using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
+constexpr std::size_t kKeptPoints = 256;
+constexpr std::size_t kBoxesPerBody = 2;
+constexpr std::size_t kSpareBoxes = 64;
 
 double distanceTo(const gp_Pnt& point, const TopoDS_Shape& shape)
 {
@@ -46,6 +52,35 @@ bool hasName(const geometry::FaceNames& names, const TopoDS_Shape& face, const s
 {
     const std::vector<std::string>* list = names.find(face);
     return list != nullptr && std::ranges::find(*list, name) != list->end();
+}
+
+bool samePlace(const TopoDS_Shape& a, const TopoDS_Shape& b)
+{
+    if (a.IsEqual(b)) {
+        return true;
+    }
+    if (a.TShape() != b.TShape() || a.Orientation() != b.Orientation()) {
+        return false;
+    }
+    const gp_Trsf& first = a.Location().Transformation();
+    const gp_Trsf& second = b.Location().Transformation();
+    for (int row = 1; row <= 3; ++row) {
+        for (int column = 1; column <= 4; ++column) {
+            if (first.Value(row, column) != second.Value(row, column)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+TopoDS_Face faceAt(const TopoDS_Shape& shape, int index)
+{
+    TopExp_Explorer it(shape, TopAbs_FACE);
+    for (int i = 0; i < index && it.More(); ++i) {
+        it.Next();
+    }
+    return TopoDS::Face(it.Current());
 }
 
 int sharedNames(const geometry::FaceNames& names, const TopoDS_Shape& face, const std::vector<std::string>& wanted)
@@ -95,6 +130,34 @@ std::string profileSuffix(const SketchState& state, const std::vector<TopoDS_Fac
     return index ? "/p" + std::to_string(*index) : std::string();
 }
 
+bool holdsAnyOf(const geometry::FaceNames& names, const TopoDS_Shape& face, const std::vector<std::string>& wanted)
+{
+    return std::ranges::any_of(wanted, [&](const std::string& name) { return hasName(names, face, name); });
+}
+
+bool facesMatch(const geometry::FaceNames& names, const NCollection_List<TopoDS_Shape>& faces,
+                const std::vector<std::string>& wanted)
+{
+    if (faces.IsEmpty()) {
+        return false;
+    }
+    for (const TopoDS_Shape& face : faces) {
+        if (!holdsAnyOf(names, face, wanted)) {
+            return false;
+        }
+    }
+    for (const std::string& name : wanted) {
+        bool held = false;
+        for (const TopoDS_Shape& face : faces) {
+            held = held || hasName(names, face, name);
+        }
+        if (!held) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::optional<gp_Pln> planeOf(const TopoDS_Face& face)
 {
     const BRepAdaptor_Surface surface(face);
@@ -105,6 +168,17 @@ std::optional<gp_Pln> planeOf(const TopoDS_Face& face)
 }
 
 } // namespace
+
+std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face)
+{
+    int index = 0;
+    for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next(), ++index) {
+        if (it.Current().IsEqual(face)) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
 
 std::string namePrefix(FeatureId id)
 {
@@ -136,6 +210,36 @@ FeatureId featureOfEdge(const Body& body, const TopoDS_Edge& edge)
     return latest;
 }
 
+bool namesFeature(const Body& body, FeatureId id)
+{
+    for (TopExp_Explorer it(body.shape, TopAbs_FACE); it.More(); it.Next()) {
+        const std::vector<std::string>* names = body.faceNames.find(it.Current());
+        if (names != nullptr &&
+            std::ranges::any_of(*names, [id](const std::string& name) { return featureOfName(name) == id; })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<BodyKey> bodiesOf(const Model& model, const Feature& feature)
+{
+    const std::vector<BodyKey>* listed = nullptr;
+    if (const auto* move = std::get_if<MoveFeature>(&feature.data); move != nullptr && !move->copy) {
+        listed = &move->bodies;
+    } else if (const auto* appearance = std::get_if<AppearanceFeature>(&feature.data)) {
+        listed = &appearance->bodies;
+    }
+    std::vector<BodyKey> keys;
+    for (const Body& body : model.bodies) {
+        if (body.id == feature.id || (listed != nullptr && std::ranges::find(*listed, body.key()) != listed->end()) ||
+            namesFeature(body, feature.id)) {
+            keys.push_back(body.key());
+        }
+    }
+    return keys;
+}
+
 TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point)
 {
     TopoRef ref{point, {}};
@@ -150,7 +254,76 @@ TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point)
     return {point, body.faceNames.edgeNames(body.shape, edge)};
 }
 
-std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref)
+TopoRef vertexRef(const Body& body, const TopoDS_Vertex& vertex)
+{
+    TopoRef ref{BRep_Tool::Pnt(vertex), {}};
+    AncestorMap vertexFaces;
+    TopExp::MapShapesAndUniqueAncestors(body.shape, TopAbs_VERTEX, TopAbs_FACE, vertexFaces);
+    if (const NCollection_List<TopoDS_Shape>* faces = vertexFaces.Seek(vertex)) {
+        ref.names = body.faceNames.namesAround(*faces);
+    }
+    return ref;
+}
+
+void FaceLookup::clear()
+{
+    m_found.clear();
+    m_boxes.Clear();
+}
+
+const Bnd_Box& FaceLookup::boxOf(const TopoDS_Shape& shape)
+{
+    if (const Bnd_Box* box = m_boxes.Seek(shape)) {
+        return *box;
+    }
+    return *m_boxes.Bound(shape, geometry::geometryBox(shape));
+}
+
+std::optional<FaceHit> FaceLookup::atPoint(const std::vector<Body>& bodies, const gp_Pnt& point)
+{
+    const auto kept = std::ranges::find_if(m_found, [&](const Found& old) { return old.point.IsEqual(point, 0.0); });
+    const Found* last = kept == m_found.end() ? nullptr : &*kept;
+    if (static_cast<std::size_t>(m_boxes.Extent()) > kBoxesPerBody * bodies.size() + kSpareBoxes) {
+        m_boxes.Clear();
+    }
+    Found found{point, {}, std::nullopt, 0};
+    for (std::size_t i = 0; i < bodies.size() && !found.hit; ++i) {
+        const TopoDS_Shape& shape = bodies[i].shape;
+        found.shapes.push_back(shape);
+        if (last != nullptr && i < last->shapes.size() && samePlace(last->shapes[i], shape)) {
+            if (last->hit && last->hit->body == i) {
+                found.hit = FaceHit{i, faceAt(shape, last->faceIndex)};
+                found.faceIndex = last->faceIndex;
+            }
+            continue;
+        }
+        if (!geometry::mayHold(boxOf(shape), point, kRefTolerance)) {
+            continue;
+        }
+        if (auto face = geometry::findFace(shape, point, kRefTolerance)) {
+            const std::optional<int> index = faceIndexOf(shape, *face);
+            if (!index) {
+                if (last != nullptr) {
+                    m_found.erase(kept);
+                }
+                return FaceHit{i, *face};
+            }
+            found.hit = FaceHit{i, *face};
+            found.faceIndex = *index;
+        }
+    }
+    if (last != nullptr) {
+        *kept = std::move(found);
+        return kept->hit;
+    }
+    if (m_found.size() >= kKeptPoints) {
+        m_found.erase(m_found.begin());
+    }
+    m_found.push_back(std::move(found));
+    return m_found.back().hit;
+}
+
+std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup)
 {
     std::optional<FaceHit> best;
     int bestShared = 0;
@@ -174,7 +347,13 @@ std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRe
             return best;
         }
     }
+    if (lookup != nullptr) {
+        return lookup->atPoint(bodies, ref.point);
+    }
     for (std::size_t i = 0; i < bodies.size(); ++i) {
+        if (!geometry::mayHold(geometry::geometryBox(bodies[i].shape), ref.point, kRefTolerance)) {
+            continue;
+        }
         if (auto face = geometry::findFace(bodies[i].shape, ref.point, kRefTolerance)) {
             return FaceHit{i, *face};
         }
@@ -182,15 +361,45 @@ std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRe
     return std::nullopt;
 }
 
+ShapeAncestors::ShapeAncestors(const std::vector<Body>& bodies)
+    : m_bodies(bodies), m_edgeFaces(bodies.size()), m_vertexFaces(bodies.size())
+{}
+
+const AncestorMap& ShapeAncestors::edgeFaces(std::size_t body)
+{
+    std::optional<AncestorMap>& map = m_edgeFaces.at(body);
+    if (!map) {
+        map.emplace();
+        TopExp::MapShapesAndUniqueAncestors(m_bodies[body].shape, TopAbs_EDGE, TopAbs_FACE, *map);
+    }
+    return *map;
+}
+
+const AncestorMap& ShapeAncestors::vertexFaces(std::size_t body)
+{
+    std::optional<AncestorMap>& map = m_vertexFaces.at(body);
+    if (!map) {
+        map.emplace();
+        TopExp::MapShapesAndUniqueAncestors(m_bodies[body].shape, TopAbs_VERTEX, TopAbs_FACE, *map);
+    }
+    return *map;
+}
+
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref)
 {
+    ShapeAncestors ancestors(bodies);
+    return resolveEdge(ancestors, ref);
+}
+
+std::optional<EdgeHit> resolveEdge(ShapeAncestors& ancestors, const TopoRef& ref)
+{
+    const std::vector<Body>& bodies = ancestors.bodies();
     if (ref.names.size() == 2) {
         std::optional<EdgeHit> best;
         double bestDistance = std::numeric_limits<double>::max();
         for (std::size_t i = 0; i < bodies.size(); ++i) {
             const geometry::FaceNames& names = bodies[i].faceNames;
-            AncestorMap edgeFaces;
-            TopExp::MapShapesAndUniqueAncestors(bodies[i].shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+            const AncestorMap& edgeFaces = ancestors.edgeFaces(i);
             for (int e = 1; e <= edgeFaces.Extent(); ++e) {
                 const NCollection_List<TopoDS_Shape>& faces = edgeFaces(e);
                 if (faces.IsEmpty()) {
@@ -220,6 +429,38 @@ std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRe
         }
     }
     return std::nullopt;
+}
+
+std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref)
+{
+    ShapeAncestors ancestors(bodies);
+    return resolveVertex(ancestors, ref);
+}
+
+std::optional<VertexHit> resolveVertex(ShapeAncestors& ancestors, const TopoRef& ref)
+{
+    const std::vector<Body>& bodies = ancestors.bodies();
+    std::optional<VertexHit> named;
+    double namedDistance = std::numeric_limits<double>::max();
+    std::optional<VertexHit> near;
+    double nearDistance = kRefTolerance;
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
+        const AncestorMap& vertexFaces = ancestors.vertexFaces(i);
+        for (int v = 1; v <= vertexFaces.Extent(); ++v) {
+            const TopoDS_Vertex& vertex = TopoDS::Vertex(vertexFaces.FindKey(v));
+            const double distance = ref.point.Distance(BRep_Tool::Pnt(vertex));
+            if (!ref.names.empty() && distance < namedDistance &&
+                facesMatch(bodies[i].faceNames, vertexFaces(v), ref.names)) {
+                named = VertexHit{i, vertex};
+                namedDistance = distance;
+            }
+            if (distance <= nearDistance) {
+                near = VertexHit{i, vertex};
+                nearDistance = distance;
+            }
+        }
+    }
+    return named ? named : near;
 }
 
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref)

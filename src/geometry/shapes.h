@@ -6,6 +6,8 @@
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
 
+#include <vector>
+
 class BRepTools_History;
 
 namespace kalve137::geometry {
@@ -17,5 +19,7 @@ double volume(const TopoDS_Shape& shape);
 double area(const TopoDS_Shape& shape);
 gp_Pnt areaCentroid(const TopoDS_Shape& shape);
 double length(const TopoDS_Shape& shape);
+double totalArea(const std::vector<TopoDS_Shape>& shapes);
+double totalLength(const std::vector<TopoDS_Shape>& shapes);
 
 } // namespace kalve137::geometry

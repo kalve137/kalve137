@@ -4,17 +4,14 @@
 #include "viewer/occt_view_widget.h"
 
 #include <Graphic3d_Camera.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
 
 #include <cmath>
+#include <optional>
 
 namespace kalve137::viewer {
-
-namespace {
-
-constexpr double kMinGridCellPixels = 12.0;
-constexpr double kGridRadiusFactor = 2.5;
-
-} // namespace
 
 void OcctViewWidget::setGridStyle(const GridStyle& style)
 {
@@ -29,6 +26,7 @@ void OcctViewWidget::setGridVisible(bool visible)
         return;
     }
     m_gridVisible = visible;
+    emit gridChanged();
     if (!isReady()) {
         return;
     }
@@ -63,6 +61,7 @@ void OcctViewWidget::setGridSpacing(bool adaptive, double spacing)
     }
     m_gridAdaptive = adaptive;
     m_gridSpacing = spacing;
+    emit gridChanged();
     updateGrid(true);
 }
 
@@ -70,6 +69,7 @@ void OcctViewWidget::setGridPlane(const gp_Ax3& plane)
 {
     m_grid->setPlane(plane);
     m_gridWash->setPlane(plane);
+    emit gridChanged();
     updateGrid(true);
 }
 
@@ -77,6 +77,7 @@ void OcctViewWidget::setGridExtent(const std::optional<GridExtent>& extent)
 {
     const bool washChanged = extent.has_value() != m_gridExtent.has_value();
     m_gridExtent = extent;
+    emit gridChanged();
     if (washChanged && m_gridVisible && isReady()) {
         if (extent) {
             m_context->Erase(m_gridWash, false);
@@ -93,14 +94,28 @@ void OcctViewWidget::updateGrid(bool force)
         return;
     }
     const double worldPerLogicalPixel = worldPerPixel();
-    const double step = viewer::gridStep(m_gridAdaptive, m_gridSpacing, worldPerLogicalPixel * kMinGridCellPixels);
-    const double viewRadius = 0.5 * std::hypot(width(), height()) * worldPerLogicalPixel * kGridRadiusFactor;
-    const GridLayout wanted = layoutGrid(m_grid->plane(), step, m_view->Camera()->Center(), viewRadius, m_gridExtent);
-    if (!force && !isGridStale(m_grid->layout(), wanted)) {
+    const gp_Dir normal = m_grid->plane().Direction();
+    const double away = normal.Dot(m_view->Camera()->Direction()) < 0.0 ? -1.0 : 1.0;
+    gp_Trsf behind;
+    behind.SetTranslation(gp_Vec(normal) * (away * render::kGridDepthPixels * worldPerLogicalPixel));
+    if (!behind.TranslationPart().IsEqual(m_grid->LocalTransformation().TranslationPart(), 0.0)) {
+        m_context->SetLocation(m_grid, behind);
+    }
+    const double step =
+        render::gridStep(m_gridAdaptive, m_gridSpacing, worldPerLogicalPixel * render::kGridMinCellPixels);
+    const double viewRadius = 0.5 * std::hypot(width(), height()) * worldPerLogicalPixel * render::kGridRadiusFactor;
+    const gp_Pnt center = m_view->Camera()->Center();
+    std::optional<render::GridExtent> extent;
+    if (m_gridExtent) {
+        extent = gridExtentOf(*m_gridExtent);
+    }
+    const render::GridLayout wanted = render::layoutGrid(gridPlaneOf(m_grid->plane()), step,
+                                                         {center.X(), center.Y(), center.Z()}, viewRadius, extent);
+    if (!force && !render::isGridStale(m_grid->layout(), wanted)) {
         return;
     }
-    m_grid->setLayout(wanted.step, wanted.center, wanted.radius);
-    m_gridWash->setLayout(wanted.step, wanted.center, wanted.radius);
+    m_grid->setLayout(wanted);
+    m_gridWash->setLayout(wanted);
     m_context->Redisplay(m_grid, false);
     m_context->Redisplay(m_gridWash, false);
     m_view->Invalidate();

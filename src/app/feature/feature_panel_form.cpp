@@ -13,7 +13,8 @@
 #include <QLabel>
 #include <QMetaObject>
 #include <QPushButton>
-#include <QSpinBox>
+#include <QScrollArea>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -24,6 +25,17 @@ namespace kalve137::app {
 
 using feature_panel_detail::kMaxLength;
 using feature_panel_detail::makeLengthBox;
+
+namespace {
+
+bool sketchesOnFace(const core::Document& document, core::FeatureId sketch)
+{
+    const core::Feature* feature = document.find(sketch);
+    const auto* data = feature != nullptr ? std::get_if<core::SketchFeature>(&feature->data) : nullptr;
+    return data != nullptr && data->face.has_value();
+}
+
+} // namespace
 
 ValueEdit* feature_panel_detail::makeLengthBox(double value, double minimum, QWidget* parent)
 {
@@ -74,12 +86,18 @@ void FeaturePanel::buildForm()
     m_selection->setWordWrap(true);
     layout->addWidget(m_selection);
 
-    m_items = new QWidget(m_form);
+    m_itemsArea = new QScrollArea(m_form);
+    m_itemsArea->setObjectName("selectionItems");
+    m_itemsArea->setFrameShape(QFrame::NoFrame);
+    m_itemsArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_itemsArea->setWidgetResizable(true);
+    m_items = new QWidget(m_itemsArea);
     m_itemsLayout = new QVBoxLayout(m_items);
     m_itemsLayout->setContentsMargins(0, 0, 0, 0);
     m_itemsLayout->setSpacing(0);
-    m_items->hide();
-    layout->addWidget(m_items);
+    m_itemsArea->setWidget(m_items);
+    m_itemsArea->hide();
+    layout->addWidget(m_itemsArea);
 
     auto* fields = new QFormLayout();
     layout->addLayout(fields);
@@ -87,7 +105,7 @@ void FeaturePanel::buildForm()
     const auto addTangentChain = [&] {
         auto* chain = new QCheckBox(tr("Tangent chain"), m_form);
         chain->setChecked(m_tangentChain);
-        chain->setToolTip(tr("Clicking an edge also picks the edges that run smoothly on from it"));
+        chain->setToolTip(tr("Clicking an edge also picks edges that run smoothly on from it"));
         fields->addRow(QString(), chain);
         connect(chain, &QCheckBox::toggled, this, [this](bool on) { m_tangentChain = on; });
     };
@@ -109,9 +127,12 @@ void FeaturePanel::buildForm()
                 end->addItems({tr("Distance"), tr("To object"), tr("All")});
                 end->setCurrentIndex(static_cast<int>(f.end));
                 m_target = new QPushButton(extrudeTargetName(f), m_form);
-                m_target->setToolTip(tr("Click, then pick the flat face or construction plane to stop at"));
+                m_target->setToolTip(tr("Click, then pick flat face or construction plane to stop at"));
                 auto* taper = feature_panel_detail::makeAngleBox(f.taperDegrees, -kMaxTaper, kMaxTaper, m_form);
                 taper->setStep(1.0);
+                bindField(distance, "distance");
+                bindField(second, "second_distance");
+                bindField(taper, "taper");
                 m_distance = distance;
                 m_secondDistance = second;
                 m_flip = flip;
@@ -171,6 +192,14 @@ void FeaturePanel::buildForm()
                     }
                 });
                 connect(flip, &QPushButton::toggled, this, apply);
+                connect(operation, &QComboBox::currentIndexChanged, this, [this, flip](int index) {
+                    if (!sketchesOnFace(m_base, std::get<core::ExtrudeFeature>(*m_data).profiles.sketch)) {
+                        return;
+                    }
+                    const auto chosen = static_cast<core::Operation>(index);
+                    const QSignalBlocker blocker(flip);
+                    flip->setChecked(chosen == core::Operation::Cut || chosen == core::Operation::Intersect);
+                });
                 connect(operation, &QComboBox::currentIndexChanged, this, apply);
             },
             [&](core::RevolveFeature& f) {
@@ -182,6 +211,7 @@ void FeaturePanel::buildForm()
                 angle->setRange(0.1, 360.0);
                 angle->setDecimals(2);
                 angle->setStep(15.0);
+                bindField(angle, "angle");
                 auto* operation = makeOperationBox(f.operation, m_form);
                 fields->addRow(tr("Axis"), m_axis);
                 fields->addRow(tr("Angle"), angle);
@@ -220,6 +250,7 @@ void FeaturePanel::buildForm()
                 auto* add = new QPushButton(tr("Add set"), m_form);
                 add->setToolTip(tr("Starts a new set of edges with its own radius"));
                 m_size = makeLengthBox(active.radius, 0.001, m_form);
+                bindField(m_size, "sets." + std::to_string(m_filletSet) + ".radius");
                 auto* clear = new QPushButton(tr("Clear edges"), m_form);
                 fields->addRow(tr("Set"), set);
                 fields->setRowVisible(set, f.sets.size() > 1);
@@ -258,6 +289,7 @@ void FeaturePanel::buildForm()
             },
             [&](core::ChamferFeature& f) {
                 m_size = makeLengthBox(f.distance, 0.001, m_form);
+                bindField(m_size, "distance");
                 auto* clear = new QPushButton(tr("Clear edges"), m_form);
                 fields->addRow(tr("Distance"), m_size);
                 addTangentChain();
@@ -274,6 +306,7 @@ void FeaturePanel::buildForm()
             },
             [&](core::ShellFeature& f) {
                 m_size = makeLengthBox(f.thickness, 0.001, m_form);
+                bindField(m_size, "thickness");
                 auto* direction = new QComboBox(m_form);
                 direction->addItems({tr("Inside"), tr("Outside")});
                 direction->setCurrentIndex(f.inside ? 0 : 1);
@@ -303,14 +336,17 @@ void FeaturePanel::buildForm()
                 m_axis = axis;
                 axis->addItems({tr("X axis"), tr("Y axis"), tr("Z axis"), tr("Construction axis")});
                 axis->setCurrentIndex(static_cast<int>(f.axis.kind) - 1);
-                auto* count = new QSpinBox(m_form);
+                auto* count = new ValueEdit(core::Quantity::Count, f.count, m_form);
                 count->setRange(core::kMinPatternCount, core::kMaxPatternCount);
-                count->setValue(f.count);
+                count->setDecimals(0);
                 auto* spacing = makeLengthBox(f.spacing, -kMaxLength, m_form);
                 auto* angle = new ValueEdit(core::Quantity::Angle, f.angleDegrees, m_form);
                 angle->setRange(0.1, 360.0);
                 angle->setDecimals(2);
                 angle->setStep(15.0);
+                bindField(count, "count");
+                bindField(spacing, "spacing");
+                bindField(angle, "angle");
                 fields->addRow(tr("Type"), kind);
                 fields->addRow(tr("Axis"), axis);
                 fields->addRow(tr("Count"), count);
@@ -339,10 +375,11 @@ void FeaturePanel::buildForm()
                     data.axis = {kind, 0, 0};
                     changed();
                 });
-                connect(count, &QSpinBox::valueChanged, this, [this, changed](int value) {
-                    std::get<core::PatternFeature>(*m_data).count = value;
+                connect(count, &ValueEdit::valueChanged, this, [this, changed](double value) {
+                    std::get<core::PatternFeature>(*m_data).count = static_cast<int>(std::lround(value));
                     changed();
                 });
+                connect(count, &ValueEdit::accepted, this, &FeaturePanel::accept);
                 connect(spacing, &ValueEdit::valueChanged, this, [this, changed](double value) {
                     std::get<core::PatternFeature>(*m_data).spacing = value;
                     changed();

@@ -19,4 +19,6 @@ target_link_libraries(occt_qt
 )
 if(MSVC)
     target_compile_options(occt_qt PRIVATE /utf-8)
+else()
+    target_compile_options(occt_qt PRIVATE -Wno-deprecated-declarations)
 endif()

@@ -49,6 +49,119 @@ TEST(Polygon, HexagonHasEqualSidesAndFourFreedoms)
     }
 }
 
+namespace {
+
+double lineDistance(const Sketch& s, Vec2 p, Id line)
+{
+    const Curve* curve = s.curve(line);
+    const Vec2 a = s.point(curve->points[0])->pos;
+    const Vec2 b = s.point(curve->points[1])->pos;
+    return std::abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / distance(a, b);
+}
+
+void expectSlot(const Sketch& s, const Slot& slot, double width)
+{
+    const Curve* axis = s.curve(slot.centerLine);
+    for (Id arc : slot.arcs) {
+        EXPECT_NEAR(s.curve(arc)->radius, width / 2.0, 1e-6);
+    }
+    EXPECT_EQ(s.curve(slot.arcs[0])->points[0], axis->points[1]);
+    EXPECT_EQ(s.curve(slot.arcs[1])->points[0], axis->points[0]);
+    for (Id side : slot.sides) {
+        for (Id center : axis->points) {
+            EXPECT_NEAR(lineDistance(s, s.point(center)->pos, side), width / 2.0, 1e-6);
+        }
+    }
+}
+
+} // namespace
+
+TEST(Slot, KeepsTangentSidesAndFiveFreedoms)
+{
+    Sketch s;
+    const Id start = s.addPoint({-10, 5});
+    const Id end = s.addPoint({14, 23});
+    const Slot slot = addSlot(s, start, end, 8.0);
+    ASSERT_EQ(slot.sides.size(), 2u);
+    ASSERT_EQ(slot.arcs.size(), 2u);
+    EXPECT_TRUE(s.curve(slot.centerLine)->construction);
+    const SolveResult result = solve(s);
+    EXPECT_TRUE(result.solved);
+    EXPECT_TRUE(result.redundant.empty());
+    EXPECT_EQ(result.dof, 5);
+    expectSlot(s, slot, 8.0);
+}
+
+TEST(Slot, StaysASlotWhenItsDimensionsChange)
+{
+    Sketch s;
+    const Id start = s.addPoint({0, 0}, true);
+    const Id end = s.addPoint({17, 10});
+    const Slot slot = addSlot(s, start, end, 6.0);
+    const Id width = s.addConstraint(ConstraintKind::Distance, {s.curve(slot.sides[0])->points[0], slot.sides[1]}, 6.0);
+    const Id length = s.addConstraint(ConstraintKind::Distance, {slot.centerLine}, 20.0);
+    s.addConstraint(ConstraintKind::Angle, {slot.centerLine, s.addLine(start, s.addPoint({10, 0}, true), true)}, 30.0);
+    SolveResult result = solve(s);
+    ASSERT_TRUE(result.solved);
+    EXPECT_TRUE(result.redundant.empty());
+    EXPECT_EQ(result.dof, 0);
+
+    s.constraint(width)->value = 11.0;
+    s.constraint(length)->value = 35.0;
+    result = solve(s);
+    ASSERT_TRUE(result.solved);
+    expectSlot(s, slot, 11.0);
+    const Vec2 e = s.point(end)->pos;
+    EXPECT_NEAR(distance({0, 0}, e), 35.0, 1e-6);
+    EXPECT_NEAR(std::atan2(e.y, e.x) * 180.0 / 3.14159265358979, 30.0, 1e-6);
+}
+
+TEST(Slot, TakesALengthAndAWidthOnFreeCenters)
+{
+    Sketch s;
+    const Slot slot = addSlot(s, s.addPoint({-20, 20}), s.addPoint({10, 20}), 8.0);
+    s.addConstraint(ConstraintKind::Distance, {s.curve(slot.sides[0])->points[0], slot.sides[1]}, 8.0);
+    s.addConstraint(ConstraintKind::Distance, {slot.centerLine}, 30.0);
+    const SolveResult result = solve(s);
+    EXPECT_TRUE(result.solved);
+    EXPECT_TRUE(result.conflicting.empty());
+    EXPECT_TRUE(result.redundant.empty());
+    EXPECT_EQ(result.dof, 3);
+}
+
+TEST(Slot, CenterPointSlotKeepsItsMiddleOnTheCenter)
+{
+    Sketch s;
+    const Slot slot = addSlot(s, s.addPoint({-20, 0}), s.addPoint({20, 0}), 20.0);
+    s.addConstraint(ConstraintKind::Midpoint, {kOriginId, slot.centerLine});
+    s.addConstraint(ConstraintKind::Distance, {s.curve(slot.sides[0])->points[0], slot.sides[1]}, 20.0);
+    const Id length = s.addConstraint(ConstraintKind::Distance, {slot.centerLine}, 40.0);
+    SolveResult result = solve(s);
+    EXPECT_TRUE(result.solved);
+    EXPECT_TRUE(result.conflicting.empty());
+    EXPECT_TRUE(result.redundant.empty());
+    EXPECT_EQ(result.dof, 1);
+
+    s.constraint(length)->value = 60.0;
+    result = solve(s);
+    ASSERT_TRUE(result.solved);
+    const Curve* axis = s.curve(slot.centerLine);
+    const Vec2 a = s.point(axis->points[0])->pos;
+    const Vec2 b = s.point(axis->points[1])->pos;
+    EXPECT_NEAR(distance(a, b), 60.0, 1e-6);
+    EXPECT_NEAR(a.x + b.x, 0.0, 1e-6);
+    EXPECT_NEAR(a.y + b.y, 0.0, 1e-6);
+    expectSlot(s, slot, 20.0);
+}
+
+TEST(Slot, NeedsTwoCentersAndAWidth)
+{
+    Sketch s;
+    const Id a = s.addPoint({0, 0});
+    EXPECT_TRUE(addSlot(s, a, s.addPoint({0, 0}), 4.0).sides.empty());
+    EXPECT_TRUE(addSlot(s, a, s.addPoint({10, 0}), 0.0).sides.empty());
+}
+
 TEST(ArcThrough, RunsThroughTheMiddlePoint)
 {
     for (const double side : {1.0, -1.0}) {

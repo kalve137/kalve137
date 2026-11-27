@@ -4,10 +4,13 @@
 #pragma once
 
 #include "core/feature.h"
+#include "core/parameters.h"
 
 #include <cstddef>
 #include <map>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace kalve137::core {
@@ -34,10 +37,16 @@ public:
     const std::map<std::string, int>& counters() const { return m_counters; }
     FeatureId nextId() const { return m_nextId; }
 
+    const std::vector<Parameter>& parameters() const { return m_parameters; }
+    void setParameters(std::vector<Parameter> parameters) { m_parameters = std::move(parameters); }
+    const Parameter* parameter(std::string_view name) const;
+    const Feature* featureNamed(std::string_view name) const;
+
 private:
     std::string defaultName(const FeatureData& data);
 
     std::vector<Feature> m_features;
+    std::vector<Parameter> m_parameters;
     std::size_t m_marker = 0;
     std::map<std::string, int> m_counters;
     FeatureId m_nextId = 1;

@@ -8,21 +8,26 @@
 #include "app/session/autosave.h"
 #include "app/session/design_session.h"
 #include "app/session/paths.h"
+#include "app/session/step_import.h"
 #include "app/shell/command_search.h"
 #include "app/shell/modal_scrim.h"
 #include "app/shell/version_dialog.h"
 #include "app/theme/theme.h"
+#include "app/view/camera_commands.h"
 
 #include "core/history.h"
 #include "core/serialization.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
+#include "render/rhi/viewport.h"
 #include "viewer/occt_view_widget.h"
 
 #include <QCloseEvent>
 #include <QDialog>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileDialog>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -45,8 +50,10 @@
 #include <exception>
 #include <functional>
 #include <future>
+#include <memory>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace kalve137::app {
 
@@ -54,10 +61,20 @@ namespace {
 
 constexpr int kMaxRecentProjects = 8;
 const char* const kRecentProjectsKey = "recentProjects";
+const char* const kLastFolderKey = "lastFolder";
 
 QString defaultFolder()
 {
+    QString last = QSettings().value(kLastFolderKey).toString();
+    if (!last.isEmpty() && QDir(last).exists()) {
+        return last;
+    }
     return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+}
+
+void rememberFolder(const std::filesystem::path& folder)
+{
+    QSettings().setValue(kLastFolderKey, toQString(folder));
 }
 
 QStringList recentProjects()
@@ -123,7 +140,7 @@ private:
             return;
         }
         m_cancel->setEnabled(false);
-        m_label->setText(MainWindow::tr("Stopping the import..."));
+        m_label->setText(MainWindow::tr("Stopping import..."));
         m_bar->setRange(0, 0);
         m_onCancel();
     }
@@ -134,12 +151,12 @@ private:
     std::function<void()> m_onCancel;
 };
 
-std::vector<geometry::StepPart> readStepInBackground(QWidget* parent, const std::filesystem::path& path)
+ImportedStep readStepInBackground(QWidget* parent, const std::filesystem::path& path)
 {
     std::atomic<double> fraction = 0.0;
     std::atomic<bool> stop = false;
     auto task = std::async(std::launch::async, [&] {
-        return geometry::readStepParts(path, [&](double done) {
+        return readStepForImport(path, [&](double done) {
             fraction = done;
             return !stop;
         });
@@ -211,19 +228,24 @@ void MainWindow::offerRecovery()
     box.setInformativeText(tr("Changes up to %1 were kept. Recover them?")
                                .arg(QLocale().toString(recovery->savedAt, QLocale::ShortFormat)));
     QPushButton* recover = box.addButton(tr("Recover"), QMessageBox::AcceptRole);
-    box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    QPushButton* discard = box.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    QPushButton* later = box.addButton(QMessageBox::Cancel);
+    later->hide();
     box.setDefaultButton(recover);
+    box.setEscapeButton(later);
     box.exec();
-    K137_INFO(App, "Recovery offered for {}, {}", name.toStdString(),
-              box.clickedButton() == recover ? "recovered" : "discarded");
-    if (box.clickedButton() == recover) {
+    const QAbstractButton* clicked = box.clickedButton();
+    const char* choice = clicked == recover ? "recovered" : clicked == discard ? "discarded" : "postponed";
+    K137_INFO(App, "Recovery offered for {}, {}", name.toStdString(), choice);
+    if (clicked == recover) {
         leaveModes();
         m_session->recover(std::move(recovery->document), recovery->source);
-        m_view->homeView();
-        fitView();
+        m_cameraCommands->home(CameraCommands::Move::Jump);
         statusBar()->showMessage(tr("Recovered %1, save to keep it").arg(name), kMessageTimeoutMs);
     }
-    Autosave::remove(*recovery);
+    if (clicked == recover || clicked == discard) {
+        Autosave::remove(*recovery);
+    }
 }
 
 void MainWindow::showVersionHistory()
@@ -256,9 +278,11 @@ bool MainWindow::maybeSave()
     if (!m_session->isDirty()) {
         return true;
     }
-    const auto answer =
-        QMessageBox::question(this, tr("Kalve 137"), tr("Save changes to %1?").arg(m_session->displayName()),
-                              QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    QMessageBox box(QMessageBox::Question, tr("Kalve 137"), tr("Save changes to %1?").arg(m_session->displayName()),
+                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
+    box.button(QMessageBox::Discard)->setText(tr("Don't Save"));
+    box.setDefaultButton(QMessageBox::Save);
+    const auto answer = static_cast<QMessageBox::StandardButton>(box.exec());
     if (answer == QMessageBox::Save) {
         return save();
     }
@@ -296,6 +320,7 @@ bool MainWindow::saveAs()
     if (path.extension() != core::kDesignExtension) {
         path += core::kDesignExtension;
     }
+    rememberFolder(path.parent_path());
     return writeDesign(path);
 }
 
@@ -331,8 +356,7 @@ void MainWindow::newDesign()
     }
     leaveModes();
     m_session->reset(core::Document{}, {});
-    m_view->homeView();
-    fitView();
+    m_cameraCommands->home(CameraCommands::Move::Jump);
 }
 
 void MainWindow::openDesign()
@@ -345,16 +369,48 @@ void MainWindow::openDesign()
         return QFileDialog::getOpenFileName(this, tr("Open Design"), folder, tr("Kalve 137 design (*.k137)"));
     });
     if (!file.isEmpty()) {
+        rememberFolder(toPath(file).parent_path());
         openDesignAt(toPath(file));
+    }
+}
+
+void MainWindow::openDesignWhenShown(const std::filesystem::path& path)
+{
+    statusBar()->showMessage(tr("Opening %1...").arg(toQString(path.filename())));
+    auto connections = std::make_shared<std::vector<QMetaObject::Connection>>();
+    const auto open = [this, path, connections](bool drawn) {
+        if (drawn && !centralWidget()->isVisible()) {
+            return;
+        }
+        for (const QMetaObject::Connection& connection : *connections) {
+            disconnect(connection);
+        }
+        connections->clear();
+        QTimer::singleShot(0, this, [this, path] { openDesignAt(path); });
+    };
+    if (m_viewport != nullptr) {
+        connections->push_back(connect(m_viewport, &QRhiWidget::frameSubmitted, this, [open] { open(true); }));
+        connections->push_back(connect(m_viewport, &render::Viewport::ready, this, [open] { open(false); }));
+        connections->push_back(connect(m_viewport, &QRhiWidget::renderFailed, this, [open] { open(false); }));
+    } else if (centralWidget() == m_view) {
+        connections->push_back(connect(m_view, &viewer::OcctViewWidget::rendered, this, [open] { open(true); }));
+    } else {
+        open(false);
     }
 }
 
 void MainWindow::openDesignAt(const std::filesystem::path& path)
 {
+    const QString fileName = toQString(path.filename());
+    statusBar()->showMessage(tr("Opening %1...").arg(fileName));
+    statusBar()->repaint();
+    std::optional<BusyCursor> busy(std::in_place);
     core::Document document;
     try {
         document = core::loadDesign(path, shapesOf(path));
     } catch (const std::exception& error) {
+        busy.reset();
+        statusBar()->clearMessage();
         reportFailure(this, tr("Open Failed"), error);
         return;
     }
@@ -370,8 +426,30 @@ void MainWindow::openDesignAt(const std::filesystem::path& path)
         }
     }
     m_session->reset(std::move(document), path);
-    m_view->homeView();
-    fitView();
+    m_cameraCommands->home(CameraCommands::Move::Jump);
+    statusBar()->showMessage(tr("Opened %1").arg(fileName), kMessageTimeoutMs);
+}
+
+void MainWindow::openSample()
+{
+    if (!maybeSave()) {
+        return;
+    }
+    QFile file(QStringLiteral(":/kalve137/samples/dodecahedron.k137"));
+    core::Document document;
+    try {
+        if (!file.open(QIODevice::ReadOnly)) {
+            throw std::runtime_error(file.errorString().toStdString());
+        }
+        core::ShapeStore shapes;
+        document = core::fromJson(file.readAll().toStdString(), shapes);
+    } catch (const std::exception& error) {
+        reportFailure(this, tr("Open Failed"), error);
+        return;
+    }
+    leaveModes();
+    m_session->reset(std::move(document), {});
+    m_cameraCommands->home(CameraCommands::Move::Jump);
 }
 
 void MainWindow::newProject()
@@ -389,6 +467,7 @@ void MainWindow::newProject()
     if (parent.isEmpty()) {
         return;
     }
+    rememberFolder(toPath(parent));
     const std::filesystem::path folder = toPath(parent) / toPath(name);
     try {
         setProject(core::Project::create(folder, name.toStdString()));
@@ -407,6 +486,7 @@ void MainWindow::openProject()
         return;
     }
     const std::filesystem::path path = toPath(folder);
+    rememberFolder(path.parent_path());
     if (!core::Project::isProjectFolder(path)) {
         const auto answer = QMessageBox::question(
             this, tr("Open Project"),
@@ -485,6 +565,7 @@ std::filesystem::path MainWindow::exportPath(const QString& extension, const QSt
     if (path.extension().empty()) {
         path += extension.toStdString();
     }
+    rememberFolder(path.parent_path());
     return path;
 }
 
@@ -497,11 +578,13 @@ void MainWindow::importStep()
         return;
     }
     const std::filesystem::path path = toPath(file);
-    const QString name = toQString(path.stem());
+    rememberFolder(path.parent_path());
     statusBar()->showMessage(tr("Importing %1...").arg(toQString(path.filename())));
-    std::vector<geometry::StepPart> parts;
+    ImportedStep imported;
+    QElapsedTimer timer;
+    timer.start();
     try {
-        parts = readStepInBackground(this, path);
+        imported = readStepInBackground(this, path);
     } catch (const geometry::ImportCanceled&) {
         statusBar()->showMessage(tr("Import canceled"), kMessageTimeoutMs);
         return;
@@ -510,20 +593,34 @@ void MainWindow::importStep()
         reportFailure(this, tr("Import Failed"), error);
         return;
     }
-    for (std::size_t i = 0; i < parts.size(); ++i) {
-        if (parts[i].name.empty()) {
-            parts[i].name = (parts.size() == 1 ? name : QStringLiteral("%1 %2").arg(name).arg(i + 1)).toStdString();
-        }
-    }
+    K137_INFO(Io, "Read {}: {} ms on the worker", path.filename().string(), timer.elapsed());
+    addImport(path, std::move(imported));
+}
+
+void MainWindow::addImport(const std::filesystem::path& path, ImportedStep imported)
+{
+    QElapsedTimer timer;
+    timer.start();
     leaveModes();
     {
         const BusyCursor busy;
-        m_session->edit(tr("Import %1").arg(name), [&](core::Document& document) {
-            document.add(core::ImportFeature{toQString(path.filename()).toStdString(), std::move(parts)});
+        for (std::size_t i = 0; i < imported.meshes.size(); ++i) {
+            m_session->snapshots().seed(imported.parts[i].shape, imported.meshes[i]);
+        }
+        m_session->edit(tr("Import %1").arg(toQString(path.stem())), [&](core::Document& document) {
+            document.add(importFeature(path, std::move(imported.parts)));
         });
-        fitView();
+        m_cameraCommands->fit(CameraCommands::Move::Jump);
     }
     statusBar()->showMessage(tr("Imported %1").arg(toQString(path.filename())), kMessageTimeoutMs);
+    const auto logFirstFrame = [timer, file = path.filename().string()] {
+        K137_INFO(Io, "Imported {}: {} ms on the UI thread until the first frame", file, timer.elapsed());
+    };
+    if (m_viewport != nullptr) {
+        connect(m_viewport, &QRhiWidget::frameSubmitted, this, logFirstFrame, Qt::SingleShotConnection);
+    } else {
+        connect(m_view, &viewer::OcctViewWidget::rendered, this, logFirstFrame, Qt::SingleShotConnection);
+    }
 }
 
 void MainWindow::exportStep()

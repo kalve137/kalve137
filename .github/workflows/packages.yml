@@ -1,0 +1,384 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Packages
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        default: ""
+      version_base:
+        required: false
+        type: string
+        default: ""
+      version_suffix:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
+  QT_VERSION: 6.12.0
+  AQT_SOURCE: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
+  KALVE137_VERSION_BASE: ${{ inputs.version_base }}
+  KALVE137_VERSION_SUFFIX: ${{ inputs.version_suffix }}
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    timeout-minutes: 120
+    env:
+      VCPKG_ROOT: C:\vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,C:\vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-windows-release
+      LLVM_VERSION: 22.1.8
+      SOFTWARE_GL_DIR: C:\software-gl
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install LLVM
+        run: choco install llvm --version=$env:LLVM_VERSION -y --no-progress --force
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtshadertools
+          dir: C:\
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-v2
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 count -Path C:\vcpkg-cache
+
+      - name: Bootstrap vcpkg
+        run: |
+          New-Item -ItemType Directory -Force C:\vcpkg-cache | Out-Null
+          git clone https://github.com/microsoft/vcpkg $env:VCPKG_ROOT
+          git -C $env:VCPKG_ROOT checkout $env:VCPKG_COMMIT
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Start vcpkg build log tail
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-start -VcpkgRoot $env:VCPKG_ROOT
+
+      - name: Build
+        id: build
+        run: |
+          . ./scripts/dev-shell.ps1
+          $extra = @()
+          if ($env:KALVE137_VERSION_BASE) {
+              $extra += "-DKALVE137_VERSION_BASE=$env:KALVE137_VERSION_BASE"
+          }
+          if ($env:KALVE137_VERSION_SUFFIX) {
+              $extra += "-DKALVE137_VERSION_SUFFIX=$env:KALVE137_VERSION_SUFFIX"
+          }
+          python scripts/ci-no-cmake-warnings.py cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev @extra
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/ci-no-cmake-warnings.py cmake --build --preset windows-release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stop vcpkg build log tail
+        if: always()
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-windows
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: pwsh ./scripts/ci-vcpkg-cache.ps1 save-plan -Path C:\vcpkg-cache
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: C:\vcpkg-cache
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
+
+      - name: Install software OpenGL
+        run: |
+          New-Item -ItemType Directory -Force $env:SOFTWARE_GL_DIR | Out-Null
+          Copy-Item "$env:QT_ROOT_DIR\bin\opengl32sw.dll" "$env:SOFTWARE_GL_DIR\opengl32.dll"
+          Copy-Item "$env:SOFTWARE_GL_DIR\opengl32.dll" build\windows-release
+
+      - name: Test
+        id: test
+        timeout-minutes: 10
+        run: |
+          . ./scripts/dev-shell.ps1
+          ctest --preset windows-release -LE ui --timeout 180 --output-junit test-results.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Summarize tests
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python scripts/ci-test-report.py "Windows tests without a window" build/windows-release/test-results.xml
+
+      - name: Package
+        timeout-minutes: 10
+        run: python scripts/ci-no-cmake-warnings.py pwsh ./scripts/package.ps1 -SkipBuild -OpenGlDir $env:SOFTWARE_GL_DIR
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-windows-x64
+          path: build/windows-release/package/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VCPKG_ROOT: /home/runner/vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,/home/runner/vcpkg-cache,readwrite
+      VCPKG_TRIPLET: x64-linux-dynamic-release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install system packages
+        run: bash scripts/linux-deps.sh
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtshadertools
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/runner/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: bash scripts/ci-vcpkg-cache.sh count -Path /home/runner/vcpkg-cache
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p /home/runner/vcpkg-cache
+          git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Start vcpkg build log tail
+        run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
+
+      - name: Build
+        id: build
+        run: |
+          extra=()
+          if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
+              extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
+          fi
+          if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
+              extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
+          fi
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev "${extra[@]}"
+          python3 scripts/ci-no-cmake-warnings.py cmake --build --preset linux-release
+
+      - name: Stop vcpkg build log tail
+        if: always()
+        run: bash scripts/ci-vcpkg-cache.sh tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-linux
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /home/runner/vcpkg-cache
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /home/runner/vcpkg-cache
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
+
+      - name: Test without window
+        id: test
+        timeout-minutes: 10
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset linux-release -LE ui --timeout 180 --output-junit test-results.xml
+
+      - name: Summarize tests without window
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python3 scripts/ci-test-report.py "Linux tests without a window" build/linux-release/test-results.xml
+
+      - name: Package
+        timeout-minutes: 10
+        run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-linux.sh --skip-build
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-linux-x64
+          path: build/linux-release/package/kalve137-linux-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      VCPKG_ROOT: /Users/runner/vcpkg-kalve137
+      VCPKG_BINARY_SOURCES: clear;files,/Users/runner/vcpkg-cache,readwrite
+      VCPKG_TRIPLET: arm64-osx-dynamic-release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install build tools
+        run: brew install autoconf autoconf-archive automake libtool ninja pkgconf
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtshadertools
+          cache: true
+          aqtsource: ${{ env.AQT_SOURCE }}
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /Users/runner/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*') }}-v2
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Count vcpkg binary cache after restore
+        id: vcpkg-cache-count-before
+        run: bash scripts/ci-vcpkg-cache.sh count -Path /Users/runner/vcpkg-cache
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p /Users/runner/vcpkg-cache
+          git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout "$VCPKG_COMMIT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Start vcpkg build log tail
+        run: bash scripts/ci-vcpkg-cache.sh tail-start -VcpkgRoot "$VCPKG_ROOT"
+
+      - name: Build
+        id: build
+        run: |
+          extra=()
+          if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
+              extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
+          fi
+          if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
+              extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
+          fi
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev "${extra[@]}"
+          python3 scripts/ci-no-cmake-warnings.py cmake --build --preset macos-release
+
+      - name: Stop vcpkg build log tail
+        if: always()
+        run: bash scripts/ci-vcpkg-cache.sh tail-stop
+
+      - name: Upload vcpkg build logs
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: vcpkg-buildtrees-macos
+          path: ${{ env.VCPKG_ROOT }}/buildtrees/**/*.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Plan vcpkg binary cache save
+        id: vcpkg-cache-save
+        if: steps.build.outcome == 'success'
+        env:
+          CACHE_HIT: ${{ steps.vcpkg-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          COUNT_BEFORE: ${{ steps.vcpkg-cache-count-before.outputs.count }}
+          RUN_ID: ${{ github.run_id }}
+        run: bash scripts/ci-vcpkg-cache.sh save-plan -Path /Users/runner/vcpkg-cache
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-cache-save.outputs.save == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /Users/runner/vcpkg-cache
+          key: ${{ steps.vcpkg-cache-save.outputs.key }}
+
+      - name: Test without window
+        id: test
+        timeout-minutes: 10
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset macos-release -LE ui --timeout 180 --output-junit test-results.xml
+
+      - name: Summarize tests without window
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        run: python3 scripts/ci-test-report.py "macOS tests without a window" build/macos-release/test-results.xml
+
+      - name: Package
+        timeout-minutes: 10
+        run: python3 scripts/ci-no-cmake-warnings.py bash scripts/package-macos.sh --skip-build
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalve137-macos-arm64
+          path: build/macos-release/package/kalve137-macos-arm64.zip
+          if-no-files-found: error

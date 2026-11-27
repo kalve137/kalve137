@@ -3,20 +3,29 @@
 
 #include "core/document.h"
 #include "core/naming.h"
+#include "core/parameter_table.h"
+#include "core/projection.h"
 #include "core/recompute.h"
 #include "core/serialization.h"
 #include "core/undo_stack.h"
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
+#include "same_document.h"
+#include "sketch/offset.h"
 
 #include <gtest/gtest.h>
 
 #include <BRepBndLib.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Vertex.hxx>
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -33,6 +42,7 @@ namespace {
 using Step = std::function<void(Document&)>;
 
 const std::filesystem::path kFixtures = std::filesystem::path(KALVE137_SOURCE_DIR) / "tests" / "core" / "fixtures";
+const std::filesystem::path kSamples = std::filesystem::path(KALVE137_SOURCE_DIR) / "assets" / "samples";
 
 SketchFeature rectangle(double x0, double y0, double x1, double y1, OriginPlane plane = OriginPlane::XY)
 {
@@ -144,6 +154,28 @@ std::vector<Step> everyKindSteps()
         doc.add(AxisFeature{AxisSource::TwoPoints, gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), "Points"});
     });
     steps.emplace_back([](Document& doc) { doc.add(PointFeature{gp_Pnt(1, 2, 3), "Point"}); });
+    steps.emplace_back([](Document& doc) {
+        SketchFeature data = rectangle(0, 40, 20, 50);
+        std::vector<sketch::Id> sides;
+        for (const auto& [id, curve] : data.sketch.curves()) {
+            sides.push_back(id);
+        }
+        sketch::addOffset(data.sketch, sides, 2.0);
+        const Model model = recompute(doc);
+        const Body& block = model.bodies.front();
+        for (const gp_Pnt& at : {gp_Pnt(20, 0, 0), gp_Pnt(30, 12, 10), gp_Pnt(40, 0, 5)}) {
+            const TopoDS_Edge edge = *geometry::findEdge(block.shape, at, 1e-6);
+            addProjectedEdge(data, *projectEdge(edge, data.plane), edgeRef(block, edge, at));
+        }
+        for (TopExp_Explorer it(block.shape, TopAbs_VERTEX); it.More(); it.Next()) {
+            const TopoDS_Vertex& vertex = TopoDS::Vertex(it.Current());
+            if (BRep_Tool::Pnt(vertex).Distance(gp_Pnt(40, 20, 0)) < 1e-6) {
+                addProjectedVertex(data, *projectVertex(vertex, data.plane), vertexRef(block, vertex));
+                break;
+            }
+        }
+        doc.add(std::move(data));
+    });
     return steps;
 }
 
@@ -154,15 +186,6 @@ Document everyKind()
         step(doc);
     }
     return doc;
-}
-
-std::vector<double> volumes(const Model& model)
-{
-    std::vector<double> result;
-    for (const Body& body : model.bodies) {
-        result.push_back(geometry::volume(body.shape));
-    }
-    return result;
 }
 
 void expectSameVolumes(const Model& actual, const Model& expected)
@@ -710,4 +733,125 @@ TEST(Sweep, VersionSixFixtureStillLoads)
         EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
     }
     expectSameVolumes(model, recompute(everyKind()));
+}
+
+TEST(Sweep, VersionSevenFixtureFromTheFirstReleaseStillLoads)
+{
+    const auto fixture = kFixtures / "dodecahedron-v7.k137";
+    ASSERT_TRUE(std::filesystem::exists(fixture)) << fixture;
+    ShapeStore shapes;
+    const std::string text = readFile(fixture);
+    ASSERT_EQ(nlohmann::json::parse(text)["version"], 7);
+    const Document loaded = fromJson(text, shapes);
+    const Model model = recompute(loaded);
+    for (const Feature& feature : loaded.features()) {
+        EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
+    }
+    ASSERT_EQ(model.bodies.size(), 1U);
+    const std::string shipped = readFile(kSamples / "dodecahedron.k137");
+    expectSameVolumes(model, recompute(fromJson(shipped, shapes)));
+    test::expectSameDocument(nlohmann::json::parse(shipped), nlohmann::json::parse(toJson(loaded, shapes)), "");
+}
+
+TEST(Sweep, VersionEightFixtureWritesBackUnchanged)
+{
+    ShapeStore shapes;
+    const std::string text = readFile(kFixtures / "every-kind-v8.k137");
+    const nlohmann::json saved = nlohmann::json::parse(toJson(fromJson(text, shapes), shapes));
+    test::expectSameDocument(nlohmann::json::parse(text), saved, "");
+    const nlohmann::json& features = saved.at("features");
+    const auto plane = std::find_if(features.begin(), features.end(),
+                                    [](const nlohmann::json& feature) { return feature.at("name") == "Plane2"; });
+    ASSERT_NE(plane, features.end());
+    EXPECT_EQ((*plane)["data"]["angle"], 30.0);
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsOffset)
+{
+    const auto fixture = kFixtures / "every-kind-v8.k137";
+    ASSERT_TRUE(std::filesystem::exists(fixture)) << fixture;
+    ShapeStore shapes;
+    const std::string text = readFile(fixture);
+    ASSERT_EQ(nlohmann::json::parse(text)["version"], 8);
+    const Document loaded = fromJson(text, shapes);
+    const Model model = recompute(loaded);
+    for (const Feature& feature : loaded.features()) {
+        EXPECT_EQ(model.status.at(feature.id).health, FeatureHealth::Ok) << feature.name;
+    }
+    expectSameVolumes(model, recompute(everyKind()));
+    const sketch::Sketch& s = std::get<SketchFeature>(loaded.features().back().data).sketch;
+    const auto offset = std::ranges::find(s.constraints(), sketch::ConstraintKind::Offset,
+                                          [](const auto& entry) { return entry.second.kind; });
+    ASSERT_NE(offset, s.constraints().end());
+    EXPECT_EQ(sketch::offsetPairs(offset->second).size(), 4U);
+    EXPECT_DOUBLE_EQ(offset->second.value, 2.0);
+    ASSERT_EQ(offset->second.joints.size(), 4U);
+    EXPECT_TRUE(std::ranges::none_of(offset->second.joints, &sketch::OffsetJoint::tangent));
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsParameters)
+{
+    ShapeStore shapes;
+    const std::string text = readFile(kFixtures / "every-kind-v8.k137");
+    Document loaded = fromJson(text, shapes);
+    ASSERT_EQ(loaded.parameters().size(), 4U);
+    EXPECT_EQ(loaded.parameters()[1].name, "rim");
+    EXPECT_EQ(loaded.parameters()[1].expression, "height / 5");
+    const auto named = [&](const char* name) -> const Feature& { return *loaded.featureNamed(name); };
+    EXPECT_EQ(named("Extrude1").expressions.at("distance"), "height");
+    EXPECT_EQ(named("Fillet1").expressions.at("sets.0.radius"), "rim");
+    EXPECT_EQ(named("Pattern1").expressions.at("count"), "copies");
+    EXPECT_EQ(named("Plane2").expressions.at("angle"), "tilt");
+    const sketch::Sketch& s = std::get<SketchFeature>(named("Sketch1").data).sketch;
+    EXPECT_EQ(s.constraint(10)->expression, "4 * height");
+    EXPECT_EQ(s.constraint(11)->expression, "2 * height");
+    const std::string saved = toJson(loaded, shapes);
+    EXPECT_EQ(nlohmann::json::parse(saved)["parameters"], nlohmann::json::parse(text)["parameters"]);
+    EXPECT_EQ(toJson(fromJson(saved, shapes), shapes), saved);
+
+    ASSERT_FALSE(setParameterExpression(loaded, "height", "12 mm"));
+    EXPECT_DOUBLE_EQ(std::get<ExtrudeFeature>(named("Extrude1").data).distance, 12.0);
+    EXPECT_DOUBLE_EQ(std::get<PatternFeature>(named("Pattern1").data).spacing, 36.0);
+    EXPECT_DOUBLE_EQ(std::get<SketchFeature>(named("Sketch1").data).sketch.constraint(10)->value, 48.0);
+    const Model model = recompute(loaded);
+    EXPECT_EQ(model.status.at(named("Sketch1").id).health, FeatureHealth::Ok);
+    EXPECT_EQ(model.status.at(named("Extrude1").id).health, FeatureHealth::Ok);
+}
+
+TEST(Sweep, VersionEightFixtureLoadsItsProjections)
+{
+    ShapeStore shapes;
+    const Document loaded = fromJson(readFile(kFixtures / "every-kind-v8.k137"), shapes);
+    const SketchFeature& data = std::get<SketchFeature>(loaded.features().back().data);
+    const sketch::Sketch& s = data.sketch;
+    ASSERT_EQ(data.projections.size(), 4U);
+    const auto at = [&](sketch::Id point) { return s.point(point)->pos; };
+    const auto near = [](sketch::Vec2 a, sketch::Vec2 b) { return sketch::distance(a, b) < 1e-6; };
+
+    const Projection& bottom = data.projections[0];
+    EXPECT_EQ(bottom.kind, ProjectionKind::Edge);
+    ASSERT_NE(s.curve(bottom.curve), nullptr);
+    EXPECT_EQ(s.curve(bottom.curve)->kind, sketch::CurveKind::Line);
+    const std::vector<sketch::Id>& ends = s.curve(bottom.curve)->points;
+    EXPECT_TRUE((near(at(ends[0]), {-2, 0}) && near(at(ends[1]), {40, 0})) ||
+                (near(at(ends[0]), {40, 0}) && near(at(ends[1]), {-2, 0})));
+
+    const Projection& rim = data.projections[1];
+    ASSERT_NE(s.curve(rim.curve), nullptr);
+    EXPECT_EQ(s.curve(rim.curve)->kind, sketch::CurveKind::Circle);
+    EXPECT_NEAR(s.curve(rim.curve)->radius, 2.0, 1e-6);
+    EXPECT_TRUE(near(at(s.curve(rim.curve)->points[0]), {30, 10}));
+
+    const Projection& upright = data.projections[2];
+    EXPECT_EQ(upright.kind, ProjectionKind::Edge);
+    EXPECT_EQ(upright.curve, 0);
+    EXPECT_TRUE(near(at(upright.point), {40, 0}));
+
+    const Projection& corner = data.projections[3];
+    EXPECT_EQ(corner.kind, ProjectionKind::Vertex);
+    EXPECT_TRUE(near(at(corner.point), {40, 20}));
+    EXPECT_EQ(corner.ref.names.size(), 3U);
+    for (const Projection& link : {bottom, rim, upright}) {
+        EXPECT_EQ(link.ref.names.size(), 2U);
+    }
 }

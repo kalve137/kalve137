@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/shell/startup_options.h"
 #include "core/document.h"
 
 #include <gp_Pnt.hxx>
@@ -29,6 +30,10 @@ namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class Viewport;
+}
+
 namespace kalve137::app {
 class DesignSession;
 class MainWindow;
@@ -36,6 +41,8 @@ class MainWindow;
 
 namespace kalve137::uitest {
 
+std::filesystem::path shotFolder();
+std::filesystem::path scratchFolder();
 void installHarness();
 void resetSettings();
 std::vector<std::string> takeProblems();
@@ -48,16 +55,23 @@ void answerMessage(QMessageBox::StandardButton button);
 void answerText(const QString& text);
 void chooseFromMenu(const QString& item);
 std::size_t pendingAnswers();
+bool paintsAccent(QWidget& button);
+bool drawsReferenceColors(const viewer::OcctViewWidget& oldView);
+qint64 timeBudgetMs(qint64 baseMs);
 
 class UiDriver {
 public:
     UiDriver();
+    explicit UiDriver(const app::StartupOptions& options);
     ~UiDriver();
     UiDriver(const UiDriver&) = delete;
     UiDriver& operator=(const UiDriver&) = delete;
 
     app::MainWindow& window() { return *m_window; }
     viewer::OcctViewWidget& view() { return *m_view; }
+    render::Viewport* viewport() { return m_viewport; }
+    QWidget* canvas() const;
+    QImage canvasImage();
     app::DesignSession& session() { return *m_session; }
     const core::Document& document() const;
 
@@ -108,6 +122,7 @@ private:
 
     std::unique_ptr<app::MainWindow> m_window;
     viewer::OcctViewWidget* m_view = nullptr;
+    render::Viewport* m_viewport = nullptr;
     app::DesignSession* m_session = nullptr;
     Qt::MouseButtons m_buttons;
     QPointer<QWidget> m_grab;

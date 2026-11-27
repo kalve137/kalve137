@@ -17,6 +17,7 @@ struct DimensionLabel {
     QSize pixels;
 };
 
+QSize dimensionLabelPixels(const QString& text, double textPixels, double devicePixelRatio);
 DimensionLabel makeDimensionLabel(const gp_Pnt& at, const QString& text, const QColor& color, bool selected,
                                   double textPixels, double devicePixelRatio);
 

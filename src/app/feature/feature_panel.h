@@ -7,12 +7,14 @@
 
 #include "core/document.h"
 #include "core/recompute.h"
+#include "core/snapshot_cache.h"
 
 #include <QString>
 #include <QWidget>
 
 #include <array>
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -23,24 +25,23 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QPushButton;
+class QScrollArea;
 class QTimer;
 class QVBoxLayout;
-
-namespace kalve137::viewer {
-class OcctViewWidget;
-}
 
 namespace kalve137::app {
 
 class DesignSession;
 class DistanceHandle;
 class ValueEdit;
+class ViewProjection;
 
 class FeaturePanel : public QWidget {
     Q_OBJECT
 
 public:
-    FeaturePanel(DesignSession& session, Scene& scene, viewer::OcctViewWidget* view, QWidget* parent = nullptr);
+    FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, const ViewProjection& projection,
+                 QWidget* parent = nullptr);
 
     void startExtrude();
     void startRevolve();
@@ -68,6 +69,7 @@ public:
 
 signals:
     void activeChanged(bool active);
+    void previewed(double ms, double recomputeMs);
     void message(const QString& text);
     void selectionSummary(const QString& text);
 
@@ -92,6 +94,7 @@ private:
     void startFresh(core::FeatureData featureData);
     void finish();
     void buildForm();
+    void bindField(ValueEdit* box, const std::string& key);
     void buildOffsetFaceForm(core::OffsetFaceFeature& f, QFormLayout* fields);
     void buildHoleForm(core::HoleFeature& f, QFormLayout* fields);
     void buildMoveForm(core::MoveFeature& f, QFormLayout* fields);
@@ -105,6 +108,7 @@ private:
     void onSecondHandleValue(double value);
     void onThirdHandleValue(double value);
     void updateHandles(const Resolved& resolved);
+    void publishHandles();
     void onSelectionChanged();
     void togglePick(const Pick& pick);
     bool handOffPressPull(const Pick& pick);
@@ -127,7 +131,10 @@ private:
     QString extrudeTargetName(const core::ExtrudeFeature& extrude) const;
     void resolveHole(const core::HoleFeature& hole, Resolved& resolved) const;
     void resolvePlane(const core::PlaneFeature& plane, Resolved& resolved) const;
-    std::vector<TopoDS_Shape> highlightedBodies(const core::Model& model, core::FeatureId featureId) const;
+    std::vector<const core::Body*> highlightedBodies(const core::Model& model, core::FeatureId featureId) const;
+    void showPicks(const Resolved& resolved, const std::vector<const core::Body*>& bodies);
+    void showPreview(const core::Document& document, const core::Model& model);
+    void endPreview();
     std::set<core::BodyKey> previewBodies(const core::Model& model) const;
     core::FilletSet& activeSet(core::FilletFeature& fillet);
     const core::FilletSet& activeSet(const core::FilletFeature& fillet) const;
@@ -143,16 +150,21 @@ private:
 
     DesignSession& m_session;
     Scene& m_scene;
-    viewer::OcctViewWidget* m_view;
+    PickSource& m_source;
+    const ViewProjection& m_projection;
 
     std::optional<core::FeatureData> m_data;
+    std::map<std::string, std::string> m_expressions;
     core::FeatureId m_editing = 0;
     core::Document m_base;
     core::Model m_baseModel;
+    core::SnapshotCache m_previewSnapshots;
+    core::SnapshotCache m_baseSnapshots;
 
     QVBoxLayout* m_layout = nullptr;
     QWidget* m_form = nullptr;
     QLabel* m_selection = nullptr;
+    QScrollArea* m_itemsArea = nullptr;
     QWidget* m_items = nullptr;
     QVBoxLayout* m_itemsLayout = nullptr;
     QLabel* m_error = nullptr;

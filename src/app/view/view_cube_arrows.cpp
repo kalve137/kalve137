@@ -77,11 +77,11 @@ protected:
 
     void paintEvent(QPaintEvent*) override
     {
-        QColor color = theme::kTitaniumLight;
+        QColor color = theme::palette().chrome.text;
         if (isDown()) {
-            color = theme::kTitanium;
+            color = theme::palette().chrome.textDim;
         } else if (underMouse()) {
-            color = theme::kTitaniumLight.lighter(kHoverLighterPercent);
+            color = theme::palette().chrome.text.lighter(kHoverLighterPercent);
         }
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);

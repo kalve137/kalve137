@@ -55,30 +55,77 @@ try {
         'bin\THIRD-PARTY-NOTICES.md'
         'bin\fonts\roboto\Roboto-Regular.ttf'
         'bin\fonts\roboto\Roboto-Medium.ttf'
-        'bin\planegcs.dll'
-        'bin\TKOffset.dll'
         'bin\vcruntime140.dll'
         'bin\msvcp140.dll'
         'bin\samples\dodecahedron.k137'
-        'bin\notices\Kalve137.txt'
-        'bin\notices\Qt.txt'
-        'bin\notices\OpenCASCADE.txt'
-        'bin\notices\PlaneGCS.txt'
-        'bin\notices\occt-qt-tools.txt'
-        'bin\notices\Roboto.txt'
-        'bin\notices\Boost.txt'
-        'bin\notices\Eigen.txt'
         'plugins\platforms\qwindows.dll'
         'plugins\imageformats\qsvg.dll'
     )
     $missing = $expected | Where-Object { -not (Test-Path (Join-Path $top $_)) }
     if ($missing) {
-        throw "The package is missing: $($missing -join ', ')"
+        throw "Package is missing: $($missing -join ', ')"
+    }
+
+    function SkipPackagedDll([string]$name) {
+        return $name -match '^(vcruntime|msvcp|concrt)\d'
+    }
+
+    function NoticeForDll([string]$relative) {
+        if ($relative -match '^plugins[\\/]') {
+            return 'Qt'
+        }
+        $base = [IO.Path]::GetFileNameWithoutExtension($relative)
+        switch -Regex ($base) {
+            '^Qt6' { return 'Qt' }
+            '^TK' { return 'OpenCASCADE' }
+            '^planegcs$' { return 'PlaneGCS' }
+            '^freetype' { return 'FreeType' }
+            '^libpng' { return 'libpng' }
+            '^z$' { return 'zlib' }
+            '^bz2$' { return 'bzip2' }
+            '^brotli' { return 'Brotli' }
+            '^fmt$' { return 'fmt' }
+            '^miniz$' { return 'miniz' }
+            '^spdlog$' { return 'spdlog' }
+            default { return $null }
+        }
+    }
+
+    $noticesDir = Join-Path $bin 'notices'
+    $requiredNotices = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $unmapped = @()
+    foreach ($dll in Get-ChildItem -Path $top -Recurse -Filter '*.dll') {
+        if (SkipPackagedDll $dll.Name) {
+            continue
+        }
+        $relative = $dll.FullName.Substring($top.Length + 1)
+        $notice = NoticeForDll $relative
+        if ($notice) {
+            [void]$requiredNotices.Add($notice)
+        } else {
+            $unmapped += $relative
+        }
+    }
+    foreach ($name in @(
+            'Kalve137', 'PlaneGCS', 'occt-qt-tools', 'tinybvh', 'Roboto',
+            'Boost', 'Eigen', 'nlohmann-json'
+        )) {
+        [void]$requiredNotices.Add($name)
+    }
+    if ($unmapped) {
+        throw "Package has DLLs with no notice mapping: $($unmapped -join ', ')"
+    }
+    $missingNotices = $requiredNotices | Where-Object { -not (Test-Path (Join-Path $noticesDir "$_.txt")) }
+    if ($missingNotices) {
+        throw "Package is missing license notices: $($missingNotices -join ', ')"
     }
     $unwanted = 'bin\kalve137.pdb', 'bin\vc_redist.x64.exe', 'bin\opengl32sw.dll', 'bin\opengl32.dll', 'translations'
+    $unwanted += 'plugins\tls', 'plugins\networkinformation', 'plugins\generic\qtuiotouchplugin.dll'
+    $unwanted += Get-ChildItem -Path $top -Recurse -Include 'Qt6Network*', 'Qt6ShaderTools*', 'qsb*' |
+        ForEach-Object { $_.FullName.Substring($top.Length + 1) }
     $present = $unwanted | Where-Object { Test-Path (Join-Path $top $_) }
     if ($present) {
-        throw "The package carries files it should not: $($present -join ', ')"
+        throw "Package carries files it should not: $($present -join ', ')"
     }
     $qtConf = Join-Path $bin 'qt.conf'
     if ((Test-Path $qtConf) -and ((Get-Content $qtConf -Raw) -match '[A-Za-z]:[\\/]')) {
@@ -109,14 +156,14 @@ try {
     $process = [System.Diagnostics.Process]::Start($start)
     if (-not $process.WaitForExit($SmokeTimeoutSeconds * 1000)) {
         $process.Kill()
-        throw "The smoke run did not finish within $SmokeTimeoutSeconds seconds"
+        throw "Smoke run did not finish within $SmokeTimeoutSeconds seconds"
     }
     $report = Join-Path $smokeOut 'smoke.txt'
     if (Test-Path $report) {
         Get-Content $report | ForEach-Object { Write-Host "  $_" }
     }
     if ($process.ExitCode -ne 0) {
-        throw "The smoke run failed with exit code $($process.ExitCode)"
+        throw "Smoke run failed with exit code $($process.ExitCode)"
     }
     Write-Host "Package verified"
 } finally {

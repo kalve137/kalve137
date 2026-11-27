@@ -49,7 +49,7 @@ std::optional<std::filesystem::path> chooseVersion(QWidget* parent, const std::f
 
     QDialog dialog(parent);
     dialog.setWindowTitle(QDialog::tr("Version History"));
-    dialog.resize(kDialogWidth, kDialogHeight);
+    dialog.resize(theme::onScreen(dialog, {kDialogWidth, kDialogHeight}));
     auto* layout = new QVBoxLayout(&dialog);
     auto* intro = new QLabel(&dialog);
     intro->setWordWrap(true);
@@ -57,8 +57,9 @@ std::optional<std::filesystem::path> chooseVersion(QWidget* parent, const std::f
     auto* list = new QListWidget(&dialog);
     layout->addWidget(list);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
-    QPushButton* restore = buttons->addButton(QDialog::tr("Restore"), QDialogButtonBox::AcceptRole);
+    auto* restore = new QPushButton(QDialog::tr("Restore"), buttons);
     restore->setObjectName("primaryButton");
+    buttons->addButton(restore, QDialogButtonBox::AcceptRole);
     layout->addWidget(buttons);
 
     if (versions.empty()) {

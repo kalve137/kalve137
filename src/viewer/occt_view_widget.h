@@ -13,9 +13,11 @@
 #include <QString>
 #include <Standard_WarningsRestore.hxx>
 
+#include "camera/camera.h"
 #include "viewer/box_band.h"
 #include "viewer/grid.h"
 #include "viewer/navigation.h"
+#include "viewer/style.h"
 #include "viewer/view_turn.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -28,15 +30,18 @@
 #include <optional>
 #include <vector>
 
-class AIS_ViewCube;
-
 namespace kalve137::viewer {
 
+class ViewCube;
+
 struct ViewCubeStyle {
-    QColor face;
+    QColor side;
     QColor edge;
+    QColor corner;
+    style::Shading shading;
     QColor label;
     QColor hover;
+    QColor hoverLabel;
     QColor axisX;
     QColor axisY;
     QColor axisZ;
@@ -66,15 +71,28 @@ public:
     void setGridLabels(bool labels);
     void setGridSpacing(bool adaptive, double spacing);
     double gridStep() const;
+    bool isGridVisible() const { return m_gridVisible; }
+    bool isGridAdaptive() const { return m_gridAdaptive; }
+    double gridSpacing() const { return m_gridSpacing; }
+    const std::optional<GridExtent>& gridExtent() const { return m_gridExtent; }
     void lookAt(const gp_Ax3& plane);
     bool facesStandardView() const;
     void turnView(ViewTurn way);
     void animateCamera(const std::function<void()>& change);
+    void saveView();
+    bool hasSavedView() const { return !m_savedView.IsNull(); }
+    void restoreSavedView();
+    void dropSavedView();
     QRectF viewCubeRect() const;
     void setGridPlane(const gp_Ax3& plane);
     const gp_Ax3& gridPlane() const { return m_grid->plane(); }
     void setGridExtent(const std::optional<GridExtent>& extent);
     void redraw();
+    void orbitBy(double radians);
+    void setFrameTiming(bool timed) { m_frameTiming = timed; }
+    std::optional<double> lastFrameMs() const { return m_lastFrameMs; }
+    QString deviceName();
+    int sampleCount() const;
 
     void setLeftButtonCaptured(bool captured);
     bool isLeftButtonCaptured() const { return m_leftCaptured; }
@@ -91,10 +109,18 @@ public:
     QPointF toScreen(const gp_Pnt& point) const;
     gp_Dir towardViewer(const gp_Pnt& point) const;
 
+    void setSyncedCamera(const camera::Camera& camera, const camera::Viewport& viewport);
+    std::optional<camera::Viewport> viewport() const;
+    camera::Camera currentCamera() const;
+    std::optional<gp_Pnt> pickPoint(const camera::Pixel& pixel, bool onRay);
+    gp_Pnt gravityPoint() const;
+    std::optional<camera::Box> sceneBounds() const;
+
     bool isReady() const { return !m_view.IsNull() && !m_view->Window().IsNull(); }
     bool isAnimating() const;
     const Handle(AIS_InteractiveContext)& aisContext() const { return m_context; }
     const QString& glInfo() const { return m_glInfo; }
+    Graphic3d_ZLayerId linesLayer() const { return m_linesLayer; }
 
     QSize minimumSizeHint() const override { return {200, 200}; }
     QSize sizeHint() const override { return {1280, 800}; }
@@ -105,6 +131,7 @@ public:
 
 signals:
     void ready();
+    void gridChanged();
     void selectionChanged();
     void hoverChanged();
     void capturedPress(QPointF pos, Qt::KeyboardModifiers modifiers);
@@ -141,21 +168,27 @@ private:
     void updateGrid(bool force);
     void failFrame(V3d_View& view, const char* reason);
     bool recoverCamera(V3d_View& view);
+    void syncAspect(V3d_View& view);
     void logFailedFrame(const V3d_View& view, const char* reason) const;
     bool startBox(const QMouseEvent* event);
     bool dragBox(const QMouseEvent* event);
     bool finishBox(const QMouseEvent* event);
+    std::optional<gp_Pnt> pickOnPlaneWithoutWindow(const QPointF& pos, const gp_Ax3& plane) const;
+    double worldPerPixelWithoutWindow() const;
+    QPointF toScreenWithoutWindow(const gp_Pnt& point) const;
     void handleViewRedraw(const Handle(AIS_InteractiveContext)& context, const Handle(V3d_View)& view) override;
     Handle(V3d_Viewer) m_viewer;
     Handle(V3d_View) m_view;
     Handle(V3d_View) m_focusView;
     Handle(AIS_InteractiveContext) m_context;
-    Handle(AIS_ViewCube) m_viewCube;
+    Handle(ViewCube) m_viewCube;
     Handle(GridObject) m_grid;
     Handle(GridObject) m_gridWash;
     std::optional<GridExtent> m_gridExtent;
+    Graphic3d_ZLayerId m_linesLayer = Graphic3d_ZLayerId_Default;
     Handle(SelectMgr_EntityOwner) m_hovered;
     Handle(Graphic3d_Camera) m_lastGoodCamera = new Graphic3d_Camera();
+    Handle(Graphic3d_Camera) m_savedView;
     bool m_hasGoodCamera = false;
     int m_failedFrames = 0;
 
@@ -174,6 +207,9 @@ private:
     Qt::KeyboardModifiers m_boxModifiers;
     bool m_boxing = false;
     bool m_selectedByBox = false;
+    bool m_frameTiming = false;
+    std::optional<double> m_lastFrameMs;
+    std::optional<camera::Viewport> m_syncedViewport;
 };
 
 } // namespace kalve137::viewer

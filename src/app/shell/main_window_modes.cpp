@@ -6,6 +6,7 @@
 #include "app/feature/feature_panel.h"
 #include "app/feature/measure_panel.h"
 #include "app/session/design_session.h"
+#include "app/view/camera_commands.h"
 #include "app/view/scene.h"
 #include "core/naming.h"
 #include "geometry/modeling.h"
@@ -24,12 +25,12 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace kalve137::app {
 
 namespace {
 
-constexpr double kEmptySceneHalfSize = 60.0;
 constexpr double kPreviewGridScale = 2.0;
 
 viewer::GridExtent previewGridExtent(const core::Model& model)
@@ -39,7 +40,7 @@ viewer::GridExtent previewGridExtent(const core::Model& model)
         BRepBndLib::Add(body.shape, box);
     }
     if (box.IsVoid()) {
-        return {gp::Origin(), kEmptySceneHalfSize * kPreviewGridScale};
+        return {gp::Origin(), CameraCommands::kEmptySceneHalfSize * kPreviewGridScale};
     }
     const gp_Pnt low = box.CornerMin();
     const gp_Pnt high = box.CornerMax();
@@ -50,22 +51,22 @@ viewer::GridExtent previewGridExtent(const core::Model& model)
 
 QString MainWindow::idleSelectionSummary() const
 {
-    int faces = 0;
-    int edges = 0;
-    double area = 0.0;
-    double length = 0.0;
-    for (const Pick& pick : m_scene->selected()) {
+    std::vector<TopoDS_Shape> faceShapes;
+    std::vector<TopoDS_Shape> edgeShapes;
+    for (const Pick& pick : m_picks->selected()) {
         if (pick.shape.IsNull()) {
             continue;
         }
         if (pick.kind == Pick::Kind::Face) {
-            ++faces;
-            area += geometry::area(pick.shape);
+            faceShapes.push_back(pick.shape);
         } else if (pick.kind == Pick::Kind::Edge) {
-            ++edges;
-            length += geometry::length(pick.shape);
+            edgeShapes.push_back(pick.shape);
         }
     }
+    const auto faces = static_cast<int>(faceShapes.size());
+    const auto edges = static_cast<int>(edgeShapes.size());
+    const double area = geometry::totalArea(faceShapes);
+    const double length = geometry::totalLength(edgeShapes);
     QStringList parts;
     if (faces > 0) {
         parts
@@ -84,17 +85,17 @@ void MainWindow::startCreateSketch()
     m_measurePanel->stop();
     m_featurePanel->cancel();
     if (!m_sketchEditor->isActive()) {
-        for (const Pick& pick : m_scene->selected()) {
+        for (const Pick& pick : m_picks->selected()) {
             if (const std::optional<gp_Ax3> plane =
                     pick.kind == Pick::Kind::Face ? sketchPlaneOf(pick) : std::nullopt) {
-                m_scene->clearSelection();
+                m_picks->clearSelection();
                 createSketchOn(*plane, "Face", 0);
                 return;
             }
         }
     }
     m_pickingPlane = true;
-    m_scene->setPickMode(PickMode::Planes);
+    updatePickMode();
     m_view->setGridExtent(previewGridExtent(m_session->model()));
     m_view->setGridLabels(m_preferences.sketchGridLabels);
     updateStatus();
@@ -106,15 +107,30 @@ void MainWindow::stopPickingPlane()
         return;
     }
     m_pickingPlane = false;
-    m_scene->setPickMode(PickMode::None);
+    updatePickMode();
     m_view->setGridExtent(std::nullopt);
     m_view->setGridLabels(false);
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));
     updateStatus();
 }
 
+void MainWindow::updatePickMode()
+{
+    if (m_measurePanel->isActive() || m_featurePanel->isActive()) {
+        return;
+    }
+    if (m_pickingPlane) {
+        m_scene->setPickMode(PickMode::Planes);
+    } else if (m_sketchEditor->isActive() && m_sketchEditor->picksModel()) {
+        m_scene->setPickMode(PickMode::Project);
+    } else {
+        m_scene->setPickMode(PickMode::None);
+    }
+}
+
 void MainWindow::leaveModes()
 {
+    m_cameraCommands->dropSavedView();
     m_featurePanel->cancel();
     stopPickingPlane();
     finishSketch();
@@ -141,40 +157,41 @@ void MainWindow::beginSketch(core::FeatureId id)
     if (feature == nullptr || !std::holds_alternative<core::SketchFeature>(feature->data)) {
         return;
     }
+    const bool alreadySketching = m_sketchEditor->isActive();
     m_featurePanel->cancel();
     stopPickingPlane();
-    m_scene->setPickMode(PickMode::None);
     const gp_Ax3 plane = m_session->sketchPlane(id);
     m_sketchEditor->begin(id);
+    updatePickMode();
     refreshScene();
     m_view->setGridPlane(plane);
     m_view->setGridLabels(m_preferences.sketchGridLabels);
     if (m_preferences.lookAtSketch) {
-        m_view->animateCamera([this, &plane] {
-            m_view->lookAt(plane);
-            fitView();
-        });
+        if (!alreadySketching || !m_cameraCommands->hasSavedView()) {
+            m_cameraCommands->saveView();
+        }
+        m_cameraCommands->lookAt(plane);
     }
     updateActions();
     updateStatus();
 }
 
-void MainWindow::fitView()
+bool MainWindow::sceneIsEmpty() const
 {
     const bool hasSketchGeometry = std::ranges::any_of(m_session->document().features(), [](const core::Feature& f) {
         const auto* sketchData = std::get_if<core::SketchFeature>(&f.data);
         return sketchData != nullptr && !sketchData->sketch.curves().empty();
     });
-    if (m_session->model().bodies.empty() && !hasSketchGeometry) {
-        m_view->fitAround(kEmptySceneHalfSize);
-    } else {
-        m_view->fitAll();
-    }
+    return m_session->model().bodies.empty() && !hasSketchGeometry;
 }
 
 void MainWindow::finishSketch()
 {
+    if (m_sketchEditor->isActive()) {
+        m_cameraCommands->restoreSavedView();
+    }
     m_sketchEditor->end();
+    updatePickMode();
     m_view->setGridPlane(core::originPlane(core::OriginPlane::XY));
     m_view->setGridLabels(false);
     refreshScene();
@@ -218,7 +235,7 @@ void MainWindow::escape()
         m_sketchEditor->cancel();
         return;
     }
-    m_scene->clearSelection();
+    m_picks->clearSelection();
     updateStatus();
 }
 
@@ -227,7 +244,7 @@ void MainWindow::onViewHover()
     if (!m_pickingPlane) {
         return;
     }
-    const std::optional<Pick> hovered = m_scene->hovered();
+    const std::optional<Pick> hovered = m_picks->hovered();
     if (const std::optional<gp_Ax3> plane = hovered ? sketchPlaneOf(*hovered) : std::nullopt) {
         m_view->setGridPlane(*plane);
     }
@@ -235,13 +252,19 @@ void MainWindow::onViewHover()
 
 void MainWindow::onViewSelection()
 {
+    if (m_scene->pickMode() == PickMode::Project) {
+        for (const Pick& pick : m_picks->takePicks()) {
+            m_sketchEditor->projectPick(pick);
+        }
+        return;
+    }
     if (!m_pickingPlane) {
         if (!m_featurePanel->isActive() && !m_sketchEditor->isActive()) {
             updateStatus();
         }
         return;
     }
-    for (const Pick& pick : m_scene->takePicks()) {
+    for (const Pick& pick : m_picks->takePicks()) {
         const std::optional<gp_Ax3> plane = sketchPlaneOf(pick);
         if (!plane) {
             statusBar()->showMessage(tr("Sketches need a flat face"), kMessageTimeoutMs);

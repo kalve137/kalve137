@@ -3,6 +3,8 @@
 
 #include "core/serialization.h"
 
+#include "core/parameter_table.h"
+#include "core/projection.h"
 #include "geometry/exchange.h"
 #include "log/log.h"
 
@@ -64,22 +66,37 @@ json sketchToJson(const sketch::Sketch& s)
 {
     json points = json::array();
     for (const auto& [id, p] : s.points()) {
-        points.push_back({{"id", id}, {"x", p.pos.x}, {"y", p.pos.y}, {"fixed", p.fixed}});
+        json point = {{"id", id}, {"x", p.pos.x}, {"y", p.pos.y}, {"fixed", p.fixed}};
+        if (p.projected) {
+            point["projected"] = true;
+        }
+        points.push_back(std::move(point));
     }
     json curves = json::array();
     for (const auto& [id, c] : s.curves()) {
-        curves.push_back({{"id", id},
-                          {"kind", sketch::toString(c.kind)},
-                          {"points", c.points},
-                          {"radius", c.radius},
-                          {"construction", c.construction},
-                          {"fixed", c.fixed}});
+        json curve = {{"id", id},           {"kind", sketch::toString(c.kind)}, {"points", c.points},
+                      {"radius", c.radius}, {"construction", c.construction},   {"fixed", c.fixed}};
+        if (c.projected) {
+            curve["projected"] = true;
+        }
+        curves.push_back(std::move(curve));
     }
     json constraints = json::array();
     for (const auto& [id, c] : s.constraints()) {
         json constraint = {{"id", id}, {"kind", sketch::toString(c.kind)}, {"refs", c.refs}, {"value", c.value}};
         if (c.labelOffset) {
             constraint["label"] = {c.labelOffset->x, c.labelOffset->y};
+        }
+        if (c.kind == sketch::ConstraintKind::Offset) {
+            constraint["sides"] = c.sides;
+            json joints = json::array();
+            for (const sketch::OffsetJoint& joint : c.joints) {
+                joints.push_back({{"point", joint.point}, {"tangent", joint.tangent}});
+            }
+            constraint["joints"] = std::move(joints);
+        }
+        if (!c.expression.empty()) {
+            constraint["expression"] = c.expression;
         }
         constraints.push_back(std::move(constraint));
     }
@@ -90,8 +107,9 @@ sketch::Sketch sketchFrom(const json& j)
 {
     sketch::Sketch s;
     for (const json& p : j.at("points")) {
-        s.insertPoint(p.at("id").get<int>(),
-                      {{p.at("x").get<double>(), p.at("y").get<double>()}, p.value("fixed", false)});
+        s.insertPoint(
+            p.at("id").get<int>(),
+            {{p.at("x").get<double>(), p.at("y").get<double>()}, p.value("fixed", false), p.value("projected", false)});
     }
     for (const json& c : j.at("curves")) {
         const auto kind = sketch::curveKindFromString(c.at("kind").get<std::string>());
@@ -104,6 +122,7 @@ sketch::Sketch sketchFrom(const json& j)
         curve.radius = c.value("radius", 0.0);
         curve.construction = c.value("construction", false);
         curve.fixed = c.value("fixed", false);
+        curve.projected = c.value("projected", false);
         s.insertCurve(c.at("id").get<int>(), std::move(curve));
     }
     for (const json& c : j.at("constraints")) {
@@ -116,6 +135,13 @@ sketch::Sketch sketchFrom(const json& j)
             const auto xy = label->get<std::array<double, 2>>();
             constraint.labelOffset = sketch::Vec2{xy[0], xy[1]};
         }
+        constraint.sides = c.value("sides", std::vector<int>());
+        if (const auto joints = c.find("joints"); joints != c.end()) {
+            for (const json& joint : *joints) {
+                constraint.joints.push_back({joint.at("point").get<int>(), joint.at("tangent").get<bool>()});
+            }
+        }
+        constraint.expression = c.value("expression", std::string());
         s.insertConstraint(c.at("id").get<int>(), std::move(constraint));
     }
     if (const std::optional<std::string> problem = sketch::validate(s)) {
@@ -177,6 +203,40 @@ std::vector<TopoRef> refsFrom(const json& j)
             continue;
         }
         result.push_back({pointFrom(ref.at("point")), ref.value("names", std::vector<std::string>())});
+    }
+    return result;
+}
+
+json projectionsToJson(const std::vector<Projection>& projections)
+{
+    json result = json::array();
+    for (const Projection& link : projections) {
+        json entry = {{"kind", toString(link.kind)}, {"ref", refsToJson({link.ref}).front()}};
+        if (link.curve != 0) {
+            entry["curve"] = link.curve;
+        }
+        if (link.point != 0) {
+            entry["point"] = link.point;
+        }
+        result.push_back(std::move(entry));
+    }
+    return result;
+}
+
+TopoRef projectionRefFrom(const json& j)
+{
+    if (!j.is_object()) {
+        throw std::runtime_error("The design file is damaged: a projection ref is not an object");
+    }
+    return {pointFrom(j.at("point")), j.at("names").get<std::vector<std::string>>()};
+}
+
+std::vector<Projection> projectionsFrom(const json& j)
+{
+    std::vector<Projection> result;
+    for (const json& entry : j) {
+        result.push_back({enumFrom(entry.at("kind"), projectionKindFromString, "projection kind"),
+                          entry.value("curve", 0), entry.value("point", 0), projectionRefFrom(entry.at("ref"))});
     }
     return result;
 }
@@ -361,6 +421,9 @@ json dataToJson(const FeatureData& data, ShapeStore& shapes)
                 if (f.face) {
                     result["face"] = refsToJson({*f.face}).front();
                 }
+                if (!f.projections.empty()) {
+                    result["projections"] = projectionsToJson(f.projections);
+                }
                 return result;
             },
             [](const PlaneFeature& f) -> json { return planeFeatureToJson(f); },
@@ -463,6 +526,12 @@ FeatureData dataFrom(const std::string& type, const json& j, ShapeStore& shapes)
             f.face = refsFrom(json::array({j.at("face")})).front();
         }
         f.sketch = sketchFrom(j.at("sketch"));
+        if (const auto projections = j.find("projections"); projections != j.end()) {
+            f.projections = projectionsFrom(*projections);
+        }
+        if (const std::optional<std::string> problem = validateProjections(f)) {
+            throw std::runtime_error("A sketch in the design is damaged: " + *problem);
+        }
         return f;
     }
     if (type == "plane") {
@@ -606,16 +675,26 @@ std::string toJson(const Document& document, ShapeStore& shapes)
 {
     json features = json::array();
     for (const Feature& feature : document.features()) {
+        json data = dataToJson(feature.data, shapes);
+        if (!feature.expressions.empty()) {
+            data["expressions"] = feature.expressions;
+        }
         features.push_back({{"id", feature.id},
                             {"type", typeName(feature.data)},
                             {"name", feature.name},
                             {"suppressed", feature.suppressed},
-                            {"data", dataToJson(feature.data, shapes)}});
+                            {"data", std::move(data)}});
     }
-    const json root = {
-        {"format", "kalve137-design"}, {"version", kDesignFormatVersion}, {"units", "mm"},
-        {"marker", document.marker()}, {"next_id", document.nextId()},    {"counters", document.counters()},
-        {"features", features}};
+    json root = {{"format", "kalve137-design"}, {"version", kDesignFormatVersion}, {"units", "mm"},
+                 {"marker", document.marker()}, {"next_id", document.nextId()},    {"counters", document.counters()},
+                 {"features", features}};
+    if (!document.parameters().empty()) {
+        json parameters = json::array();
+        for (const Parameter& parameter : document.parameters()) {
+            parameters.push_back({{"name", parameter.name}, {"expression", parameter.expression}});
+        }
+        root["parameters"] = std::move(parameters);
+    }
     return root.dump(2) + "\n";
 }
 
@@ -635,12 +714,23 @@ Document fromJson(const std::string& text, ShapeStore& shapes)
             feature.name = f.at("name").get<std::string>();
             feature.suppressed = f.value("suppressed", false);
             feature.data = dataFrom(f.at("type").get<std::string>(), f.at("data"), shapes);
+            feature.expressions = f.at("data").value("expressions", std::map<std::string, std::string>());
             features.push_back(std::move(feature));
         }
         const std::size_t marker = root.value("marker", features.size());
         Document document;
         document.restore(std::move(features), marker, root.value("counters", std::map<std::string, int>()),
                          root.value("next_id", 1));
+        if (const auto list = root.find("parameters"); list != root.end()) {
+            std::vector<Parameter> parameters;
+            for (const json& p : list->get<std::vector<json>>()) {
+                parameters.push_back({p.at("name").get<std::string>(), p.at("expression").get<std::string>()});
+            }
+            document.setParameters(std::move(parameters));
+        }
+        if (const std::optional<ExpressionError> error = applyStoredParameters(document)) {
+            throw std::runtime_error("The design file is damaged: " + error->message);
+        }
         return document;
     } catch (const json::exception& error) {
         throw std::runtime_error(std::string("The design file is damaged: ") + error.what());

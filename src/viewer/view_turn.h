@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include "camera/navigation.h"
+
 class Graphic3d_Camera;
 
 namespace kalve137::viewer {
 
-enum class ViewTurn { Up, Down, Left, Right, RollClockwise, RollCounterclockwise };
+using camera::ViewTurn;
 
 bool facesStandardView(const Graphic3d_Camera& camera);
 

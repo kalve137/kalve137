@@ -9,7 +9,7 @@
 
 namespace kalve137::sketch {
 
-Vec2 lineEnd(Vec2 start, Vec2 cursor, std::optional<Vec2> previousDir, std::optional<double> length,
+Vec2 lineEnd(Vec2 start, Vec2 cursor, std::optional<Vec2> previousDir, std::optional<double> fixedLength,
              std::optional<double> interiorDegrees);
 
 double interiorAngle(Vec2 previousDir, Vec2 dir);

@@ -30,7 +30,7 @@ constexpr int kPillPadding = theme::kSpaceL;
 constexpr int kPillInset = 14;
 constexpr int kIconSize = 16;
 constexpr int kIconGap = theme::kSpaceM;
-constexpr int kListGap = theme::kSpaceL;
+constexpr int kListGap = theme::kSpaceXxl;
 constexpr int kRowHeight = theme::kDensity.rowHeight;
 constexpr int kRowPadding = theme::kSpaceL;
 constexpr int kSeparatorHeight = 9;
@@ -66,6 +66,11 @@ MarkingMenu::MarkingMenu(QWidget* parent)
 void MarkingMenu::setSlot(Slot slot, QAction* action)
 {
     m_slots[static_cast<std::size_t>(slot)] = action;
+}
+
+bool MarkingMenu::inRing(const QAction* action) const
+{
+    return std::ranges::find(m_slots, action) != m_slots.end();
 }
 
 void MarkingMenu::addListAction(QAction* action)
@@ -251,7 +256,7 @@ void MarkingMenu::paintEvent(QPaintEvent*)
     painter.setRenderHint(QPainter::Antialiasing);
     painter.fillRect(rect(), QColor(0, 0, 0, 1));
 
-    painter.setPen(QPen(theme::kTitaniumDim, style::kStrokeThin));
+    painter.setPen(QPen(theme::palette().chrome.textDisabled, style::kStrokeThin));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(QPointF(m_center), kDeadZone * 0.5, kDeadZone * 0.5);
 
@@ -260,7 +265,7 @@ void MarkingMenu::paintEvent(QPaintEvent*)
         const QPointF direction = target - QPointF(m_center);
         const double length = std::hypot(direction.x(), direction.y());
         if (length > 0.0) {
-            painter.setPen(QPen(theme::kGold, style::kStrokeRegular, Qt::SolidLine, Qt::RoundCap));
+            painter.setPen(QPen(theme::palette().chrome.accent, style::kStrokeRegular, Qt::SolidLine, Qt::RoundCap));
             painter.drawLine(QPointF(m_center) + direction * (kDeadZone * 0.5 / length),
                              QPointF(m_center) + direction * (kDeadZone / length));
         }
@@ -275,8 +280,9 @@ void MarkingMenu::paintEvent(QPaintEvent*)
         }
         const bool hovered = i == m_hovered;
         const bool enabled = item.action->isEnabled();
-        painter.setPen(QPen(hovered && enabled ? theme::kGold : theme::kSlateEdge, style::kStrokeHairline));
-        painter.setBrush(hovered && enabled ? theme::kSlateLight : theme::kSlate);
+        painter.setPen(QPen(hovered && enabled ? theme::palette().chrome.accent : theme::palette().chrome.border,
+                            style::kStrokeHairline));
+        painter.setBrush(hovered && enabled ? theme::palette().chrome.raised : theme::palette().chrome.surface);
         const QRectF pill = QRectF(item.rect).adjusted(0.5, 0.5, -0.5, -0.5);
         painter.drawRoundedRect(pill, pill.height() / 2.0, pill.height() / 2.0);
 
@@ -295,15 +301,16 @@ void MarkingMenu::paintEvent(QPaintEvent*)
             const QIcon::Mode mode = !enabled ? QIcon::Disabled : (hovered ? QIcon::Active : QIcon::Normal);
             painter.drawPixmap(icon, item.action->icon().pixmap(QSize(kIconSize, kIconSize), ratio, mode));
         }
-        painter.setPen(!enabled ? theme::kTitaniumDim : (hovered ? theme::kGold : theme::kTitaniumLight));
+        painter.setPen(!enabled ? theme::palette().chrome.textDisabled
+                                : (hovered ? theme::palette().chrome.accent : theme::palette().chrome.text));
         painter.drawText(text, Qt::AlignVCenter | (iconRight ? Qt::AlignRight : Qt::AlignLeft), plainText(item.action));
     }
 
     if (m_listRect.isNull()) {
         return;
     }
-    painter.setPen(QPen(theme::kSlateEdge, style::kStrokeHairline));
-    painter.setBrush(theme::kSlate);
+    painter.setPen(QPen(theme::palette().chrome.border, style::kStrokeHairline));
+    painter.setBrush(theme::palette().chrome.surface);
     painter.drawRoundedRect(QRectF(m_listRect).adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
     for (const QRect& separator : m_separators) {
         const int y = separator.center().y();
@@ -314,12 +321,13 @@ void MarkingMenu::paintEvent(QPaintEvent*)
         const bool hovered = static_cast<int>(i) == m_hovered;
         const bool enabled = item.action->isEnabled();
         if (hovered && enabled) {
-            painter.fillRect(item.rect, theme::kSlateLight);
+            painter.fillRect(item.rect, theme::palette().chrome.raised);
         }
         const QRect text = item.rect.adjusted(kRowPadding, 0, -kRowPadding, 0);
-        painter.setPen(!enabled ? theme::kTitaniumDim : (hovered ? theme::kGold : theme::kTitaniumLight));
+        painter.setPen(!enabled ? theme::palette().chrome.textDisabled
+                                : (hovered ? theme::palette().chrome.accent : theme::palette().chrome.text));
         painter.drawText(text, Qt::AlignVCenter | Qt::AlignLeft, plainText(item.action));
-        painter.setPen(hovered && enabled ? theme::kTitaniumLight : theme::kTitanium);
+        painter.setPen(hovered && enabled ? theme::palette().chrome.text : theme::palette().chrome.textDim);
         painter.drawText(text, Qt::AlignVCenter | Qt::AlignRight, shortcutText(item.action));
     }
 }

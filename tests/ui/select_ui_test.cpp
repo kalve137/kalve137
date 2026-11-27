@@ -1,19 +1,32 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "app/session/design_session.h"
 #include "app/theme/theme.h"
+#include "core/document.h"
+#include "core/feature.h"
 #include "scenario.h"
 #include "ui_test.h"
 #include "viewer/occt_view_widget.h"
 
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
+
+#include <QElapsedTimer>
 #include <QImage>
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace kalve137::uitest {
 namespace {
@@ -25,9 +38,9 @@ constexpr int kMinHighlightPixels = 200;
 
 int goldPixels(UiDriver& ui)
 {
-    const QImage view = ui.view().grabFramebuffer();
+    const QImage view = ui.canvasImage();
     const auto close = [](int a, int b) { return std::abs(a - b) <= kColorTolerance; };
-    const QColor& gold = app::theme::kGold;
+    const QColor& gold = app::theme::palette().chrome.accent;
     int count = 0;
     for (int y = 0; y < view.height(); ++y) {
         for (int x = 0; x < view.width(); ++x) {
@@ -92,7 +105,7 @@ TEST_F(SelectTest, SketchCrossingTakesWhatItTouches)
     EXPECT_TRUE(ui->selectionText().startsWith("1 Sketch Curve")) << ui->selectionText().toStdString();
 
     ui->key(Qt::Key_Escape);
-    ui->drag(right - reach, right + reach);
+    ui->drag(ui->at(gp_Pnt(-15, 1, 0)), ui->at(gp_Pnt(12, -1, 0)));
     EXPECT_TRUE(ui->selectionText().isEmpty()) << ui->selectionText().toStdString();
 }
 
@@ -143,6 +156,55 @@ TEST_F(SelectTest, FilletCrossingAddsWithoutDroppingEarlierEdges)
     ui->drag(onFront + reach, onFront - reach);
     ui->save("fillet crossing again");
     EXPECT_TRUE(ui->selectionText().startsWith("2 Edges")) << ui->selectionText().toStdString();
+}
+
+TEST_F(SelectTest, WindowOverThousandsOfFacesStaysFast)
+{
+    constexpr int kGrid = 20;
+    constexpr double kPitch = 3.0;
+    constexpr double kSize = 2.0;
+    constexpr int kInset = 20;
+    constexpr int kTotalFaces = 2 * kGrid * kGrid * 6;
+    constexpr qint64 kBudgetMs = 1000;
+    std::vector<geometry::StepPart> parts;
+    for (int layer = 0; layer < 2; ++layer) {
+        BRep_Builder builder;
+        TopoDS_Compound boxes;
+        builder.MakeCompound(boxes);
+        const double shift = layer * kPitch / 2;
+        for (int i = 0; i < kGrid; ++i) {
+            for (int j = 0; j < kGrid; ++j) {
+                const gp_Pnt corner(i * kPitch + shift, j * kPitch + shift, layer * kPitch);
+                builder.Add(boxes, BRepPrimAPI_MakeBox(corner, kSize, kSize, kSize).Shape());
+            }
+        }
+        parts.push_back({"Layer " + std::to_string(layer + 1), boxes, std::nullopt});
+    }
+    ui->session().edit("Import boxes", [&](core::Document& document) {
+        document.add(core::ImportFeature{"boxes.step", std::move(parts)});
+    });
+    homeView(*ui);
+
+    const QRect area = ui->canvas()->rect().adjusted(kInset, kInset, -kInset, -kInset);
+    QElapsedTimer timer;
+    timer.start();
+    ui->drag(ui->inView(ui->canvas(), area.topLeft()), ui->inView(ui->canvas(), area.bottomRight()));
+    ui->frame();
+    const qint64 window = timer.elapsed();
+    ui->save("window over boxes");
+
+    const QString text = ui->selectionText();
+    ASSERT_TRUE(text.contains("Faces")) << text.toStdString();
+    const int selected = text.section(' ', 0, 0).toInt();
+    EXPECT_GT(selected, 0) << text.toStdString();
+    EXPECT_LT(selected, kTotalFaces) << text.toStdString();
+    const qint64 budget = timeBudgetMs(kBudgetMs);
+    RecordProperty("window_ms", static_cast<int>(window));
+    RecordProperty("budget_ms", static_cast<int>(budget));
+    std::printf("window over %d faces %lld ms, budget %lld ms\n", kTotalFaces, window, budget);
+#ifdef NDEBUG
+    EXPECT_LT(window, budget);
+#endif
 }
 
 } // namespace

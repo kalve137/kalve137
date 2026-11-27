@@ -5,11 +5,13 @@
 
 #include "app/diagnostics/diagnostics.h"
 #include "app/session/preferences.h"
+#include "app/shell/startup_options.h"
 #include "app/sketch/sketch_editor.h"
 
 #include "core/feature.h"
 #include "core/project.h"
 #include "core/shape_store.h"
+#include "core/snapshot_cache.h"
 
 #include <QMainWindow>
 
@@ -31,30 +33,49 @@ namespace kalve137::viewer {
 class OcctViewWidget;
 }
 
+namespace kalve137::render {
+class Viewport;
+}
+
 namespace kalve137::app {
 
 class Autosave;
 class BrowserPanel;
+class CameraCommands;
 class CommandSearch;
 class DesignSession;
 class FeaturePanel;
 class MeasurePanel;
+class ViewportPicker;
+class ParametersDialog;
+class PickSource;
 class ProjectPanel;
 class Scene;
 class SketchPalette;
 class TimelineWidget;
 class ViewControls;
+class ViewProjection;
+struct ImportedStep;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(const StartupOptions& options = {}, QWidget* parent = nullptr);
     ~MainWindow() override;
 
     void openDesignAt(const std::filesystem::path& path);
+    void openDesignWhenShown(const std::filesystem::path& path);
+    void addImport(const std::filesystem::path& path, ImportedStep imported);
+    viewer::OcctViewWidget* oldView() const { return m_view; }
+    render::Viewport* viewport() const { return m_viewport; }
+    CameraCommands* cameraCommands() const { return m_cameraCommands; }
+    PickSource* picks() const { return m_picks; }
+    Scene* scene() const { return m_scene.get(); }
+    void beginSketch(core::FeatureId id);
 
 protected:
+    bool event(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
 private:
@@ -67,14 +88,17 @@ private:
     void updateTitle();
     void updateStatus();
     void refreshScene();
+    void refreshVisibility(const std::vector<core::BodyKey>& keys, bool visible);
+    void showViewportScene(snapshot::Scene scene);
+    void showPickModeOpacity();
 
     void startCreateSketch();
     void stopPickingPlane();
+    void updatePickMode();
     void leaveModes();
     void createSketchOn(const gp_Ax3& plane, const std::string& planeName, core::FeatureId planeFeature = 0,
                         std::optional<core::TopoRef> face = std::nullopt);
-    void fitView();
-    void beginSketch(core::FeatureId id);
+    bool sceneIsEmpty() const;
     void finishSketch();
     void editFeature(core::FeatureId id);
     void escape();
@@ -91,6 +115,7 @@ private:
     core::ShapeStore& shapesOf(const std::filesystem::path& design);
     void newDesign();
     void openDesign();
+    void openSample();
     void newProject();
     void openProject();
     void openProjectAt(const std::filesystem::path& folder);
@@ -102,6 +127,7 @@ private:
     std::filesystem::path exportPath(const QString& extension, const QString& filter);
 
     void trackCommand(QAction* action);
+    QAction* repeatableCommand() const;
     void repeatLastCommand();
     void updateRepeatAction();
     void showMarkingMenu(QPoint center);
@@ -113,8 +139,12 @@ private:
 
     void showAbout();
     void showPreferences();
+    void showParameters();
     void showGridSettings();
     void applyPreferences();
+    void applyViewportTheme();
+    void applyViewportStyle();
+    void syncViewportGrid();
     void lookAtSketch();
 
     static constexpr int kMessageTimeoutMs = 5000;
@@ -123,7 +153,13 @@ private:
     DesignSession* m_session = nullptr;
     Autosave* m_autosave = nullptr;
     viewer::OcctViewWidget* m_view = nullptr;
+    render::Viewport* m_viewport = nullptr;
+    std::unique_ptr<viewer::OcctViewWidget> m_hiddenView;
+    CameraCommands* m_cameraCommands = nullptr;
     std::unique_ptr<Scene> m_scene;
+    PickSource* m_picks = nullptr;
+    ViewportPicker* m_viewportPicker = nullptr;
+    ViewProjection* m_viewProjection = nullptr;
     SketchEditor* m_sketchEditor = nullptr;
     FeaturePanel* m_featurePanel = nullptr;
     TimelineWidget* m_timeline = nullptr;
@@ -138,11 +174,14 @@ private:
     QToolBar* m_sketchBar = nullptr;
     QLabel* m_selectionStatus = nullptr;
     QLabel* m_sketchStatus = nullptr;
+    QLabel* m_hint = nullptr;
     QMenu* m_recentMenu = nullptr;
 
     std::optional<core::Project> m_project;
     core::ShapeStore m_shapes;
+    core::SnapshotCache m_contextSnapshots;
     bool m_pickingPlane = false;
+    core::FeatureId m_timelineHighlight = 0;
 
     QAction* m_undo = nullptr;
     QAction* m_redo = nullptr;
@@ -165,10 +204,13 @@ private:
     QAction* m_measure = nullptr;
     QAction* m_finishSketch = nullptr;
     QAction* m_construction = nullptr;
+    QAction* m_breakLink = nullptr;
+    QAction* m_pickAgain = nullptr;
     QAction* m_delete = nullptr;
     QAction* m_showOrigin = nullptr;
     QAction* m_repeat = nullptr;
     CommandSearch* m_commandSearch = nullptr;
+    ParametersDialog* m_parameters = nullptr;
     std::vector<QAction*> m_recentCommands;
     QActionGroup* m_sketchTools = nullptr;
     std::map<SketchEditor::Tool, QAction*> m_toolActions;

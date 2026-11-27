@@ -3,14 +3,24 @@
 
 #include "app/sketch/sketch_editor.h"
 
+#include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
 #include "app/session/design_session.h"
 #include "app/sketch/sketch_editor_detail.h"
 #include "app/sketch/sketch_inputs.h"
+#include "app/theme/fonts.h"
+#include "app/theme/theme.h"
+#include "app/view/band_overlay.h"
+#include "core/parameter_table.h"
+#include "core/projection.h"
 
 #include "geometry/shapes.h"
 #include "log/log.h"
+#include "render/rhi/viewport.h"
+#include "sketch/dimension.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/draft.h"
+#include "sketch/offset.h"
 #include "sketch/profiles.h"
 #include "sketch/select.h"
 #include "viewer/box_band.h"
@@ -20,6 +30,8 @@
 #include <PrsDim_Dimension.hxx>
 #include <gp_Pln.hxx>
 
+#include <QFont>
+#include <QFontMetricsF>
 #include <QLineEdit>
 #include <QScopedValueRollback>
 #include <QStringList>
@@ -36,24 +48,54 @@ namespace kalve137::app {
 
 using namespace sketch_editor_detail;
 
-SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view, QObject* parent)
-    : QObject(parent), m_session(session), m_view(view)
+SketchEditor::SketchEditor(DesignSession& session, const Scene& scene, ViewProjection& projection, QObject* parent)
+    : QObject(parent), m_session(session), m_scene(scene), m_projection(projection), m_view(&projection.view()),
+      m_viewport(projection.viewport())
 {
-    m_valueEditor = new QLineEdit(view);
+    viewer::OcctViewWidget* view = m_view;
+    render::Viewport* viewport = m_viewport;
+    m_valueEditor = new QLineEdit(canvas());
     m_valueEditor->setObjectName("dimensionEditor");
-    m_valueEditor->setFixedWidth(90);
+    m_valueEditor->setFixedWidth(kValueEditorWidth);
     m_valueEditor->hide();
+    m_recentValues = new RecentValuesMenu(
+        m_valueEditor, [this] { return m_valueQuantity; },
+        [this](double value) {
+            m_valueEditor->setText(formatValue(value));
+            m_valueEditor->selectAll();
+            previewValue(m_valueEditor->text());
+        });
+    m_valueNames = new NameCompleter(m_valueEditor, [this]() -> std::optional<core::ParameterValues> {
+        if (!m_valueTakesNames) {
+            return std::nullopt;
+        }
+        return core::parameterValues(m_session.document());
+    });
+    m_valueError = new FieldError(m_valueEditor);
     connect(m_valueEditor, &QLineEdit::returnPressed, this, [this] {
-        const std::optional<double> parsed = parseValue(m_valueEditor->text(), m_valueQuantity);
-        if (!parsed) {
-            emit message(tr("Type a number or an expression, such as 30/2 or 1in"));
+        if (m_valueNames->justCompleted()) {
             return;
         }
-        const double value = *parsed;
-        std::function<void(double)> apply = std::move(m_valueApply);
+        m_valueNames->hide();
+        const TypedValue typed = readTyped(m_valueEditor->text(), m_valueQuantity, valueNames());
+        if (typed.error) {
+            if (m_valueTakesNames) {
+                m_valueError->showError(*typed.error);
+            } else {
+                emit message(tr("Type a number or an expression, such as 30/2 or 1in"));
+            }
+            return;
+        }
+        m_recentValues->commit(typed.value);
+        std::function<void(double, const std::string&)> apply = std::move(m_valueApply);
         closeValueEditor();
         if (apply) {
-            apply(value);
+            apply(typed.value, typed.canonical);
+        }
+    });
+    connect(theme::notifier(), &theme::Notifier::changed, this, [this] {
+        if (isActive()) {
+            redraw();
         }
     });
     connect(m_valueEditor, &QLineEdit::textEdited, this, &SketchEditor::previewValue);
@@ -63,15 +105,31 @@ SketchEditor::SketchEditor(DesignSession& session, viewer::OcctViewWidget* view,
         }
     });
 
-    m_inputs = new SketchInputs(view, this);
-    connect(m_inputs, &SketchInputs::edited, this, &SketchEditor::redrawPreview);
+    m_inputs = new SketchInputs(canvas(), this);
+    connect(m_inputs, &SketchInputs::edited, this, [this] {
+        if (m_typedMove) {
+            previewTypedMove();
+        } else {
+            redrawPreview();
+        }
+    });
     connect(m_inputs, &SketchInputs::accepted, this, &SketchEditor::onInputsAccepted);
 
+    connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
+    if (viewport != nullptr) {
+        m_band = new BandOverlay(viewport);
+        connect(viewport, &render::Viewport::capturedPress, this, &SketchEditor::onPress);
+        connect(viewport, &render::Viewport::capturedRelease, this, &SketchEditor::onRelease);
+        connect(viewport, &render::Viewport::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
+        connect(viewport, &render::Viewport::mouseMoved, this,
+                [this](QPointF pos, Qt::MouseButtons buttons, Qt::KeyboardModifiers) { onMove(pos, buttons); });
+        connect(viewport, &render::Viewport::cameraChanged, this, &SketchEditor::onCameraChanged);
+        return;
+    }
     connect(view, &viewer::OcctViewWidget::capturedPress, this, &SketchEditor::onPress);
     connect(view, &viewer::OcctViewWidget::capturedRelease, this, &SketchEditor::onRelease);
     connect(view, &viewer::OcctViewWidget::capturedDoubleClick, this, &SketchEditor::onDoubleClick);
     connect(view, &viewer::OcctViewWidget::pointerMoved, this, &SketchEditor::onMove);
-    connect(&session, &DesignSession::changed, this, &SketchEditor::onSessionChanged);
 
     m_rescale = new QTimer(this);
     m_rescale->setSingleShot(true);
@@ -99,8 +157,14 @@ void SketchEditor::begin(core::FeatureId sketch)
         m_sketchId = 0;
         return;
     }
+    seed();
     m_tool = Tool::Select;
-    m_view->setLeftButtonCaptured(true);
+    m_repick = 0;
+    if (m_viewport != nullptr) {
+        m_viewport->setLeftButtonCaptured(true);
+    } else {
+        m_view->setLeftButtonCaptured(true);
+    }
     redraw();
     emit toolChanged();
 }
@@ -118,9 +182,17 @@ void SketchEditor::end()
     clearObjects(m_objects);
     clearObjects(m_preview);
     m_sketchId = 0;
-    m_view->unsetCursor();
-    m_view->setLeftButtonCaptured(false);
-    m_view->redraw();
+    m_before.reset();
+    m_drawCache.reset();
+    m_repick = 0;
+    canvas()->unsetCursor();
+    if (m_viewport != nullptr) {
+        clearView();
+        m_viewport->setLeftButtonCaptured(false);
+    } else {
+        m_view->setLeftButtonCaptured(false);
+        m_view->redraw();
+    }
     emit toolChanged();
 }
 
@@ -132,12 +204,15 @@ void SketchEditor::setTool(Tool tool)
     closeValueEditor();
     resetProgress();
     m_tool = tool;
+    m_repick = 0;
+    setModelPicking(tool == Tool::Project);
     if (drawsGeometry(tool)) {
-        m_view->setCursor(Qt::CrossCursor);
+        canvas()->setCursor(Qt::CrossCursor);
     } else {
-        m_view->unsetCursor();
+        canvas()->unsetCursor();
     }
-    if (tool != Tool::Select && tool != Tool::Mirror) {
+    m_offsetChain.clear();
+    if (tool != Tool::Select && tool != Tool::Mirror && tool != Tool::Offset) {
         m_selection.clear();
         redraw();
     }
@@ -151,7 +226,13 @@ void SketchEditor::cancel()
         closeValueEditor();
         return;
     }
-    if (m_dragPoint != 0) {
+    if (m_typedMove) {
+        resetProgress();
+        redraw();
+        emit stateChanged();
+        return;
+    }
+    if (!m_dragPoints.empty() || m_dragLabel != 0) {
         dropDrag();
         redraw();
         return;
@@ -213,11 +294,14 @@ void SketchEditor::toggleConstruction()
 
 QString SketchEditor::hint() const
 {
+    if (m_typedMove) {
+        return tr("Type X and Y offsets, Tab to next value, Enter to move, Esc to stop");
+    }
     switch (m_tool) {
     case Tool::Select:
-        return tr("Click to select, drag points to move, double-click a dimension to edit it");
+        return tr("Click to select, drag geometry to move, double-click a dimension to edit it");
     case Tool::Line:
-        return m_first ? tr("Type a length, Tab to the next value, Enter to finish, Esc to stop")
+        return m_first ? tr("Type a length, Tab to next value, Enter to finish, Esc to stop")
                        : tr("Click the start point");
     case Tool::Rectangle:
         return m_first ? tr("Click the opposite corner, or type the width, Tab, the height and Enter")
@@ -227,6 +311,24 @@ QString SketchEditor::hint() const
     case Tool::Polygon:
         return m_first ? tr("Click a corner, or type the diameter, Tab, the number of sides and Enter")
                        : tr("Click the center");
+    case Tool::Slot:
+        if (!m_first) {
+            return tr("Click the first arc center");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click the second arc center, or type the length, Tab, the width and Enter");
+    case Tool::CenterSlot:
+        if (!m_first) {
+            return tr("Click the slot center");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click an arc center, or type the length, Tab, the width and Enter");
+    case Tool::OverallSlot:
+        if (!m_first) {
+            return tr("Click one end of the slot");
+        }
+        return m_second ? tr("Click to set the width, or type it and Enter")
+                        : tr("Click the other end, or type the length, Tab, the width and Enter");
     case Tool::ArcThrough:
         if (!m_first) {
             return tr("Click the start point");
@@ -251,6 +353,14 @@ QString SketchEditor::hint() const
         }
         return m_selection.empty() ? tr("Click the mirror line")
                                    : tr("Click the mirror line to mirror the selected curves");
+    case Tool::Offset:
+        return m_offsetChain.empty()
+                   ? tr("Click a curve to offset it with the curves joined to it")
+                   : tr("Type the distance and Enter, move the cursor to the other side or type a negative "
+                        "distance to flip");
+    case Tool::Project:
+        return m_repick != 0 ? tr("Click the edge or vertex the selected curve should follow, Esc to cancel")
+                             : tr("Click edges, vertices or faces to project them, Esc to finish");
     case Tool::Dimension:
         return m_pending ? tr("Click to place the dimension, Esc to cancel")
                          : tr("Click a line, circle, arc or two points, then click to place");
@@ -264,6 +374,8 @@ QString SketchEditor::hint() const
         return tr("Click two lines");
     case Tool::Tangent:
         return tr("Click a curve and a circle or arc");
+    case Tool::Concentric:
+        return tr("Click two circles or arcs");
     case Tool::Equal:
         return tr("Click two lines or two circles and arcs");
     case Tool::Midpoint:
@@ -348,12 +460,17 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
         return true;
     case Tool::Select:
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -361,6 +478,7 @@ bool SketchEditor::drawsGeometry(Tool tool)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -387,7 +505,31 @@ const core::SketchFeature* SketchEditor::feature() const
 
 const sketch::Sketch& SketchEditor::current() const
 {
-    return feature()->sketch;
+    return m_current;
+}
+
+void SketchEditor::seed()
+{
+    const core::SketchFeature* data = feature();
+    m_current = data->sketch;
+    if (data->projections.empty()) {
+        return;
+    }
+    const auto state = m_session.model().sketches.find(m_sketchId);
+    if (state == m_session.model().sketches.end()) {
+        return;
+    }
+    const sketch::Sketch& solved = state->second.solved;
+    for (const auto& [id, from] : solved.points()) {
+        if (sketch::Point* to = m_current.point(id)) {
+            to->pos = from.pos;
+        }
+    }
+    for (const auto& [id, from] : solved.curves()) {
+        if (sketch::Curve* to = m_current.curve(id)) {
+            to->radius = from.radius;
+        }
+    }
 }
 
 const sketch::Sketch& SketchEditor::shownSketch() const
@@ -406,6 +548,10 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         return;
     }
     closeValueEditor();
+    if (m_typedMove) {
+        resetProgress();
+        redraw();
+    }
     const std::optional<Vec2> p = toSketch(pos);
     if (!p) {
         return;
@@ -416,6 +562,10 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
         clickSelect(hit, modifiers);
         if (hit.kind == Hit::Kind::None) {
             m_boxStart = pos;
+        } else if (hit.kind == Hit::Kind::Constraint) {
+            startLabelDrag(hit.id, pos, *p);
+        } else if (m_selection.contains(hit.id)) {
+            startGroupDrag(pos, *p, movablePoints());
         }
         break;
     }
@@ -437,6 +587,11 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
     case Tool::Polygon:
         clickPolygon(snapAt(*p));
         break;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        clickSlot(snapAt(*p));
+        break;
     case Tool::ArcThrough:
         clickArcThrough(snapAt(*p));
         break;
@@ -452,6 +607,11 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
     case Tool::Mirror:
         clickMirror(*p);
         break;
+    case Tool::Offset:
+        clickOffset(pos, *p);
+        break;
+    case Tool::Project:
+        break;
     case Tool::Dimension:
         clickDimension(pos, hitAt(pos));
         break;
@@ -461,6 +621,7 @@ void SketchEditor::onPress(QPointF pos, Qt::KeyboardModifiers modifiers)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -487,15 +648,19 @@ void SketchEditor::onRelease(QPointF pos)
         }
         return;
     }
-    if (m_dragPoint == 0) {
+    if (m_dragPoints.empty() && m_dragLabel == 0) {
         return;
     }
-    m_dragPoint = 0;
+    const QString label = m_dragLabel != 0 ? tr("Move Dimension") : tr("Move");
+    m_dragPoints.clear();
+    m_draggingGroup = false;
+    m_dragLabel = 0;
+    m_draggingLabel = false;
     std::optional<sketch::Sketch> moved = std::move(m_dragPreview);
     m_dragPreview.reset();
     m_dragStart.reset();
     if (moved) {
-        commit(tr("Move"), std::move(*moved));
+        commit(label, std::move(*moved));
     } else {
         redraw();
     }
@@ -503,12 +668,17 @@ void SketchEditor::onRelease(QPointF pos)
 
 void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
 {
-    if (!isActive() || feature() == nullptr) {
+    if (!isActive() || feature() == nullptr || (buttons & ~Qt::MouseButtons(Qt::LeftButton)) != Qt::NoButton) {
         return;
     }
     if (m_boxStart && (buttons & Qt::LeftButton) && (m_boxing || viewer::isBoxDrag(*m_boxStart, pos))) {
         m_boxing = true;
-        m_view->showBand(*m_boxStart, pos);
+        if (m_band != nullptr) {
+            m_band->setColor(theme::palette().chrome.accent);
+            m_band->showBand(*m_boxStart, pos);
+        } else {
+            m_view->showBand(*m_boxStart, pos);
+        }
         return;
     }
     const std::optional<Vec2> p = toSketch(pos);
@@ -518,23 +688,12 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     m_cursor = *p;
     m_hasCursor = true;
 
-    if (m_dragPoint != 0 && (buttons & Qt::LeftButton) && m_dragStart) {
-        sketch::Sketch candidate = *m_dragStart;
-        sketch::Point* point = candidate.point(m_dragPoint);
-        if (m_moveIncrement > 0.0) {
-            const Vec2 from = point->pos;
-            point->pos = {from.x + viewer::roundToIncrement(p->x - from.x, m_moveIncrement),
-                          from.y + viewer::roundToIncrement(p->y - from.y, m_moveIncrement)};
-        } else {
-            point->pos = *p;
-        }
-        point->fixed = true;
-        const sketch::SolveResult result = sketch::solve(candidate);
-        if (result.solved && result.conflicting.empty()) {
-            candidate.point(m_dragPoint)->fixed = false;
-            m_dragPreview = std::move(candidate);
-            redraw();
-        }
+    if (m_dragLabel != 0 && (buttons & Qt::LeftButton) && m_dragStart) {
+        dragLabel(pos, *p);
+        return;
+    }
+    if (!m_dragPoints.empty() && !m_typedMove && (buttons & Qt::LeftButton) && m_dragStart) {
+        dragGroup(pos, *p);
         return;
     }
 
@@ -546,6 +705,9 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
         m_cursorSnap = snapAt(*p);
         break;
@@ -553,6 +715,8 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -560,12 +724,23 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
     case Tool::Fix:
         m_cursorSnap = Snap{*p};
         break;
+    }
+
+    if (m_tool == Tool::Offset && !m_offsetChain.empty()) {
+        if (const std::optional<sketch::Chain> chain = sketch::orderChain(current(), m_offsetChain)) {
+            const int side = sketch::offsetSide(current(), *chain, *p);
+            if (side != 0 && side != m_offsetSide) {
+                m_offsetSide = side;
+                previewValue(m_valueEditor->text());
+            }
+        }
     }
 
     if (m_tool == Tool::Arc && m_first && m_second) {
@@ -586,7 +761,7 @@ void SketchEditor::onMove(QPointF pos, Qt::MouseButtons buttons)
     const Id hoverId = hover.kind == Hit::Kind::None || ownPreview ? 0 : hover.id;
     if (hoverId != m_hover || m_pending) {
         m_hover = hoverId;
-        redraw();
+        redrawHover();
     }
     redrawPreview();
 }
@@ -602,8 +777,7 @@ void SketchEditor::onDoubleClick(QPointF pos)
         emit stateChanged();
         return;
     }
-    m_view->detectAt(pos);
-    if (const std::optional<Id> constraint = detectedConstraint()) {
+    if (const std::optional<Id> constraint = constraintAt(pos)) {
         editDimension(*constraint, pos);
     }
 }
@@ -618,7 +792,9 @@ void SketchEditor::onSessionChanged()
         emit finished();
         return;
     }
+    seed();
     if (!m_committing) {
+        m_before.reset();
         closeValueEditor();
         resetProgress();
         dropDrag();
@@ -649,14 +825,6 @@ void SketchEditor::clickSelect(const Hit& hit, Qt::KeyboardModifiers modifiers)
     } else if (!m_selection.contains(hit.id)) {
         m_selection = {hit.id};
     }
-    if (hit.kind == Hit::Kind::Point) {
-        const sketch::Point* point = current().point(hit.id);
-        if (point != nullptr && !point->fixed) {
-            m_dragPoint = hit.id;
-            m_dragStart = current();
-            m_dragPreview.reset();
-        }
-    }
     redraw();
 }
 
@@ -675,120 +843,17 @@ bool SketchEditor::commit(const QString& label, sketch::Sketch candidate)
     }
     const core::FeatureId id = m_sketchId;
     const QScopedValueRollback committing(m_committing, true);
-    m_session.edit(label, [id, &candidate](core::Document& document) {
+    const bool committed = m_session.edit(label, [id, &candidate](core::Document& document) {
         if (core::Feature* f = document.find(id)) {
-            std::get<core::SketchFeature>(f->data).sketch = std::move(candidate);
+            auto& data = std::get<core::SketchFeature>(f->data);
+            data.sketch = std::move(candidate);
+            core::dropBrokenProjections(data);
         }
     });
-    return true;
-}
-
-void SketchEditor::addDimension(sketch::Constraint constraint, QPointF pos)
-{
-    const ConstraintKind kind = constraint.kind;
-    const double value = constraint.value;
-    const auto build = [this, constraint = std::move(constraint)](double typed) {
-        sketch::Sketch candidate = current();
-        const Id id = candidate.addConstraint(constraint.kind, constraint.refs, typed);
-        candidate.constraint(id)->labelOffset = constraint.labelOffset;
-        return candidate;
-    };
-    promptValue(
-        pos, value, quantityOf(kind), true,
-        [this, kind, build](double typed) {
-            if (typed <= 0.0 && kind != ConstraintKind::Angle) {
-                emit message(tr("Dimensions must be greater than zero"));
-                return;
-            }
-            commit(tr("Dimension"), build(typed));
-        },
-        build);
-}
-
-void SketchEditor::editDimension(Id constraint, QPointF pos)
-{
-    const sketch::Constraint* c = current().constraint(constraint);
-    if (c == nullptr || !sketch::isDimension(c->kind)) {
-        return;
-    }
-    const ConstraintKind kind = c->kind;
-    bool onLabel = false;
-    for (const auto& [object, id] : m_constraintObjects) {
-        if (const auto* dimension = dynamic_cast<const PrsDim_Dimension*>(object);
-            dimension != nullptr && id == constraint) {
-            pos = m_view->toScreen(dimension->GetTextPosition());
-            onLabel = true;
-            break;
-        }
-    }
-    const auto build = [this, constraint](double typed) {
-        sketch::Sketch candidate = current();
-        if (sketch::Constraint* edited = candidate.constraint(constraint)) {
-            edited->value = typed;
-        }
-        return candidate;
-    };
-    promptValue(
-        pos, c->value, quantityOf(kind), onLabel,
-        [this, kind, build](double typed) {
-            if (typed <= 0.0 && kind != ConstraintKind::Angle) {
-                emit message(tr("Dimensions must be greater than zero"));
-                return;
-            }
-            commit(tr("Edit Dimension"), build(typed));
-        },
-        build);
-}
-
-void SketchEditor::promptValue(QPointF pos, double initial, core::Quantity quantity, bool centered,
-                               std::function<void(double)> apply, std::function<sketch::Sketch(double)> preview)
-{
-    m_valueApply = std::move(apply);
-    m_valuePreview = std::move(preview);
-    m_valueQuantity = quantity;
-    m_valueEditor->setText(formatValue(initial));
-    previewValue(m_valueEditor->text());
-    const int height = m_valueEditor->sizeHint().height();
-    const QPoint at = centered ? pos.toPoint() - QPoint(m_valueEditor->width() / 2, height / 2)
-                               : pos.toPoint() + QPoint(12, -height - 4);
-    m_valueEditor->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - m_valueEditor->width())),
-                        std::clamp(at.y(), 0, std::max(0, m_view->height() - m_valueEditor->height())));
-    m_valueEditor->show();
-    m_valueEditor->raise();
-    m_valueEditor->setFocus();
-    m_valueEditor->selectAll();
-}
-
-void SketchEditor::previewValue(const QString& text)
-{
-    if (!m_valuePreview) {
-        return;
-    }
-    std::optional<sketch::Sketch> shown;
-    if (const std::optional<double> typed = parseValue(text, m_valueQuantity)) {
-        sketch::Sketch candidate = m_valuePreview(*typed);
-        const sketch::SolveResult result = sketch::solve(candidate);
-        if (result.solved && result.conflicting.empty()) {
-            shown = std::move(candidate);
-        }
-    }
-    m_dragPreview = std::move(shown);
-    m_previewingValue = true;
-    redraw();
-}
-
-void SketchEditor::closeValueEditor()
-{
-    m_valueApply = nullptr;
-    m_valuePreview = nullptr;
-    if (std::exchange(m_previewingValue, false)) {
-        m_dragPreview.reset();
+    if (!committed) {
         redraw();
     }
-    if (m_valueEditor->isVisible()) {
-        m_valueEditor->hide();
-        m_view->setFocus();
-    }
+    return committed;
 }
 
 void SketchEditor::resetProgress()
@@ -804,38 +869,11 @@ void SketchEditor::resetProgress()
         m_mirrorAxis = 0;
     }
     m_inputs->close();
-}
-
-void SketchEditor::dropDrag()
-{
-    m_dragPoint = 0;
-    m_dragStart.reset();
-    m_dragPreview.reset();
-    dropBox();
-}
-
-void SketchEditor::dropBox()
-{
-    m_boxStart.reset();
-    if (std::exchange(m_boxing, false)) {
-        m_view->hideBand();
+    if (std::exchange(m_typedMove, false)) {
+        m_dragPoints.clear();
+        m_dragStart.reset();
+        m_dragPreview.reset();
     }
-}
-
-void SketchEditor::selectInBox(QPointF from, QPointF to)
-{
-    const gp_Ax3 ax = plane();
-    const auto project = [&](Vec2 p) {
-        const QPointF screen = m_view->toScreen(sketch::toWorld(ax, p));
-        return Vec2{screen.x(), screen.y()};
-    };
-    const sketch::BoxMode mode = viewer::isCrossingBox(from, to) ? sketch::BoxMode::Crossing : sketch::BoxMode::Window;
-    const std::vector<Id> ids = sketch::inBox(current(), project, {from.x(), from.y()}, {to.x(), to.y()}, mode);
-    m_selection.insert(ids.begin(), ids.end());
-    K137_DEBUG(Input, "{} box picked {} sketch items", mode == sketch::BoxMode::Crossing ? "Crossing" : "Window",
-               ids.size());
-    redraw();
-    emit stateChanged();
 }
 
 } // namespace kalve137::app

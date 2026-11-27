@@ -23,6 +23,7 @@
 #include <QLayoutItem>
 #include <QPushButton>
 #include <QScopedValueRollback>
+#include <QScrollArea>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -34,6 +35,12 @@ namespace kalve137::app {
 
 using feature_panel_detail::counted;
 using feature_panel_detail::kMatchTolerance;
+
+namespace {
+
+constexpr int kVisibleItems = 5;
+
+} // namespace
 
 FeaturePanel::Resolved FeaturePanel::resolve() const
 {
@@ -154,11 +161,11 @@ void FeaturePanel::onSelectionChanged()
     if (!isActive()) {
         return;
     }
-    const std::vector<Pick> picks = m_scene.takePicks();
+    const std::vector<Pick> picks = m_source.takePicks();
     if (picks.empty()) {
         return;
     }
-    const QScopedValueRollback addOnly(m_addOnly, m_view->selectedByBox());
+    const QScopedValueRollback addOnly(m_addOnly, m_source.selectedByBox());
     for (const Pick& pick : picks) {
         K137_DEBUG(Input, "Feature panel pick kind {} feature {} index {}", static_cast<int>(pick.kind), pick.feature,
                    pick.index);
@@ -493,6 +500,7 @@ void FeaturePanel::refreshItems(const std::vector<QString>& items)
         }
         delete item;
     }
+    int rowHeight = 0;
     for (std::size_t i = 0; i < items.size(); ++i) {
         auto* row = new QWidget(m_items);
         auto* layout = new QHBoxLayout(row);
@@ -502,14 +510,16 @@ void FeaturePanel::refreshItems(const std::vector<QString>& items)
         auto* remove = new QToolButton(row);
         remove->setObjectName("removeItem");
         remove->setText(QStringLiteral("×"));
-        remove->setToolTip(tr("Remove from the selection"));
+        remove->setToolTip(tr("Remove from selection"));
         remove->setAutoRaise(true);
         layout->addWidget(label, 1);
         layout->addWidget(remove);
         connect(remove, &QToolButton::clicked, this, [this, i] { removeItem(i); });
         m_itemsLayout->addWidget(row);
+        rowHeight = row->sizeHint().height();
     }
-    m_items->setVisible(!items.empty());
+    m_itemsArea->setFixedHeight(rowHeight * std::min(static_cast<int>(items.size()), kVisibleItems));
+    m_itemsArea->setVisible(!items.empty());
 }
 
 void FeaturePanel::removeItem(std::size_t index)

@@ -53,29 +53,34 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
     description->setPlaceholderText(QDialog::tr("Steps to reproduce, what you expected and what happened"));
     layout->addWidget(description, 1);
 
-    auto* logs = new QCheckBox(QDialog::tr("Include the logs"), &dialog);
+    auto* logs = new QCheckBox(QDialog::tr("Include logs"), &dialog);
     logs->setChecked(true);
     auto* system = new QCheckBox(QDialog::tr("Include system information (OS, GPU, memory, versions)"), &dialog);
     system->setChecked(true);
-    auto* crashBox = new QCheckBox(&dialog);
+    layout->addWidget(logs);
+    layout->addWidget(system);
+    const auto addNote = [&](const QString& text) {
+        auto* note = new QLabel(text, &dialog);
+        note->setObjectName("panelHint");
+        layout->addWidget(note);
+    };
+    QCheckBox* crashBox = nullptr;
     if (crash) {
-        crashBox->setText(
-            QDialog::tr("Include the crash report from %1").arg(QLocale().toString(crash->time, QLocale::ShortFormat)));
+        crashBox = new QCheckBox(
+            QDialog::tr("Include crash report from %1").arg(QLocale().toString(crash->time, QLocale::ShortFormat)),
+            &dialog);
         crashBox->setChecked(true);
+        layout->addWidget(crashBox);
     } else {
-        crashBox->setText(QDialog::tr("No crash report found"));
-        crashBox->setEnabled(false);
+        addNote(QDialog::tr("No crash report found"));
     }
-    auto* designBox = new QCheckBox(&dialog);
+    QCheckBox* designBox = nullptr;
     if (design.empty()) {
-        designBox->setText(QDialog::tr("Save the design to include it"));
-        designBox->setEnabled(false);
+        addNote(QDialog::tr("Save design to include it"));
     } else {
-        designBox->setText(
-            QDialog::tr("Include the design %1 (its last saved state)").arg(toQString(design.filename())));
-    }
-    for (QCheckBox* box : {logs, system, crashBox, designBox}) {
-        layout->addWidget(box);
+        designBox = new QCheckBox(QDialog::tr("Include design %1 (last saved state)").arg(toQString(design.filename())),
+                                  &dialog);
+        layout->addWidget(designBox);
     }
     auto* status = new QLabel(&dialog);
     status->setWordWrap(true);
@@ -83,8 +88,9 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
     layout->addWidget(status);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    QPushButton* saveZip = buttons->addButton(QDialog::tr("Save Zip..."), QDialogButtonBox::ActionRole);
+    auto* saveZip = new QPushButton(QDialog::tr("Save Zip..."), buttons);
     saveZip->setObjectName("primaryButton");
+    buttons->addButton(saveZip, QDialogButtonBox::ActionRole);
     QPushButton* copy = buttons->addButton(QDialog::tr("Copy Issue Text"), QDialogButtonBox::ActionRole);
     QPushButton* openFolder = buttons->addButton(QDialog::tr("Open Log Folder"), QDialogButtonBox::ActionRole);
     layout->addWidget(buttons);
@@ -95,10 +101,10 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
         report.description = description->toPlainText();
         report.includeLogs = logs->isChecked();
         report.includeSystem = system->isChecked();
-        if (crashBox->isChecked()) {
+        if (crashBox != nullptr && crashBox->isChecked()) {
             report.crash = crash;
         }
-        if (designBox->isChecked()) {
+        if (designBox != nullptr && designBox->isChecked()) {
             report.design = design;
         }
         return report;
@@ -125,12 +131,12 @@ void showProblemReport(QWidget* parent, std::optional<diagnostics::Crash> crash,
     });
     QObject::connect(copy, &QPushButton::clicked, &dialog, [&] {
         QApplication::clipboard()->setText(issueText(current(), savedZip));
-        status->setText(QDialog::tr("Issue text copied to the clipboard"));
+        status->setText(QDialog::tr("Issue text copied to clipboard"));
     });
     QObject::connect(openFolder, &QPushButton::clicked, &dialog,
                      [] { QDesktopServices::openUrl(QUrl::fromLocalFile(toQString(diagnostics::logFolder()))); });
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    dialog.resize(kDialogSize);
+    dialog.resize(theme::onScreen(dialog, kDialogSize));
     dialog.exec();
 }
 

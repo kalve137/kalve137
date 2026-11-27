@@ -7,9 +7,15 @@
 
 #include "geometry/face_names.h"
 
+#include <Bnd_Box.hxx>
+#include <NCollection_DataMap.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_List.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Vertex.hxx>
 #include <gp_Ax1.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -26,9 +32,12 @@ std::string namePrefix(FeatureId id);
 FeatureId featureOfName(const std::string& name);
 FeatureId featureOfFace(const Body& body, const TopoDS_Face& face);
 FeatureId featureOfEdge(const Body& body, const TopoDS_Edge& edge);
+bool namesFeature(const Body& body, FeatureId id);
+std::vector<BodyKey> bodiesOf(const Model& model, const Feature& feature);
 
 TopoRef faceRef(const Body& body, const TopoDS_Face& face, const gp_Pnt& point);
 TopoRef edgeRef(const Body& body, const TopoDS_Edge& edge, const gp_Pnt& point);
+TopoRef vertexRef(const Body& body, const TopoDS_Vertex& vertex);
 
 struct FaceHit {
     std::size_t body = 0;
@@ -40,8 +49,52 @@ struct EdgeHit {
     TopoDS_Edge edge;
 };
 
-std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref);
+struct VertexHit {
+    std::size_t body = 0;
+    TopoDS_Vertex vertex;
+};
+
+using AncestorMap = NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher>;
+
+class ShapeAncestors {
+public:
+    explicit ShapeAncestors(const std::vector<Body>& bodies);
+
+    const std::vector<Body>& bodies() const { return m_bodies; }
+    const AncestorMap& edgeFaces(std::size_t body);
+    const AncestorMap& vertexFaces(std::size_t body);
+
+private:
+    const std::vector<Body>& m_bodies;
+    std::vector<std::optional<AncestorMap>> m_edgeFaces;
+    std::vector<std::optional<AncestorMap>> m_vertexFaces;
+};
+
+class FaceLookup {
+public:
+    std::optional<FaceHit> atPoint(const std::vector<Body>& bodies, const gp_Pnt& point);
+    void clear();
+
+private:
+    struct Found {
+        gp_Pnt point;
+        std::vector<TopoDS_Shape> shapes;
+        std::optional<FaceHit> hit;
+        int faceIndex = 0;
+    };
+
+    const Bnd_Box& boxOf(const TopoDS_Shape& shape);
+
+    std::vector<Found> m_found;
+    NCollection_DataMap<TopoDS_Shape, Bnd_Box, TopTools_ShapeMapHasher> m_boxes;
+};
+
+std::optional<int> faceIndexOf(const TopoDS_Shape& shape, const TopoDS_Face& face);
+std::optional<FaceHit> resolveFace(const std::vector<Body>& bodies, const TopoRef& ref, FaceLookup* lookup = nullptr);
 std::optional<EdgeHit> resolveEdge(const std::vector<Body>& bodies, const TopoRef& ref);
+std::optional<EdgeHit> resolveEdge(ShapeAncestors& ancestors, const TopoRef& ref);
+std::optional<VertexHit> resolveVertex(const std::vector<Body>& bodies, const TopoRef& ref);
+std::optional<VertexHit> resolveVertex(ShapeAncestors& ancestors, const TopoRef& ref);
 std::optional<gp_Ax1> holeAxis(const std::vector<Body>& bodies, const TopoRef& ref);
 
 geometry::FaceNames nameExtrusion(const TopoDS_Shape& tool, FeatureId id, const SketchState& state,

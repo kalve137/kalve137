@@ -6,6 +6,7 @@
 #include "app/sketch/constraint_badge.h"
 
 #include "core/expression.h"
+#include "sketch/dimension_layout.h"
 #include "sketch/sketch.h"
 #include "sketch/solver.h"
 #include "viewer/style.h"
@@ -23,6 +24,7 @@
 #include <cstddef>
 #include <functional>
 #include <numbers>
+#include <optional>
 
 namespace kalve137::app::sketch_editor_detail {
 
@@ -32,6 +34,7 @@ using sketch::Id;
 using sketch::Vec2;
 
 inline constexpr double kPickPixels = 9.0;
+inline constexpr double kDimensionPickPixels = 2.5;
 inline constexpr double kInferencePixels = 6.0;
 inline constexpr double kInferenceLineWidth = viewer::style::kStrokeHairline;
 inline constexpr double kMinCrossing = 0.25;
@@ -39,33 +42,21 @@ inline constexpr double kAutoAxisDegrees = 3.0;
 inline constexpr double kGlyphPixels = 18.0;
 inline constexpr double kInputOffsetPixels = 24.0;
 inline constexpr double kInputGapPixels = 12.0;
+inline constexpr int kValueEditorWidth = 90;
+inline constexpr int kRecentValuesPixels = 20;
 inline constexpr double kAngleArcPixels = 30.0;
+inline constexpr double kAngleReachPixels = 120.0;
 inline constexpr double kCursorMarkerScale = viewer::style::kMarkerSmall;
 inline constexpr double kSnapMarkerScale = viewer::style::kMarkerMedium;
 inline constexpr double kMidpointMarkerScale = viewer::style::kMarkerLarge;
 inline constexpr double kGlyphStepPixels = kConstraintBadgePixels + 3.0;
 inline constexpr double kDimensionTextPixels = 20.0;
-inline constexpr double kDimensionFlyoutPixels = 28.0;
-inline constexpr double kAngleDimensionPixels = 64.0;
+using sketch::kAngleDimensionPixels;
+using sketch::kDimensionFlyoutPixels;
 inline constexpr double kRescaleTolerance = 0.02;
 inline constexpr int kRescaleDelayMs = 120;
 inline constexpr double kProfileTransparency = viewer::style::kTintFaint;
 inline constexpr double kTwoPi = 2.0 * std::numbers::pi;
-
-inline double dot(Vec2 a, Vec2 b)
-{
-    return a.x * b.x + a.y * b.y;
-}
-inline double length(Vec2 a)
-{
-    return std::hypot(a.x, a.y);
-}
-
-inline Vec2 normalized(Vec2 a)
-{
-    const double l = length(a);
-    return l > 0.0 ? a * (1.0 / l) : Vec2{1.0, 0.0};
-}
 
 inline Vec2 closestOnSegment(Vec2 p, Vec2 a, Vec2 b)
 {
@@ -92,6 +83,18 @@ inline double angleOf(Vec2 v)
 inline bool angleInArc(double angle, double start, double end)
 {
     return wrapAngle(angle - start) <= wrapAngle(end - start);
+}
+
+inline std::optional<ConstraintKind> autoAxisOf(Vec2 delta)
+{
+    const double degrees = std::abs(std::atan2(delta.y, delta.x)) * 180.0 / std::numbers::pi;
+    if (degrees < kAutoAxisDegrees || degrees > 180.0 - kAutoAxisDegrees) {
+        return ConstraintKind::Horizontal;
+    }
+    if (std::abs(degrees - 90.0) < kAutoAxisDegrees) {
+        return ConstraintKind::Vertical;
+    }
+    return std::nullopt;
 }
 
 inline QString formatValue(double value)
@@ -149,6 +152,8 @@ inline QString glyphFor(ConstraintKind kind)
         return QStringLiteral("midpoint");
     case ConstraintKind::Symmetric:
         return QStringLiteral("symmetric");
+    case ConstraintKind::Offset:
+        return QStringLiteral("sketch_offset");
     case ConstraintKind::Coincident:
     case ConstraintKind::Distance:
     case ConstraintKind::HorizontalDistance:
@@ -183,13 +188,17 @@ inline Vec2 anchorOf(const sketch::Sketch& sketch, Id curveId)
     return {};
 }
 
+inline bool solvesWithin(sketch::Sketch probe, std::size_t redundantBefore)
+{
+    const sketch::SolveResult result = sketch::solve(probe);
+    return result.solved && result.conflicting.empty() && result.redundant.size() <= redundantBefore;
+}
+
 inline sketch::Sketch withDimensionsIfSolvable(const std::function<sketch::Sketch(bool)>& build,
                                                std::size_t redundantBefore)
 {
     sketch::Sketch candidate = build(true);
-    sketch::Sketch probe = candidate;
-    const sketch::SolveResult result = sketch::solve(probe);
-    if (!result.solved || !result.conflicting.empty() || result.redundant.size() > redundantBefore) {
+    if (!solvesWithin(candidate, redundantBefore)) {
         return build(false);
     }
     return candidate;

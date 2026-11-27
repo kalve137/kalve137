@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "app/session/design_session.h"
+#include "app/shell/main_window.h"
+#include "app/view/camera_commands.h"
 #include "scenario.h"
 #include "ui_test.h"
 
@@ -56,7 +59,7 @@ TEST_F(FeatureTest, FilletsTwoSetsWithTheirOwnRadius)
     ui->click(kTopFrontEdge);
     ui->fill("Radius", "2", false);
     ui->pressButton("Add set");
-    ASSERT_NE(ui->field("Set"), nullptr) << "the set chooser shows once there are two sets";
+    ASSERT_NE(ui->field("Set"), nullptr) << "set chooser shows once there are two sets";
     ui->click(gp_Pnt(0, kBlockDepth / 2, kBlockHeight));
     ui->save("second set");
     ui->fill("Radius", "3");
@@ -187,7 +190,9 @@ TEST_F(FeatureTest, ClosesWithEveryCommandOpen)
         ui->click(kTopFace);
         ui.reset();
         ui = std::make_unique<UiDriver>();
-        block(*ui);
+        ui->session().reset(blockDocument(), {});
+        ui->window().cameraCommands()->home(app::CameraCommands::Move::Jump);
+        ASSERT_NEAR(volume(*ui), kBlockVolume, kTolerance) << ui->state().dump(2);
     }
 }
 
@@ -211,12 +216,14 @@ TEST_F(FeatureTest, IdleHoverAndSelectStayFast)
         ASSERT_FALSE(ui->selectionText().isEmpty());
         ui->key(Qt::Key_Escape);
     }
+    const qint64 budget = timeBudgetMs(kBudgetMs);
     RecordProperty("worst_hover_ms", static_cast<int>(worstHover));
     RecordProperty("worst_select_ms", static_cast<int>(worstSelect));
-    std::printf("worst hover %lld ms, worst select %lld ms\n", worstHover, worstSelect);
+    RecordProperty("budget_ms", static_cast<int>(budget));
+    std::printf("worst hover %lld ms, worst select %lld ms, budget %lld ms\n", worstHover, worstSelect, budget);
 #ifdef NDEBUG
-    EXPECT_LT(worstHover, kBudgetMs);
-    EXPECT_LT(worstSelect, kBudgetMs);
+    EXPECT_LT(worstHover, budget);
+    EXPECT_LT(worstSelect, budget);
 #endif
 }
 

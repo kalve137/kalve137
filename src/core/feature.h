@@ -12,6 +12,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,12 +44,24 @@ struct TopoRef {
     std::vector<std::string> names;
 };
 
+enum class ProjectionKind { Edge, Vertex };
+std::string_view toString(ProjectionKind kind);
+std::optional<ProjectionKind> projectionKindFromString(std::string_view name);
+
+struct Projection {
+    ProjectionKind kind = ProjectionKind::Edge;
+    sketch::Id curve = 0;
+    sketch::Id point = 0;
+    TopoRef ref;
+};
+
 struct SketchFeature {
     gp_Ax3 plane = originPlane(OriginPlane::XY);
     std::string planeName = "XY";
     FeatureId planeFeature = 0;
     std::optional<TopoRef> face;
     sketch::Sketch sketch;
+    std::vector<Projection> projections;
 };
 
 enum class PlaneKind { Offset, Angle, Midplane };
@@ -225,12 +238,14 @@ using FeatureData = std::variant<SketchFeature, ExtrudeFeature, RevolveFeature, 
                                  HoleFeature, MoveFeature, AxisFeature, PointFeature, AppearanceFeature>;
 
 std::string_view typeName(const FeatureData& data);
+FeatureId profileSketchOf(const FeatureData& data);
 
 struct Feature {
     FeatureId id = 0;
     std::string name;
     bool suppressed = false;
     FeatureData data;
+    std::map<std::string, std::string> expressions;
 };
 
 template <typename... Ts>

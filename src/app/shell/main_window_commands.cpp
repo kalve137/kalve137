@@ -28,9 +28,10 @@ namespace kalve137::app {
 
 namespace {
 
-constexpr std::size_t kRecentCommandCount = 3;
+constexpr std::size_t kRecentCommandCount = 12;
+constexpr std::size_t kRecentListCount = 3;
 
-}
+} // namespace
 
 void MainWindow::trackCommand(QAction* action)
 {
@@ -45,24 +46,31 @@ void MainWindow::trackCommand(QAction* action)
     });
 }
 
+QAction* MainWindow::repeatableCommand() const
+{
+    const auto found = std::ranges::find_if(m_recentCommands, [](const QAction* a) { return a->isEnabled(); });
+    return found != m_recentCommands.end() ? *found : nullptr;
+}
+
 void MainWindow::repeatLastCommand()
 {
-    if (!m_recentCommands.empty()) {
-        m_recentCommands.front()->trigger();
+    if (QAction* command = repeatableCommand()) {
+        command->trigger();
     }
 }
 
 void MainWindow::updateRepeatAction()
 {
-    if (m_recentCommands.empty()) {
+    const QAction* command = repeatableCommand();
+    if (command == nullptr) {
         m_repeat->setText(tr("Repeat"));
+        m_repeat->setIcon({});
         m_repeat->setEnabled(false);
         return;
     }
-    const QAction* last = m_recentCommands.front();
-    m_repeat->setText(tr("Repeat %1").arg(last->text().remove('&')));
-    m_repeat->setIcon(last->icon());
-    m_repeat->setEnabled(last->isEnabled());
+    m_repeat->setText(tr("Repeat %1").arg(command->text().remove('&')));
+    m_repeat->setIcon(command->icon());
+    m_repeat->setEnabled(true);
 }
 
 void MainWindow::showMarkingMenu(QPoint center)
@@ -86,8 +94,8 @@ void MainWindow::showMarkingMenu(QPoint center)
     menu->setSlot(Slot::West, m_undo);
     menu->setSlot(Slot::NorthWest, m_delete);
     if (sketching) {
-        menu->setSlot(Slot::South, temporary(icons::tinted("finish_sketch", theme::kGold), m_finishSketch->text(), {},
-                                             [this] { finishSketch(); }));
+        menu->setSlot(Slot::South, temporary(icons::tinted("finish_sketch", &theme::ChromeColors::accent),
+                                             m_finishSketch->text(), {}, [this] { finishSketch(); }));
         menu->setSlot(Slot::SouthWest, m_toolActions.at(SketchEditor::Tool::Line));
     } else {
         menu->setSlot(Slot::South, m_createSketch);
@@ -101,9 +109,9 @@ void MainWindow::showMarkingMenu(QPoint center)
     const bool idle = !sketching && !m_featurePanel->isActive() && !m_measurePanel->isActive() && !m_pickingPlane;
     std::vector<Pick> picks;
     if (idle) {
-        picks = m_scene->selected();
-        if (picks.empty() && m_scene->selectHovered()) {
-            picks = m_scene->selected();
+        picks = m_picks->selected();
+        if (picks.empty() && m_picks->selectHovered()) {
+            picks = m_picks->selected();
             updateStatus();
         }
     }
@@ -132,7 +140,7 @@ void MainWindow::showMarkingMenu(QPoint center)
         const core::BodyKey key = body->key();
         const QString name = body->name.empty() ? tr("Body") : QString::fromStdString(body->name);
         menu->addListAction(temporary({}, tr("Hide %1").arg(name), {}, [this, key] {
-            m_scene->clearSelection();
+            m_picks->clearSelection();
             m_session->setBodyVisible(key, false);
             updateStatus();
         }));
@@ -148,8 +156,13 @@ void MainWindow::showMarkingMenu(QPoint center)
         }
     }
     menu->addListSeparator();
+    const QAction* repeated = repeatableCommand();
+    std::size_t listed = 0;
     for (QAction* action : m_recentCommands) {
-        menu->addListAction(action);
+        if (listed < kRecentListCount && action->isEnabled() && action != repeated && !menu->inRing(action)) {
+            menu->addListAction(action);
+            ++listed;
+        }
     }
     menu->popup(center);
 }

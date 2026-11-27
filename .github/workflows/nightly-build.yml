@@ -1,0 +1,119 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Nightly build
+
+on:
+  workflow_call:
+    inputs:
+      force:
+        description: Build even when dev matches the nightly release
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.plan.outputs.skip }}
+      version_base: ${{ steps.plan.outputs.version_base }}
+      version_suffix: ${{ steps.plan.outputs.version_suffix }}
+      commit: ${{ steps.plan.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+
+      - name: Plan nightly build
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          short="$(git rev-parse --short HEAD)"
+          date="$(date -u +%Y%m%d)"
+          skip=false
+          if [[ "$FORCE" != "true" ]] && gh release view nightly >/dev/null 2>&1; then
+              line="$(gh release view nightly --json body -q .body | head -n 1)"
+              stored="${line#Commit }"
+              if [[ "$stored" == "$commit" || "$stored" == "$short" ]]; then
+                  skip=true
+              fi
+          fi
+          {
+              echo "skip=$skip"
+              echo "commit=$commit"
+              echo "version_base=0.2.0"
+              echo "version_suffix=-dev.${date}+${short}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    uses: kalve137/kalve137/.github/workflows/packages.yml@dev
+    with:
+      ref: ${{ needs.prepare.outputs.commit }}
+      version_base: ${{ needs.prepare.outputs.version_base }}
+      version_suffix: ${{ needs.prepare.outputs.version_suffix }}
+    secrets: inherit
+
+  publish:
+    name: Publish
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: kalve137-*
+          path: assets
+          merge-multiple: true
+
+      - name: Update nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          set -euo pipefail
+          notes="Commit ${COMMIT}"
+          shopt -s nullglob
+          uploads=(assets/kalve137-*)
+          if [[ ${#uploads[@]} -eq 0 ]]; then
+              echo "No package artifacts" >&2
+              exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" >/dev/null 2>&1; then
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" -f sha="$COMMIT" -F force=true >/dev/null
+          else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/nightly" -f sha="$COMMIT" >/dev/null
+          fi
+          if gh release view nightly >/dev/null 2>&1; then
+              gh release upload nightly "${uploads[@]}" --clobber
+              declare -A fresh=()
+              for path in "${uploads[@]}"; do
+                  fresh["$(basename "$path")"]=1
+              done
+              while IFS= read -r name; do
+                  if [[ -z "${fresh[$name]:-}" ]]; then
+                      gh release delete-asset nightly "$name" --yes
+                  fi
+              done < <(gh release view nightly --json assets -q '.assets[].name')
+              gh release edit nightly --prerelease --notes "$notes" --title "nightly" --latest=false
+          else
+              gh release create nightly --verify-tag --prerelease --latest=false --title "nightly" --notes "$notes" "${uploads[@]}"
+          fi

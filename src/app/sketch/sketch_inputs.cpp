@@ -75,7 +75,8 @@ void SketchInputs::open(const std::vector<Kind>& kinds)
         box.edit = new QLineEdit(m_view);
         box.edit->setObjectName("sketchInput");
         box.edit->setFixedWidth(kBoxWidth);
-        box.lock = box.edit->addAction(icons::fixed(QStringLiteral("lock"), theme::kGold), QLineEdit::TrailingPosition);
+        box.lock = box.edit->addAction(icons::fixed(QStringLiteral("lock"), &theme::ChromeColors::accent),
+                                       QLineEdit::TrailingPosition);
         box.lock->setVisible(false);
         box.edit->installEventFilter(this);
         QLineEdit* edit = box.edit;
@@ -131,7 +132,16 @@ void SketchInputs::setLive(std::size_t index, double value, QPointF anchor, QPoi
             box.edit->selectAll();
         }
     }
-    const QSize size(box.edit->width(), box.edit->sizeHint().height());
+    place(index, anchor, away);
+}
+
+void SketchInputs::place(std::size_t index, QPointF anchor, QPointF away)
+{
+    if (index >= m_boxes.size()) {
+        return;
+    }
+    Box& box = m_boxes[index];
+    const QSize size = boxSize(index).toSize();
     anchor += away * (std::abs(away.x()) * size.width() / 2.0 + std::abs(away.y()) * size.height() / 2.0);
     const QPoint at = (anchor - QPointF(size.width() / 2.0, size.height() / 2.0)).toPoint();
     box.edit->move(std::clamp(at.x(), 0, std::max(0, m_view->width() - size.width())),
@@ -144,6 +154,22 @@ void SketchInputs::setLive(std::size_t index, double value, QPointF anchor, QPoi
         m_pendingFocus.reset();
         focusBox(index);
     }
+}
+
+void SketchInputs::setPlaceholder(std::size_t index, const QString& text)
+{
+    if (index < m_boxes.size()) {
+        m_boxes[index].edit->setPlaceholderText(text);
+    }
+}
+
+QSizeF SketchInputs::boxSize(std::size_t index) const
+{
+    if (index >= m_boxes.size()) {
+        return {};
+    }
+    const QLineEdit* edit = m_boxes[index].edit;
+    return {static_cast<double>(edit->width()), static_cast<double>(edit->sizeHint().height())};
 }
 
 std::optional<double> SketchInputs::held(std::size_t index) const

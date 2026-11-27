@@ -3,16 +3,26 @@
 
 #include "app/feature/value_edit.h"
 
+#include "app/theme/theme.h"
+
 #include <QFocusEvent>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QStyle>
 #include <QTimer>
 #include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace kalve137::app {
+
+namespace {
+
+constexpr int kWholeCheckDecimals = 3;
+
+} // namespace
 
 QString formatValue(double value, core::Quantity quantity, int decimals)
 {
@@ -46,34 +56,85 @@ std::optional<double> parseValue(const QString& text, core::Quantity quantity)
 }
 
 ValueEdit::ValueEdit(core::Quantity quantity, double value, QWidget* parent)
-    : QLineEdit(parent), m_quantity(quantity), m_value(value)
+    : QLineEdit(parent), m_quantity(quantity), m_value(value), m_committed(value)
 {
     setObjectName("valueEdit");
     setToolTip(tr("Type a value or an expression, such as 30/2 or 1in"));
     showValue();
     connect(this, &QLineEdit::editingFinished, this, [this] {
         if (!commit()) {
-            showValue();
+            showText();
         }
     });
     connect(this, &QLineEdit::textEdited, this, [this](const QString& text) {
-        const std::optional<double> parsed = parseValue(text, m_quantity);
-        setInvalid(!parsed.has_value());
-        if (!parsed || *parsed < m_minimum || *parsed > m_maximum || *parsed == m_value) {
+        if (m_error != nullptr) {
+            m_error->dismiss();
+        }
+        const TypedValue typed = readTyped(text, m_quantity, m_source);
+        setInvalid(typed.error.has_value());
+        if (typed.error || !whole(typed.value) || typed.value < m_minimum || typed.value > m_maximum ||
+            typed.value == m_value) {
             return;
         }
-        m_value = *parsed;
+        m_value = typed.value;
         emit valueChanged(m_value);
     });
 }
 
+void ValueEdit::acceptNames(ParameterSource source)
+{
+    m_source = std::move(source);
+    if (m_completer == nullptr) {
+        m_completer = new NameCompleter(this, [this] { return m_source(); });
+    }
+}
+
+void ValueEdit::setExpression(const QString& canonical)
+{
+    m_expression = canonical;
+    showValue();
+}
+
 void ValueEdit::setValue(double value)
 {
-    m_value = std::clamp(value, m_minimum, m_maximum);
-    if (hasFocus() && parseValue(text(), m_quantity) == m_value) {
+    const double clamped = std::clamp(value, m_minimum, m_maximum);
+    if (const TypedValue typed = readTyped(text(), m_quantity, m_source);
+        hasFocus() && !typed.error && typed.value == clamped) {
+        m_value = clamped;
         return;
     }
+    const bool unchanged = clamped == m_value && clamped == m_committed;
+    if (clamped != m_value) {
+        dropExpression();
+    }
+    m_value = clamped;
+    m_committed = clamped;
+    if (unchanged) {
+        if (!hasFocus()) {
+            showText();
+        }
+    } else {
+        showValue();
+    }
+}
+
+void ValueEdit::chooseValue(double value)
+{
+    m_value = std::clamp(value, m_minimum, m_maximum);
+    m_committed = m_value;
+    dropExpression();
     showValue();
+    selectAll();
+    emit valueChanged(m_value);
+}
+
+void ValueEdit::dropExpression()
+{
+    if (m_expression.isEmpty()) {
+        return;
+    }
+    m_expression.clear();
+    emit expressionChanged(m_expression);
 }
 
 void ValueEdit::setRange(double minimum, double maximum)
@@ -100,6 +161,9 @@ void ValueEdit::keyPressEvent(QKeyEvent* event)
         return;
     case Qt::Key_Return:
     case Qt::Key_Enter:
+        if (m_completer != nullptr && m_completer->justCompleted()) {
+            return;
+        }
         if (commit()) {
             selectAll();
             emit accepted();
@@ -126,30 +190,119 @@ void ValueEdit::wheelEvent(QWheelEvent* event)
 void ValueEdit::focusInEvent(QFocusEvent* event)
 {
     QLineEdit::focusInEvent(event);
+    if (!m_expression.isEmpty()) {
+        showValue();
+    }
     QTimer::singleShot(0, this, &QLineEdit::selectAll);
+}
+
+void ValueEdit::focusOutEvent(QFocusEvent* event)
+{
+    QLineEdit::focusOutEvent(event);
+    if (m_completer != nullptr) {
+        m_completer->hide();
+    }
+    if (event->reason() != Qt::PopupFocusReason) {
+        showText();
+    }
+}
+
+void ValueEdit::resizeEvent(QResizeEvent* event)
+{
+    QLineEdit::resizeEvent(event);
+    showMark();
 }
 
 bool ValueEdit::commit()
 {
-    const std::optional<double> parsed = parseValue(text(), m_quantity);
-    if (!parsed) {
+    if (m_completer != nullptr) {
+        m_completer->hide();
+    }
+    const TypedValue typed = readTyped(text(), m_quantity, m_source);
+    std::optional<core::ExpressionError> error = typed.error;
+    if (!error && !whole(typed.value)) {
+        error = core::ExpressionError{
+            "range",
+            tr("%1 is not a whole number").arg(formatValue(typed.value, m_quantity, kWholeCheckDecimals)).toStdString(),
+            tr("Use a whole number from %1 to %2")
+                .arg(formatValue(m_minimum, m_quantity, 0), formatValue(m_maximum, m_quantity, 0))
+                .toStdString()};
+    }
+    if (!error && !typed.canonical.empty() && (typed.value < m_minimum || typed.value > m_maximum)) {
+        error = core::ExpressionError{
+            "range", tr("%1 is out of range").arg(formatValue(typed.value, m_quantity, m_decimals)).toStdString(),
+            tr("Use a value from %1 to %2")
+                .arg(formatValue(m_minimum, m_quantity, m_decimals), formatValue(m_maximum, m_quantity, m_decimals))
+                .toStdString()};
+    }
+    if (error) {
         setInvalid(true);
+        if (m_source) {
+            if (m_error == nullptr) {
+                m_error = new FieldError(this);
+            }
+            m_error->showError(*error);
+        }
+        if (m_value != m_committed) {
+            m_value = m_committed;
+            emit valueChanged(m_value);
+        }
         return false;
     }
-    const double value = std::clamp(*parsed, m_minimum, m_maximum);
+    const double value = std::clamp(typed.value, m_minimum, m_maximum);
     const bool changed = value != m_value;
+    const QString expression = QString::fromStdString(typed.canonical);
+    const bool rewritten = expression != m_expression;
     m_value = value;
+    m_committed = value;
+    m_expression = expression;
     showValue();
     if (changed) {
         emit valueChanged(m_value);
+    }
+    if (rewritten) {
+        emit expressionChanged(m_expression);
     }
     return true;
 }
 
 void ValueEdit::showValue()
 {
-    setText(formatValue(m_value, m_quantity, m_decimals));
+    showText();
+    if (m_error != nullptr) {
+        m_error->dismiss();
+    }
+}
+
+void ValueEdit::showText()
+{
+    const bool driven = !m_expression.isEmpty();
+    setText(driven && hasFocus() ? m_expression : formatValue(m_value, m_quantity, m_decimals));
     setInvalid(false);
+    showMark();
+}
+
+void ValueEdit::showMark()
+{
+    const bool shown = !m_expression.isEmpty() && !hasFocus();
+    if (shown && m_mark == nullptr) {
+        m_mark = new QLabel(QStringLiteral("fx"), this);
+        m_mark->setObjectName("fxMark");
+    }
+    if (m_mark == nullptr) {
+        return;
+    }
+    m_mark->setVisible(shown);
+    if (shown) {
+        m_mark->adjustSize();
+        m_mark->move(theme::kSpaceS, (height() - m_mark->height()) / 2);
+    }
+    setTextMargins(shown ? m_mark->width() + theme::kSpaceS : 0, 0, 0, 0);
+}
+
+bool ValueEdit::whole(double value) const
+{
+    return m_quantity != core::Quantity::Count || value == std::round(value);
 }
 
 void ValueEdit::setInvalid(bool invalid)
@@ -169,6 +322,8 @@ void ValueEdit::step(int steps)
     }
     const double value = std::clamp(m_value + steps * m_step, m_minimum, m_maximum);
     m_value = value;
+    m_committed = value;
+    dropExpression();
     showValue();
     selectAll();
     emit valueChanged(m_value);

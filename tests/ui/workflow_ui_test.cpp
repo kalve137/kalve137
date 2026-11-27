@@ -4,7 +4,25 @@
 #include "scenario.h"
 #include "ui_test.h"
 
+#include "app/session/preferences.h"
+#include "app/theme/theme.h"
+#include "viewer/occt_view_widget.h"
+
+#include <QColor>
+#include <QImage>
+#include <QPoint>
+#include <QPointF>
+#include <QRect>
+
+#include <gp_Pnt.hxx>
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <memory>
+#include <vector>
 
 namespace kalve137::uitest {
 namespace {
@@ -103,6 +121,189 @@ TEST_F(WorkflowTest, SketchOnAFaceFollowsTheFace)
     for (const nlohmann::json& feature : state["features"]) {
         EXPECT_EQ(feature["health"], "ok") << feature.dump();
     }
+}
+
+TEST_F(WorkflowTest, CutFromAFaceSketchGoesIntoTheBody)
+{
+    block(*ui);
+    ui->trigger("Create Sketch");
+    ui->click(gp_Pnt(5, 3, kBlockHeight));
+    ASSERT_EQ(ui->state()["sketch"], 3) << ui->state().dump(2);
+    ui->trigger("Rectangle");
+    ui->click(gp_Pnt(-5, -5, kBlockHeight));
+    ui->click(gp_Pnt(5, 5, kBlockHeight));
+    ui->save("sketch over face");
+    ui->trigger("Finish Sketch");
+
+    ui->trigger("Extrude");
+    ui->choose("Operation", "Cut");
+    ui->save("cut into face");
+    ui->fill("Distance", "5");
+    const nlohmann::json state = ui->state();
+    ASSERT_EQ(state["bodies"].size(), 1U) << state.dump(2);
+    EXPECT_NEAR(volume(*ui), kBlockVolume - 10.0 * 10.0 * 5.0, 1e-3) << state.dump(2);
+    for (const nlohmann::json& feature : state["features"]) {
+        EXPECT_EQ(feature["health"], "ok") << feature.dump();
+    }
+
+    ui->doubleClick(ui->timelineChip(4));
+    ui->choose("Operation", "Join");
+    ui->fill("Distance", "5");
+    EXPECT_NEAR(volume(*ui), kBlockVolume + 10.0 * 10.0 * 5.0, 1e-3) << ui->state().dump(2);
+}
+
+constexpr int kZoomSteps = 6;
+constexpr int kLineSamples = 200;
+constexpr int kLineBackgroundRows = 4;
+constexpr int kLineTolerance = 64;
+constexpr double kLineSplitCoverage = 0.7;
+
+std::vector<QPointF> viewMarks(const UiDriver& ui)
+{
+    return {ui.at(gp_Pnt(0, 0, 0)), ui.at(gp_Pnt(10, 0, 0)), ui.at(gp_Pnt(0, 10, 0)), ui.at(gp_Pnt(0, 0, 10))};
+}
+
+void expectSameView(const std::vector<QPointF>& before, const std::vector<QPointF>& after)
+{
+    ASSERT_EQ(before.size(), after.size());
+    for (std::size_t i = 0; i < before.size(); ++i) {
+        EXPECT_NEAR(before[i].x(), after[i].x(), 1.0) << "mark " << i;
+        EXPECT_NEAR(before[i].y(), after[i].y(), 1.0) << "mark " << i;
+    }
+}
+
+TEST_F(WorkflowTest, FinishingASketchReturnsToThePreviousView)
+{
+    ui->settle();
+    const std::vector<QPointF> before = viewMarks(*ui);
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XZ));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->settle();
+    const QPointF up = ui->at(gp_Pnt(0, 0, 10)) - ui->at(gp_Pnt(0, 0, 0));
+    const QPointF across = ui->at(gp_Pnt(10, 0, 0)) - ui->at(gp_Pnt(0, 0, 0));
+    EXPECT_LT(std::abs(up.x()), 1.0) << "View faces XZ plane";
+    EXPECT_LT(std::abs(across.y()), 1.0) << "View faces XZ plane";
+
+    ui->trigger("Finish Sketch");
+    ui->settle();
+    expectSameView(before, viewMarks(*ui));
+}
+
+void zoomOnGridLine(UiDriver& ui)
+{
+    ui.settle();
+    for (int i = 0; i < kZoomSteps; ++i) {
+        ui.wheel(ui.at(gp_Pnt(45, 20, 0)), 2);
+    }
+    ui.settle();
+}
+
+int distance(const QColor& a, const QColor& b)
+{
+    return std::abs(a.red() - b.red()) + std::abs(a.green() - b.green()) + std::abs(a.blue() - b.blue());
+}
+
+double coverage(const QColor& pixel, const QColor& background, const QColor& line)
+{
+    const std::array<double, 3> toLine{static_cast<double>(line.red() - background.red()),
+                                       static_cast<double>(line.green() - background.green()),
+                                       static_cast<double>(line.blue() - background.blue())};
+    const std::array<double, 3> toPixel{static_cast<double>(pixel.red() - background.red()),
+                                        static_cast<double>(pixel.green() - background.green()),
+                                        static_cast<double>(pixel.blue() - background.blue())};
+    double along = 0.0;
+    double length = 0.0;
+    for (std::size_t i = 0; i < toLine.size(); ++i) {
+        along += toPixel.at(i) * toLine.at(i);
+        length += toLine.at(i) * toLine.at(i);
+    }
+    return length > 0.0 ? along / length : 0.0;
+}
+
+void expectSolidAlongGridLine(UiDriver& ui, const QColor& line)
+{
+    const QImage frame = ui.canvasImage();
+    const qreal ratio = ui.canvas()->devicePixelRatioF();
+    int sampled = 0;
+    int solid = 0;
+    for (int i = 0; i <= kLineSamples; ++i) {
+        const QPointF at = ui.at(gp_Pnt(30.0 + 30.0 * i / kLineSamples, 20, 0)) * ratio;
+        const QPoint pixel = at.toPoint();
+        const QRect around(pixel - QPoint(0, kLineBackgroundRows), pixel + QPoint(0, kLineBackgroundRows));
+        if (!frame.rect().contains(around)) {
+            continue;
+        }
+        ++sampled;
+        QColor background = line;
+        for (const int dy :
+             {-kLineBackgroundRows, 1 - kLineBackgroundRows, kLineBackgroundRows - 1, kLineBackgroundRows}) {
+            const QColor c = frame.pixelColor(pixel + QPoint(0, dy));
+            if (distance(c, line) > distance(background, line)) {
+                background = c;
+            }
+        }
+        bool full = false;
+        std::array<double, 3> rows{};
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            const QColor c = frame.pixelColor(pixel + QPoint(0, static_cast<int>(row) - 1));
+            full = full || distance(c, line) <= kLineTolerance;
+            rows.at(row) = coverage(c, background, line);
+        }
+        const bool split = std::min(rows.at(0), rows.at(1)) >= kLineSplitCoverage ||
+                           std::min(rows.at(1), rows.at(2)) >= kLineSplitCoverage;
+        solid += full || split ? 1 : 0;
+    }
+    ASSERT_GT(sampled, kLineSamples / 2);
+    EXPECT_GE(solid, sampled * 9 / 10) << solid << " of " << sampled << " samples show the line";
+}
+
+TEST_F(WorkflowTest, FinishedSketchLinesStaySolidOnTheGrid)
+{
+    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
+    ASSERT_EQ(ui->state()["sketch"], 0);
+    zoomOnGridLine(*ui);
+    ui->save("zoomed on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().viewport.sketchFree);
+}
+
+TEST_F(WorkflowTest, BodyEdgesAndTheirHighlightStaySolidOnTheGrid)
+{
+    sketchRectangle(*ui, core::OriginPlane::XY, gp_Pnt(30, 20, 0), gp_Pnt(60, 40, 0));
+    extrude(*ui, "10");
+    zoomOnGridLine(*ui);
+    ui->save("body edge on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().viewport.bodyEdge);
+
+    ui->click(gp_Pnt(45, 20, 0));
+    ASSERT_TRUE(ui->selectionText().startsWith("1 Edge")) << ui->selectionText().toStdString();
+    ui->move(QPointF(20, 20));
+    ui->settle();
+    ui->save("selected edge on a grid line");
+    expectSolidAlongGridLine(*ui, app::theme::palette().chrome.accent);
+}
+
+TEST_F(WorkflowTest, WithoutLookAtTheViewStaysPutThroughASketch)
+{
+    app::Preferences preferences = app::Preferences::load();
+    preferences.lookAtSketch = false;
+    preferences.save();
+    ui = std::make_unique<UiDriver>();
+    ui->settle();
+    const std::vector<QPointF> before = viewMarks(*ui);
+
+    ui->trigger("Create Sketch");
+    ui->click(ui->originPlane(core::OriginPlane::XZ));
+    ASSERT_NE(ui->state()["sketch"], 0);
+    ui->settle();
+    const QPointF up = ui->at(gp_Pnt(0, 0, 10)) - ui->at(gp_Pnt(0, 0, 0));
+    EXPECT_GT(std::abs(up.x()) + std::abs(ui->at(gp_Pnt(10, 0, 0)).y() - ui->at(gp_Pnt(0, 0, 0)).y()), 1.0)
+        << "View keeps its slant instead of facing plane";
+
+    ui->trigger("Finish Sketch");
+    ui->settle();
+    expectSameView(before, viewMarks(*ui));
 }
 
 } // namespace

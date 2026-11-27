@@ -4,6 +4,7 @@
 #include "crash_trace.h"
 #include "ui_driver.h"
 
+#include "app/theme/fonts.h"
 #include "app/theme/theme.h"
 #include "log/log.h"
 
@@ -12,6 +13,15 @@
 #include <QApplication>
 
 #include <gtest/gtest.h>
+
+namespace {
+
+class FontsEnvironment : public testing::Environment {
+public:
+    void SetUp() override { ASSERT_EQ(kalve137::app::fonts::families().qt.toStdString(), "Roboto"); }
+};
+
+} // namespace
 
 int main(int argc, char** argv)
 {
@@ -24,9 +34,9 @@ int main(int argc, char** argv)
     QApplication::setOrganizationName("Kalve 137 UI Tests");
     QApplication::setApplicationVersion(KALVE137_VERSION);
     kalve137::uitest::installHarness();
-    kalve137::app::theme::apply(app);
+    kalve137::app::theme::apply(app, kalve137::app::theme::Scheme::Dark);
+    testing::AddGlobalTestEnvironment(new FontsEnvironment);
     const int result = RUN_ALL_TESTS();
-    kalve137::uitest::resetSettings();
     kalve137::log::shutdown();
     return result;
 }

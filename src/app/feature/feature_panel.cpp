@@ -8,13 +8,14 @@
 #include "app/feature/value_edit.h"
 #include "app/session/design_session.h"
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
+#include "core/parameter_table.h"
 
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
 #include "geometry/topology.h"
 #include "log/log.h"
 #include "sketch/profiles.h"
-#include "viewer/occt_view_widget.h"
 
 #include <QLabel>
 #include <QPushButton>
@@ -141,35 +142,38 @@ double elapsedMs(std::chrono::steady_clock::time_point since)
 
 } // namespace
 
-FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, viewer::OcctViewWidget* view, QWidget* parent)
-    : QWidget(parent), m_session(session), m_scene(scene), m_view(view)
+FeaturePanel::FeaturePanel(DesignSession& session, Scene& scene, PickSource& picks, const ViewProjection& projection,
+                           QWidget* parent)
+    : QWidget(parent), m_session(session), m_scene(scene), m_source(picks), m_projection(projection)
 {
     m_layout = new QVBoxLayout(this);
     m_layout->setContentsMargins(theme::kPanelMargins);
     m_layout->addStretch();
-    connect(view, &viewer::OcctViewWidget::selectionChanged, this, &FeaturePanel::onSelectionChanged);
+    connect(&picks, &PickSource::selectionChanged, this, &FeaturePanel::onSelectionChanged);
 
     m_previewTimer = new QTimer(this);
     m_previewTimer->setSingleShot(true);
     m_previewTimer->setInterval(kDragPreviewMs);
     connect(m_previewTimer, &QTimer::timeout, this, &FeaturePanel::updatePreview);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &FeaturePanel::updatePreview);
 
-    m_handle = new DistanceHandle(view, this);
+    m_handle = new DistanceHandle(projection, this);
     connect(m_handle, &DistanceHandle::dragged, this, &FeaturePanel::onHandleValue);
     connect(m_handle, &DistanceHandle::edited, this, &FeaturePanel::onHandleValue);
     connect(m_handle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
-    m_secondHandle = new DistanceHandle(view, this);
+    m_secondHandle = new DistanceHandle(projection, this);
     m_secondHandle->setActive(false);
     connect(m_secondHandle, &DistanceHandle::dragged, this, &FeaturePanel::onSecondHandleValue);
     connect(m_secondHandle, &DistanceHandle::edited, this, &FeaturePanel::onSecondHandleValue);
     connect(m_secondHandle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
-    m_thirdHandle = new DistanceHandle(view, this);
+    m_thirdHandle = new DistanceHandle(projection, this);
     m_thirdHandle->setActive(false);
     connect(m_thirdHandle, &DistanceHandle::dragged, this, &FeaturePanel::onThirdHandleValue);
     connect(m_thirdHandle, &DistanceHandle::edited, this, &FeaturePanel::onThirdHandleValue);
     connect(m_thirdHandle, &DistanceHandle::accepted, this, &FeaturePanel::accept);
     const std::array<DistanceHandle*, 3> handles{m_handle, m_secondHandle, m_thirdHandle};
     for (DistanceHandle* handle : handles) {
+        connect(handle, &DistanceHandle::itemChanged, this, &FeaturePanel::publishHandles);
         connect(handle, &DistanceHandle::activated, this, [handles, handle] {
             for (DistanceHandle* other : handles) {
                 if (other != handle) {
@@ -402,7 +406,7 @@ void FeaturePanel::updateHandles(const Resolved& resolved)
                     if (across.Magnitude() < kMinDistance) {
                         return;
                     }
-                    const double radius = kArcHandlePixels * m_view->worldPerPixel();
+                    const double radius = kArcHandlePixels * m_projection.worldPerPixel();
                     m_handle->showArc(f.hinge, f.center.Translated(across.Normalized() * radius), f.angleDegrees);
                     shown = true;
                     break;
@@ -573,6 +577,7 @@ void FeaturePanel::startFresh(core::FeatureData featureData)
 {
     m_base = m_session.document();
     m_baseModel = m_session.model();
+    m_expressions.clear();
     start(std::move(featureData), 0);
     const std::vector<Pick> preselection = m_scene.takePreselection();
     if (preselection.empty() || !takesPreselection(*m_data)) {
@@ -598,7 +603,23 @@ void FeaturePanel::edit(core::FeatureId id)
     m_base = m_session.document();
     m_base.setMarker(static_cast<std::size_t>(m_base.indexOf(id)));
     m_baseModel = core::recompute(m_base);
+    m_expressions = feature->expressions;
     start(feature->data, id);
+}
+
+void FeaturePanel::bindField(ValueEdit* box, const std::string& key)
+{
+    box->acceptNames([this] { return core::parameterValues(m_session.document()); });
+    if (const auto found = m_expressions.find(key); found != m_expressions.end()) {
+        box->setExpression(QString::fromStdString(found->second));
+    }
+    connect(box, &ValueEdit::expressionChanged, this, [this, key](const QString& canonical) {
+        if (canonical.isEmpty()) {
+            m_expressions.erase(key);
+        } else {
+            m_expressions[key] = canonical.toStdString();
+        }
+    });
 }
 
 void FeaturePanel::start(core::FeatureData featureData, core::FeatureId editing)
@@ -618,11 +639,11 @@ void FeaturePanel::accept()
     if (!isActive() || !m_ok->isEnabled()) {
         return;
     }
-    core::FeatureData accepted = std::move(*m_data);
+    core::FeatureData accepted = *m_data;
+    std::map<std::string, std::string> expressions = m_expressions;
     const core::FeatureId editing = m_editing;
     const QString title = titleOf(accepted);
     K137_INFO(App, "{} accepted{}", title.toStdString(), editing != 0 ? " as an edit" : "");
-    finish();
 
     const auto nameBody = [](core::FeatureData& d, core::Document& document) {
         std::visit(core::Overloaded{
@@ -662,22 +683,34 @@ void FeaturePanel::accept()
                    d);
     };
 
+    bool done = false;
     if (editing != 0) {
         const core::Feature* edited = m_session.document().find(editing);
         if (edited == nullptr) {
+            finish();
             emit message(tr("The feature being edited no longer exists"));
             return;
         }
         const QString name = QString::fromStdString(edited->name);
-        m_session.edit(tr("Edit %1").arg(name), [&](core::Document& document) {
+        done = m_session.edit(tr("Edit %1").arg(name), [&](core::Document& document) {
             nameBody(accepted, document);
-            document.find(editing)->data = std::move(accepted);
+            core::Feature* target = document.find(editing);
+            target->data = std::move(accepted);
+            target->expressions = std::move(expressions);
         });
     } else {
-        m_session.edit(title, [&](core::Document& document) {
+        done = m_session.edit(title, [&](core::Document& document) {
             nameBody(accepted, document);
-            document.add(std::move(accepted));
+            const core::FeatureId added = document.add(std::move(accepted));
+            document.find(added)->expressions = std::move(expressions);
         });
+    }
+    if (!done) {
+        K137_INFO(App, "{} refused, the panel stays open", title.toStdString());
+        return;
+    }
+    if (isActive()) {
+        finish();
     }
 }
 
@@ -692,6 +725,7 @@ void FeaturePanel::cancel()
 void FeaturePanel::finish()
 {
     m_data.reset();
+    m_expressions.clear();
     m_editing = 0;
     m_pressPull = false;
     m_firstAxisPoint.reset();
@@ -700,6 +734,7 @@ void FeaturePanel::finish()
         m_form->deleteLater();
     }
     m_form = nullptr;
+    m_itemsArea = nullptr;
     m_items = nullptr;
     m_itemsLayout = nullptr;
     m_axis = nullptr;
@@ -715,10 +750,8 @@ void FeaturePanel::finish()
     m_handle->hide();
     m_secondHandle->hide();
     m_thirdHandle->hide();
-    m_scene.setHighlightedProfiles({});
-    m_scene.setHighlightedEdges({});
-    m_scene.setHighlightedFaces({});
-    m_scene.setHighlightedBodies({});
+    showPicks({}, {});
+    endPreview();
     m_scene.setPreviewBodies({});
     m_scene.setPickMode(PickMode::None);
     emit selectionSummary({});
@@ -748,16 +781,14 @@ void FeaturePanel::updatePreview()
     const std::size_t index = m_editing != 0 ? static_cast<std::size_t>(document.indexOf(m_editing)) : m_base.marker();
     const core::Feature& feature = document.features()[index];
     const core::Model model = core::extend(m_baseModel, feature);
-    [[maybe_unused]] const double recomputeMs = elapsedMs(start);
+    const double recomputeMs = elapsedMs(start);
 
     Resolved resolved = resolve();
     emit selectionSummary(summaryOf(resolved));
     updateHandles(resolved);
     refreshItems(resolved.items);
-    m_scene.setHighlightedProfiles(std::move(resolved.profiles));
-    m_scene.setHighlightedEdges(std::move(resolved.edges));
-    m_scene.setHighlightedFaces(std::move(resolved.faces));
-    m_scene.setHighlightedBodies(highlightedBodies(model, feature.id));
+    showPreview(document, model);
+    showPicks(resolved, highlightedBodies(model, feature.id));
     m_scene.setPreviewBodies(previewBodies(model));
     m_scene.show(document, model, m_session);
 
@@ -778,8 +809,9 @@ void FeaturePanel::updatePreview()
     m_error->setText(error);
     m_selection->setText(selectionText());
     m_ok->setEnabled(resolved.complete && status.health != core::FeatureHealth::Failed);
-    K137_TRACE(App, "Previewed {} in {:.1f} ms, {:.1f} ms of it recompute", feature.name, elapsedMs(start),
-               recomputeMs);
+    const double previewMs = elapsedMs(start);
+    K137_TRACE(App, "Previewed {} in {:.1f} ms, {:.1f} ms of it recompute", feature.name, previewMs, recomputeMs);
+    emit previewed(previewMs, recomputeMs);
 }
 
 void FeaturePanel::setPickingTarget(bool picking)
@@ -822,29 +854,30 @@ std::set<core::BodyKey> FeaturePanel::previewBodies(const core::Model& model) co
     return keys;
 }
 
-std::vector<TopoDS_Shape> FeaturePanel::highlightedBodies(const core::Model& model, core::FeatureId featureId) const
+std::vector<const core::Body*> FeaturePanel::highlightedBodies(const core::Model& model,
+                                                               core::FeatureId featureId) const
 {
-    std::vector<TopoDS_Shape> shapes;
+    std::vector<const core::Body*> bodies;
     if (const auto* pattern = std::get_if<core::PatternFeature>(&*m_data)) {
         if (const core::Body* body = m_baseModel.body(pattern->body)) {
-            shapes.push_back(body->shape);
+            bodies.push_back(body);
         }
     } else if (const auto* move = std::get_if<core::MoveFeature>(&*m_data)) {
         if (move->copy) {
             for (const core::Body& body : model.bodies) {
                 if (body.id == featureId) {
-                    shapes.push_back(body.shape);
+                    bodies.push_back(&body);
                 }
             }
         } else {
             for (const core::BodyKey& key : move->bodies) {
                 if (const core::Body* body = model.body(key)) {
-                    shapes.push_back(body->shape);
+                    bodies.push_back(body);
                 }
             }
         }
     }
-    return shapes;
+    return bodies;
 }
 
 } // namespace kalve137::app

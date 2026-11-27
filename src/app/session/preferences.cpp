@@ -15,9 +15,10 @@ namespace {
 using viewer::NavigationPreset;
 
 constexpr std::array kPresets = {NavigationPreset::MiddleOrbitsCtrlPans, NavigationPreset::MiddlePansShiftOrbits,
-                                 NavigationPreset::MiddleOrbitsShiftPans};
+                                 NavigationPreset::MiddleOrbitsShiftPans, NavigationPreset::RightOrbitsCtrlPans};
 constexpr std::array kStyles = {VisualStyle::Shaded, VisualStyle::ShadedWithEdges, VisualStyle::Wireframe,
                                 VisualStyle::VisibleEdges};
+constexpr std::array kSchemes = {theme::Scheme::System, theme::Scheme::Light, theme::Scheme::Dark};
 
 const char* keyOf(NavigationPreset preset)
 {
@@ -28,6 +29,8 @@ const char* keyOf(NavigationPreset preset)
         return "pan-shift-orbit";
     case NavigationPreset::MiddleOrbitsShiftPans:
         return "orbit-shift-pan";
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return "right-orbit-ctrl-pan";
     }
     return "orbit-ctrl-pan";
 }
@@ -45,6 +48,19 @@ const char* keyOf(VisualStyle style)
         return "visibleEdges";
     }
     return "shadedWithEdges";
+}
+
+const char* keyOf(theme::Scheme scheme)
+{
+    switch (scheme) {
+    case theme::Scheme::System:
+        return "system";
+    case theme::Scheme::Light:
+        return "light";
+    case theme::Scheme::Dark:
+        return "dark";
+    }
+    return "system";
 }
 
 template <typename Enum, std::size_t N>
@@ -80,6 +96,7 @@ Preferences Preferences::load()
     QSettings settings;
     settings.beginGroup("preferences");
     p.reopenLastProject = settings.value("reopenLastProject", defaults.reopenLastProject).toBool();
+    p.colorScheme = readEnum(settings, "appearance/theme", kSchemes, defaults.colorScheme);
 
     p.navigation.preset = readEnum(settings, "navigation/mouseScheme", kPresets, defaults.navigation.preset);
     p.navigation.reverseZoom = settings.value("navigation/reverseZoom", defaults.navigation.reverseZoom).toBool();
@@ -119,6 +136,7 @@ void Preferences::save() const
     QSettings settings;
     settings.beginGroup("preferences");
     settings.setValue("reopenLastProject", reopenLastProject);
+    settings.setValue("appearance/theme", QString::fromLatin1(keyOf(colorScheme)));
 
     settings.remove("navigation/preset");
     settings.setValue("navigation/mouseScheme", QString::fromLatin1(keyOf(navigation.preset)));
@@ -159,6 +177,8 @@ QString displayName(NavigationPreset preset)
         return tr("Middle Pans, Shift Orbits");
     case NavigationPreset::MiddleOrbitsShiftPans:
         return tr("Middle Orbits, Shift Pans");
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return tr("Right Orbits, Ctrl Pans");
     }
     return {};
 }
@@ -178,6 +198,19 @@ QString displayName(VisualStyle style)
     return {};
 }
 
+QString displayName(theme::Scheme scheme)
+{
+    switch (scheme) {
+    case theme::Scheme::System:
+        return tr("Use System Setting");
+    case theme::Scheme::Light:
+        return tr("Light");
+    case theme::Scheme::Dark:
+        return tr("Dark");
+    }
+    return {};
+}
+
 QString navigationHint(NavigationPreset preset)
 {
     switch (preset) {
@@ -187,6 +220,10 @@ QString navigationHint(NavigationPreset preset)
         return tr("Orbit: Shift + middle drag   Pan: middle drag   Zoom: wheel or Ctrl + middle drag   Fit: F6");
     case NavigationPreset::MiddleOrbitsShiftPans:
         return tr("Orbit: middle drag   Pan: Shift + middle drag   Zoom: wheel or Ctrl + middle drag   Fit: F6");
+    case NavigationPreset::RightOrbitsCtrlPans:
+        return tr(
+            "Orbit: right drag   Pan: Ctrl + right drag   Zoom: wheel or Shift + right drag   Menu: middle click   "
+            "Fit: F6");
     }
     return {};
 }

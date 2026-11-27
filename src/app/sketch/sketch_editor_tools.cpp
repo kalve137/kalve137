@@ -10,10 +10,9 @@
 #include "sketch/draft.h"
 #include "sketch/edit.h"
 #include "sketch/profiles.h"
-#include "viewer/occt_view_widget.h"
-
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <utility>
@@ -51,13 +50,8 @@ void SketchEditor::clickLine(Snap snap)
         const Id start = placePoint(candidate, *m_first);
         built.end = placePoint(candidate, snap);
         built.line = candidate.addLine(start, built.end);
-        if (autoAxis && !heldAngle) {
-            const double degrees = std::abs(std::atan2(delta.y, delta.x)) * 180.0 / std::numbers::pi;
-            if (degrees < kAutoAxisDegrees || degrees > 180.0 - kAutoAxisDegrees) {
-                candidate.addConstraint(ConstraintKind::Horizontal, {built.line});
-            } else if (std::abs(degrees - 90.0) < kAutoAxisDegrees) {
-                candidate.addConstraint(ConstraintKind::Vertical, {built.line});
-            }
+        if (const std::optional<ConstraintKind> axis = autoAxisOf(delta); autoAxis && !heldAngle && axis) {
+            candidate.addConstraint(*axis, {built.line});
         }
         if (dimensions && heldLength) {
             candidate.addConstraint(ConstraintKind::Distance, {built.line}, *heldLength);
@@ -72,8 +66,7 @@ void SketchEditor::clickLine(Snap snap)
         }
         if (dimensions && heldAngle && previous != nullptr) {
             const Vec2 d1 = candidate.point(previous->points[1])->pos - candidate.point(previous->points[0])->pos;
-            const double angle =
-                std::abs(std::atan2(d1.x * delta.y - d1.y * delta.x, dot(d1, delta))) * 180.0 / std::numbers::pi;
+            const double angle = std::abs(std::atan2(cross(d1, delta), dot(d1, delta))) * 180.0 / std::numbers::pi;
             if (angle > 1e-6 && angle < 180.0 - 1e-6) {
                 candidate.addConstraint(ConstraintKind::Angle, {m_chainLine, built.line}, angle);
             }
@@ -195,6 +188,12 @@ void SketchEditor::openInputs()
     case Tool::Polygon:
         m_inputs->open({Kind::Length, Kind::Count});
         return;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        m_inputs->open({Kind::Length, Kind::Length});
+        m_inputs->setPlaceholder(1, tr("Width"));
+        return;
     case Tool::Select:
     case Tool::Arc:
     case Tool::ArcThrough:
@@ -202,6 +201,8 @@ void SketchEditor::openInputs()
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -209,6 +210,7 @@ void SketchEditor::openInputs()
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -220,6 +222,10 @@ void SketchEditor::openInputs()
 
 void SketchEditor::onInputsAccepted()
 {
+    if (m_typedMove) {
+        acceptTypedMove();
+        return;
+    }
     if (!isActive() || !m_first) {
         return;
     }
@@ -241,6 +247,11 @@ void SketchEditor::onInputsAccepted()
     case Tool::Polygon:
         clickPolygon(at);
         break;
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
+        clickSlot(at);
+        break;
     case Tool::Select:
     case Tool::Arc:
     case Tool::ArcThrough:
@@ -248,6 +259,8 @@ void SketchEditor::onInputsAccepted()
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -255,6 +268,7 @@ void SketchEditor::onInputsAccepted()
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -338,7 +352,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
         return;
     }
     const gp_Ax3 ax = plane();
-    const auto screen = [&](Vec2 p) { return m_view->toScreen(sketch::toWorld(ax, p)); };
+    const auto screen = [&](Vec2 p) { return toScreen(sketch::toWorld(ax, p)); };
     const auto unitScreen = [](QPointF v) {
         const double n = std::hypot(v.x(), v.y());
         return n > 1e-9 ? v / n : QPointF(0.0, -1.0);
@@ -362,16 +376,29 @@ void SketchEditor::placeInputs(Vec2 cursor)
         const Vec2 inside = previous ? start - *previous : start + Vec2{0.0, -1.0};
         beside(0, sketch::distance(start, end), start, end, inside);
         const Vec2 reference = protractorReference();
-        const Vec2 back = normalized(reference * -1.0);
-        const Vec2 dir = sketch::distance(start, end) > 1e-9 ? normalized(end - start) : back;
+        const Vec2 back = unit(reference * -1.0);
+        const Vec2 dir = sketch::distance(start, end) > 1e-9 ? unit(end - start) : back;
         Vec2 bisector = back + dir;
         if (length(bisector) < 1e-6) {
-            bisector = {-back.y, back.x};
+            bisector = leftOf(back);
         }
         const QPointF joint = screen(start);
-        const QPointF along = unitScreen(screen(start + normalized(bisector)) - joint);
-        m_inputs->setLive(1, sketch::interiorAngle(reference, dir), joint + along * (kAngleArcPixels + kInputGapPixels),
-                          along);
+        const QPointF along = unitScreen(screen(start + unit(bisector)) - joint);
+        const QPointF ray = unitScreen(screen(start + dir) - joint);
+        const QSizeF box = m_inputs->boxSize(1);
+        const auto support = [&](QPointF n) {
+            return std::abs(n.x()) * box.width() / 2.0 + std::abs(n.y()) * box.height() / 2.0;
+        };
+        const double spread = std::abs(along.x() * ray.y() - along.y() * ray.x());
+        const double clear = spread > 1e-6 ? (support(QPointF(-ray.y(), ray.x())) + kInputGapPixels) / spread
+                                           : std::numeric_limits<double>::infinity();
+        const double reach = std::max(kAngleArcPixels + kInputGapPixels + support(along), clear);
+        const double angle = sketch::interiorAngle(reference, dir);
+        if (reach <= kAngleReachPixels) {
+            m_inputs->setLive(1, angle, joint + along * reach);
+        } else {
+            m_inputs->setLive(1, angle, joint - along * kInputGapPixels, -along);
+        }
         return;
     }
     case Tool::Rectangle: {
@@ -383,7 +410,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
     }
     case Tool::Circle: {
         const double radius = draftRadius(cursor);
-        const Vec2 dir = sketch::distance(start, cursor) > 1e-9 ? normalized(cursor - start) : Vec2{1.0, 0.0};
+        const Vec2 dir = sketch::distance(start, cursor) > 1e-9 ? unit(cursor - start) : Vec2{1.0, 0.0};
         const QPointF rim = screen(start + dir * radius);
         const QPointF out = unitScreen(rim - screen(start));
         m_inputs->setLive(0, radius * 2.0, rim + out * kInputGapPixels, out);
@@ -404,6 +431,26 @@ void SketchEditor::placeInputs(Vec2 cursor)
         m_inputs->setLive(1, polygonSides(), screen(start) + QPointF(0.0, kInputOffsetPixels));
         return;
     }
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot: {
+        const Vec2 end = m_second ? m_second->pos : draftSlotEnd(cursor);
+        const Vec2 from = m_tool == Tool::CenterSlot ? start * 2.0 - end : start;
+        const Vec2 dir = sketch::distance(from, end) > 1e-9 ? unit(end - from) : Vec2{1.0, 0.0};
+        const Vec2 side = leftOf(dir);
+        const double span = sketch::distance(start, end) * (m_tool == Tool::CenterSlot ? 2.0 : 1.0);
+        if (m_second) {
+            const double width = draftSlotWidth(cursor);
+            const Vec2 away = dot(cursor - from, side) > 0.0 ? side * (-width / 2.0) : side * (width / 2.0);
+            beside(0, span, from + away, end + away, from);
+            beside(1, width, end + side * (width / 2.0), end - side * (width / 2.0), from);
+        } else {
+            beside(0, span, from, end, from - side);
+            const QPointF below = unitScreen(screen(from - side) - screen(from));
+            m_inputs->place(1, screen((from + end) * 0.5) + below * kInputGapPixels, below);
+        }
+        return;
+    }
     case Tool::Select:
     case Tool::Arc:
     case Tool::ArcThrough:
@@ -411,6 +458,8 @@ void SketchEditor::placeInputs(Vec2 cursor)
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Coincident:
     case Tool::Horizontal:
@@ -418,6 +467,7 @@ void SketchEditor::placeInputs(Vec2 cursor)
     case Tool::Parallel:
     case Tool::Perpendicular:
     case Tool::Tangent:
+    case Tool::Concentric:
     case Tool::Equal:
     case Tool::Midpoint:
     case Tool::Symmetric:
@@ -477,6 +527,9 @@ void SketchEditor::clickTrim(Vec2 pos)
     }
     std::optional<sketch::Sketch> trimmed = sketch::trim(current(), hit.id, pos);
     if (!trimmed) {
+        if (current().curve(hit.id)->projected) {
+            emit message(tr("Projected curves follow the model. Break the link first"));
+        }
         return;
     }
     m_selection.clear();
@@ -514,7 +567,12 @@ void SketchEditor::clickFillet(QPointF screen, Vec2 pos)
         return;
     }
     const Id point = *corner;
-    promptValue(screen, m_filletRadius, core::Quantity::Length, false, [this, point](double radius) {
+    const sketch::Sketch& s = current();
+    if (std::ranges::any_of(s.curvesUsing(point), [&](Id curve) { return s.curve(curve)->projected; })) {
+        emit message(tr("Projected curves follow the model. Break the link first"));
+        return;
+    }
+    promptValue(screen, m_filletRadius, core::Quantity::Length, 0, [this, point](double radius, const std::string&) {
         std::optional<sketch::Sketch> rounded = sketch::filletCorner(current(), point, radius);
         if (!rounded) {
             emit message(tr("A %1 mm radius doesn't fit between those lines").arg(formatValue(radius)));
@@ -575,8 +633,7 @@ void SketchEditor::clickDimension(QPointF pos, const Hit& hit)
             const sketch::Curve* other = s.curve(hit.id);
             const Vec2 d1 = s.point(line->points[1])->pos - s.point(line->points[0])->pos;
             const Vec2 d2 = s.point(other->points[1])->pos - s.point(other->points[0])->pos;
-            const double angle =
-                std::abs(std::atan2(d1.x * d2.y - d1.y * d2.x, dot(d1, d2))) * 180.0 / std::numbers::pi;
+            const double angle = std::abs(std::atan2(cross(d1, d2), dot(d1, d2))) * 180.0 / std::numbers::pi;
             if (angle < 1e-6 || angle > 180.0 - 1e-6) {
                 m_pending.reset();
                 emit message(tr("Parallel lines have no angle, use Parallel or a distance"));
@@ -588,7 +645,7 @@ void SketchEditor::clickDimension(QPointF pos, const Hit& hit)
         if (hit.kind == Hit::Kind::Point && std::ranges::find(line->points, hit.id) == line->points.end()) {
             const Vec2 p = s.point(hit.id)->pos;
             const Vec2 a = s.point(line->points[0])->pos;
-            const Vec2 dir = normalized(s.point(line->points[1])->pos - a);
+            const Vec2 dir = unit(s.point(line->points[1])->pos - a);
             const double d = std::abs((p.x - a.x) * dir.y - (p.y - a.y) * dir.x);
             startDimension(ConstraintKind::Distance, {hit.id, first.id}, d);
             return;
@@ -689,9 +746,17 @@ void SketchEditor::clickConstraint(const Hit& hit)
         sketch::Sketch candidate = s;
         if (hit.kind == Hit::Kind::Point && hit.id != sketch::kOriginId) {
             sketch::Point* point = candidate.point(hit.id);
+            if (point->projected) {
+                emit message(tr("Projected points follow the model. Break the link first"));
+                return;
+            }
             point->fixed = !point->fixed;
         } else if (hit.kind == Hit::Kind::Curve) {
             sketch::Curve* curve = candidate.curve(hit.id);
+            if (curve->projected) {
+                emit message(tr("Projected curves follow the model. Break the link first"));
+                return;
+            }
             curve->fixed = !curve->fixed;
         } else {
             return;
@@ -780,6 +845,18 @@ void SketchEditor::clickConstraint(const Hit& hit)
             return;
         }
         break;
+    case Tool::Concentric:
+        if (both(isRoundHit)) {
+            const Id firstCenter = s.curve(first.id)->points.front();
+            const Id center = s.curve(hit.id)->points.front();
+            if (firstCenter == center) {
+                emit message(tr("Those already share a center"));
+                return;
+            }
+            apply(ConstraintKind::Coincident, {firstCenter, center}, tr("Concentric"));
+            return;
+        }
+        break;
     case Tool::Equal:
         if (both(isLine) || both(isRoundHit)) {
             apply(ConstraintKind::Equal, {first.id, hit.id}, tr("Equal"));
@@ -804,10 +881,15 @@ void SketchEditor::clickConstraint(const Hit& hit)
     case Tool::Arc:
     case Tool::ArcThrough:
     case Tool::Polygon:
+    case Tool::Slot:
+    case Tool::CenterSlot:
+    case Tool::OverallSlot:
     case Tool::Point:
     case Tool::Trim:
     case Tool::Fillet:
     case Tool::Mirror:
+    case Tool::Offset:
+    case Tool::Project:
     case Tool::Dimension:
     case Tool::Symmetric:
     case Tool::Fix:

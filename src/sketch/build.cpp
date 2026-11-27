@@ -102,6 +102,34 @@ Polygon addPolygon(Sketch& sketch, Id center, Vec2 firstCorner, int sides)
     return polygon;
 }
 
+Slot addSlot(Sketch& sketch, Id startCenter, Id endCenter, double width)
+{
+    Slot slot;
+    const Vec2 a = sketch.point(startCenter)->pos;
+    const Vec2 b = sketch.point(endCenter)->pos;
+    const double length = distance(a, b);
+    const double radius = width / 2.0;
+    if (length < 1e-12 || radius <= 0.0) {
+        return slot;
+    }
+    const Vec2 along = (b - a) * (1.0 / length);
+    const Vec2 across{-along.y * radius, along.x * radius};
+    const Id startLeft = sketch.addPoint(a + across);
+    const Id endLeft = sketch.addPoint(b + across);
+    const Id endRight = sketch.addPoint(b - across);
+    const Id startRight = sketch.addPoint(a - across);
+    slot.centerLine = sketch.addLine(startCenter, endCenter, true);
+    slot.sides = {sketch.addLine(startLeft, endLeft), sketch.addLine(endRight, startRight)};
+    slot.arcs = {sketch.addArc(endCenter, endRight, endLeft), sketch.addArc(startCenter, startLeft, startRight)};
+    for (Id side : slot.sides) {
+        for (Id arc : slot.arcs) {
+            sketch.addConstraint(ConstraintKind::Tangent, {side, arc});
+        }
+    }
+    sketch.addConstraint(ConstraintKind::Equal, {slot.arcs[0], slot.arcs[1]});
+    return slot;
+}
+
 std::optional<Id> addArcThrough(Sketch& sketch, Id start, Id end, Vec2 through)
 {
     const Vec2 s = sketch.point(start)->pos;

@@ -17,14 +17,22 @@ add_library(kalve137_app STATIC
     feature/feature_panel_detail.h
     feature/feature_panel_form.cpp
     feature/feature_panel_selection.cpp
+    feature/feature_panel_view.cpp
     feature/measure_panel.cpp
     feature/measure_panel.h
+    feature/measure_panel_view.cpp
+    feature/recent_values.cpp
+    feature/recent_values.h
+    feature/field_names.cpp
+    feature/field_names.h
     feature/value_edit.cpp
     feature/value_edit.h
     panels/browser_panel.cpp
     panels/browser_panel.h
     panels/project_panel.cpp
     panels/project_panel.h
+    panels/parameters_dialog.cpp
+    panels/parameters_dialog.h
     panels/properties_dialog.cpp
     panels/properties_dialog.h
     panels/timeline_widget.cpp
@@ -38,10 +46,20 @@ add_library(kalve137_app STATIC
     session/preferences.h
     session/preferences_dialog.cpp
     session/preferences_dialog.h
+    session/step_import.cpp
+    session/step_import.h
+    shell/batch_import.cpp
+    shell/batch_import.h
+    shell/bench_drag.cpp
+    shell/bench_orbit.cpp
+    shell/bench_orbit.h
+    shell/bench_orbit_runs.cpp
+    shell/bench_orbit_sketch.cpp
     shell/command_search.cpp
     shell/command_search.h
     shell/main_window.cpp
     shell/main_window.h
+    shell/main_window_widgets.cpp
     shell/main_window_commands.cpp
     shell/main_window_files.cpp
     shell/main_window_help.cpp
@@ -56,8 +74,14 @@ add_library(kalve137_app STATIC
     shell/smoke.h
     shell/shortcuts_dialog.cpp
     shell/shortcuts_dialog.h
+    shell/startup_options.cpp
+    shell/startup_options.h
+    shell/toolbar_fit.cpp
+    shell/toolbar_fit.h
     shell/version_dialog.cpp
     shell/version_dialog.h
+    sketch/badge_placement.cpp
+    sketch/badge_placement.h
     sketch/constraint_badge.cpp
     sketch/constraint_badge.h
     sketch/dimension_label.cpp
@@ -65,34 +89,60 @@ add_library(kalve137_app STATIC
     sketch/sketch_editor.cpp
     sketch/sketch_editor.h
     sketch/sketch_editor_detail.h
+    sketch/sketch_editor_drag.cpp
     sketch/sketch_editor_draw.cpp
     sketch/sketch_editor_hit.cpp
+    sketch/sketch_editor_move.cpp
+    sketch/sketch_editor_project.cpp
     sketch/sketch_editor_shapes.cpp
     sketch/sketch_editor_tools.cpp
+    sketch/sketch_editor_value.cpp
+    sketch/sketch_editor_view.cpp
     sketch/sketch_inputs.cpp
     sketch/sketch_inputs.h
     sketch/sketch_palette.cpp
     sketch/sketch_palette.h
+    sketch/sketch_view_items.cpp
+    sketch/sketch_view_items.h
     theme/fonts.cpp
     theme/fonts.h
     theme/icons.cpp
     theme/icons.h
+    theme/palette.cpp
     theme/theme.cpp
     theme/theme.h
     theme/theme_tokens.cpp
     theme/theme_tokens.h
+    view/band_overlay.cpp
+    view/band_overlay.h
+    view/body_opacity.cpp
+    view/body_opacity.h
+    view/camera_commands.cpp
+    view/camera_commands.h
     view/grid_settings.cpp
     view/grid_settings.h
+    view/viewport_navigation.cpp
+    view/viewport_navigation.h
+    view/viewport_picker.cpp
+    view/viewport_picker.h
+    view/panel_picks.cpp
+    view/panel_picks.h
+    view/pick.h
+    view/pick_source.h
     view/scene.cpp
     view/scene.h
     view/scene_construction.cpp
     view/scene_detail.h
+    view/sketch_snapshots.cpp
+    view/sketch_snapshots.h
     view/view_controls.cpp
     view/view_controls.h
     view/view_cube_arrows.cpp
     view/view_cube_arrows.h
     view/view_overlay.cpp
     view/view_overlay.h
+    view/view_projection.cpp
+    view/view_projection.h
 )
 
 find_package(Git QUIET)
@@ -111,8 +161,18 @@ if(GIT_FOUND)
     endif()
 endif()
 
+set(KALVE137_VERSION_BASE "" CACHE STRING "Override base semver for nightly builds")
+set(KALVE137_VERSION_SUFFIX "" CACHE STRING "Extra text appended for nightly builds")
+if(NOT KALVE137_VERSION_BASE STREQUAL "")
+    set(kalve137_version "${KALVE137_VERSION_BASE}${KALVE137_VERSION_SUFFIX}")
+elseif(NOT KALVE137_VERSION_SUFFIX STREQUAL "")
+    set(kalve137_version "${PROJECT_VERSION}${KALVE137_VERSION_SUFFIX}")
+else()
+    set(kalve137_version "${PROJECT_VERSION}")
+endif()
+
 target_compile_definitions(kalve137_app PUBLIC
-    KALVE137_VERSION="${PROJECT_VERSION}"
+    KALVE137_VERSION="${kalve137_version}"
     KALVE137_GIT_HASH="${kalve137_git_hash}"
     KALVE137_BUILD_TYPE="$<CONFIG>"
 )
@@ -120,6 +180,8 @@ target_link_libraries(kalve137_app PUBLIC
     kalve137_platform
     kalve137_log
     kalve137_core
+    kalve137_pick
+    kalve137_render_rhi
     kalve137_viewer
     occt_qt
     Qt6::Svg
@@ -137,6 +199,13 @@ kalve137_set_warnings(kalve137_app)
 qt_add_executable(kalve137 WIN32 main.cpp)
 target_link_libraries(kalve137 PRIVATE kalve137_app)
 kalve137_set_warnings(kalve137)
+if(APPLE)
+    set_target_properties(kalve137 PROPERTIES
+        MACOSX_BUNDLE ON
+        MACOSX_BUNDLE_BUNDLE_NAME "Kalve 137"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "137.kalve.kalve137"
+    )
+endif()
 
 set(asset_dir "${PROJECT_SOURCE_DIR}/assets")
 set(branding_dir "${asset_dir}/branding")
@@ -172,9 +241,11 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/body.svg
         ${asset_dir}/icons/camera.svg
         ${asset_dir}/icons/center_rectangle.svg
+        ${asset_dir}/icons/center_slot.svg
         ${asset_dir}/icons/chamfer.svg
         ${asset_dir}/icons/circle.svg
         ${asset_dir}/icons/coincident.svg
+        ${asset_dir}/icons/concentric.svg
         ${asset_dir}/icons/constrained_orbit.svg
         ${asset_dir}/icons/construct_point.svg
         ${asset_dir}/icons/construction.svg
@@ -200,6 +271,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/move.svg
         ${asset_dir}/icons/offset_plane.svg
         ${asset_dir}/icons/origin.svg
+        ${asset_dir}/icons/overall_slot.svg
         ${asset_dir}/icons/parallel.svg
         ${asset_dir}/icons/pattern.svg
         ${asset_dir}/icons/perpendicular.svg
@@ -207,12 +279,18 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/point.svg
         ${asset_dir}/icons/polygon.svg
         ${asset_dir}/icons/press_pull.svg
-        ${asset_dir}/icons/qss/check.svg
-        ${asset_dir}/icons/qss/check_disabled.svg
-        ${asset_dir}/icons/qss/chevron_down.svg
-        ${asset_dir}/icons/qss/chevron_up.svg
-        ${asset_dir}/icons/qss/partial.svg
-        ${asset_dir}/icons/qss/partial_disabled.svg
+        ${asset_dir}/icons/qss/dark/check.svg
+        ${asset_dir}/icons/qss/dark/check_disabled.svg
+        ${asset_dir}/icons/qss/dark/chevron_down.svg
+        ${asset_dir}/icons/qss/dark/chevron_up.svg
+        ${asset_dir}/icons/qss/dark/partial.svg
+        ${asset_dir}/icons/qss/dark/partial_disabled.svg
+        ${asset_dir}/icons/qss/light/check.svg
+        ${asset_dir}/icons/qss/light/check_disabled.svg
+        ${asset_dir}/icons/qss/light/chevron_down.svg
+        ${asset_dir}/icons/qss/light/chevron_up.svg
+        ${asset_dir}/icons/qss/light/partial.svg
+        ${asset_dir}/icons/qss/light/partial_disabled.svg
         ${asset_dir}/icons/rectangle.svg
         ${asset_dir}/icons/redo.svg
         ${asset_dir}/icons/revolve.svg
@@ -220,6 +298,9 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/shell.svg
         ${asset_dir}/icons/show_grid.svg
         ${asset_dir}/icons/sketch_fillet.svg
+        ${asset_dir}/icons/sketch_offset.svg
+        ${asset_dir}/icons/sketch_project.svg
+        ${asset_dir}/icons/slot.svg
         ${asset_dir}/icons/snap_grid.svg
         ${asset_dir}/icons/symmetric.svg
         ${asset_dir}/icons/tangent.svg
@@ -227,6 +308,7 @@ qt_add_resources(kalve137_app kalve137_resources
         ${asset_dir}/icons/undo.svg
         ${asset_dir}/icons/vertical.svg
         ${asset_dir}/icons/visual_style.svg
+        ${asset_dir}/samples/dodecahedron.k137
         ${branding_paths}
         ${notices_path}
 )
@@ -234,6 +316,7 @@ qt_add_resources(kalve137_app kalve137_resources
 set(font_dir "${PROJECT_SOURCE_DIR}/third_party/roboto")
 kalve137_stage_runtime(kalve137 FONT_DIRS ${font_dir})
 kalve137_install_app(kalve137 FONT_DIRS ${font_dir})
-kalve137_install_notices()
-install(FILES "${asset_dir}/samples/dodecahedron.k137" DESTINATION ${CMAKE_INSTALL_BINDIR}/samples)
+kalve137_install_notices(kalve137)
+kalve137_resource_destination(kalve137 resource_dir)
+install(FILES "${asset_dir}/samples/dodecahedron.k137" DESTINATION ${resource_dir}/samples)
 kalve137_archive_symbols(kalve137 "${PROJECT_VERSION}" "${kalve137_git_hash}")

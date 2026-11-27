@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string>
@@ -14,6 +15,8 @@ namespace kalve137::sketch {
 struct Vec2 {
     double x = 0.0;
     double y = 0.0;
+
+    bool operator==(const Vec2&) const = default;
 };
 
 inline Vec2 operator+(Vec2 a, Vec2 b)
@@ -29,6 +32,33 @@ inline Vec2 operator*(Vec2 a, double s)
     return {a.x * s, a.y * s};
 }
 
+inline double dot(Vec2 a, Vec2 b)
+{
+    return (a.x * b.x) + (a.y * b.y);
+}
+
+inline double cross(Vec2 a, Vec2 b)
+{
+    return (a.x * b.y) - (a.y * b.x);
+}
+
+inline double length(Vec2 a)
+{
+    return std::hypot(a.x, a.y);
+}
+
+inline Vec2 unit(Vec2 a)
+{
+    constexpr double kZeroLength = 1e-12;
+    const double l = length(a);
+    return l > kZeroLength ? a * (1.0 / l) : Vec2{1.0, 0.0};
+}
+
+inline Vec2 leftOf(Vec2 a)
+{
+    return {-a.y, a.x};
+}
+
 double distance(Vec2 a, Vec2 b);
 
 using Id = int;
@@ -38,6 +68,9 @@ inline constexpr Id kOriginId = 1;
 struct Point {
     Vec2 pos;
     bool fixed = false;
+    bool projected = false;
+
+    bool operator==(const Point&) const = default;
 };
 
 enum class CurveKind {
@@ -52,6 +85,9 @@ struct Curve {
     double radius = 0.0;
     bool construction = false;
     bool fixed = false;
+    bool projected = false;
+
+    bool operator==(const Curve&) const = default;
 };
 
 enum class ConstraintKind {
@@ -71,6 +107,7 @@ enum class ConstraintKind {
     Diameter,
     Angle,
     Symmetric,
+    Offset,
 };
 
 std::string_view toString(ConstraintKind kind);
@@ -80,12 +117,37 @@ std::optional<CurveKind> curveKindFromString(std::string_view name);
 
 bool isDimension(ConstraintKind kind);
 
+struct OffsetJoint {
+    Id point = 0;
+    bool tangent = false;
+
+    bool operator==(const OffsetJoint&) const = default;
+};
+
 struct Constraint {
     ConstraintKind kind = ConstraintKind::Coincident;
     std::vector<Id> refs;
     double value = 0.0;
     std::optional<Vec2> labelOffset;
+    std::vector<int> sides;
+    std::vector<OffsetJoint> joints;
+    std::string expression;
+
+    bool operator==(const Constraint&) const = default;
 };
+
+struct OffsetPair {
+    Id source = 0;
+    Id offset = 0;
+    int side = 1;
+};
+
+class Sketch;
+
+std::vector<OffsetPair> offsetPairs(const Constraint& constraint);
+Constraint offsetConstraint(const std::vector<OffsetPair>& pairs, double distance,
+                            std::vector<OffsetJoint> joints = {});
+std::vector<Id> offsetJointPoints(const Sketch& sketch, const std::vector<OffsetPair>& pairs);
 
 class Sketch {
 public:
@@ -98,6 +160,7 @@ public:
     Id addConstraint(ConstraintKind kind, std::vector<Id> refs, double value = 0.0);
 
     void remove(Id id);
+    void dropOffsetPairs(Id curve);
 
     void insertPoint(Id id, Point point);
     void insertCurve(Id id, Curve curve);
@@ -121,6 +184,8 @@ public:
     std::optional<Vec2> midpoint(Id line) const;
 
     Id nextId() const { return m_nextId; }
+
+    bool operator==(const Sketch&) const = default;
 
 private:
     Id takeId();

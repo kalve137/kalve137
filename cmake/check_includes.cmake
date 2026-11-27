@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+cmake_policy(VERSION 3.25)
+
+include("${CONFIG}")
+
+set(failures)
+foreach(file IN LISTS FILES)
+    file(READ "${file}" content)
+    foreach(pattern IN LISTS PATTERNS)
+        set(rest "${content}")
+        set(offset 0)
+        while(TRUE)
+            string(FIND "${rest}" "${pattern}" found)
+            if(found EQUAL -1)
+                break()
+            endif()
+            math(EXPR at "${offset} + ${found}")
+            string(SUBSTRING "${content}" 0 ${at} before)
+            string(REGEX MATCHALL "\n" breaks "${before}")
+            list(LENGTH breaks line)
+            math(EXPR line "${line} + 1")
+            list(APPEND failures "${file}:${line}: ${TARGET} may not use '${pattern}'")
+            string(LENGTH "${pattern}" length)
+            math(EXPR skip "${found} + ${length}")
+            string(SUBSTRING "${rest}" ${skip} -1 rest)
+            math(EXPR offset "${offset} + ${skip}")
+        endwhile()
+    endforeach()
+endforeach()
+
+if(failures)
+    list(JOIN failures "\n" report)
+    message(FATAL_ERROR "${report}")
+endif()
+file(TOUCH "${STAMP}")

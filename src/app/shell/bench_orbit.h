@@ -1,0 +1,31 @@
+// SPDX-FileCopyrightText: 2026 Danius Kalvaitis
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "app/shell/startup_options.h"
+
+#include <QString>
+
+#include <filesystem>
+
+namespace kalve137::app {
+
+inline constexpr const char* kBenchOrbitFlag = "--bench-orbit";
+inline constexpr const char* kBenchChangeFlag = "--bench-change";
+inline constexpr const char* kBenchImportFlag = "--bench-import";
+inline constexpr const char* kBenchHoverFlag = "--bench-hover";
+inline constexpr const char* kBenchDragFlag = "--bench-drag";
+
+int runBenchOrbit(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                  const QString& size);
+int runBenchChange(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                   const QString& size);
+int runBenchImport(const StartupOptions& options, const std::filesystem::path& step, const std::filesystem::path& out,
+                   const QString& size);
+int runBenchHover(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                  const QString& size);
+int runBenchDrag(const StartupOptions& options, const std::filesystem::path& design, const std::filesystem::path& out,
+                 const QString& size);
+
+} // namespace kalve137::app

@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "pick/ray_scene.h"
+#include "snapshot/mesh.h"
+
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -31,7 +34,9 @@ std::vector<gp_Pnt> samplePoints(const TopoDS_Shape& shape);
 
 class ViewBlockers {
 public:
-    explicit ViewBlockers(const std::vector<TopoDS_Shape>& shapes);
+    explicit ViewBlockers(const std::vector<const snapshot::Mesh*>& meshes);
+    ViewBlockers(std::shared_ptr<const pick::RayScene> rays, const std::vector<const snapshot::Mesh*>& meshes,
+                 std::vector<bool> shown = {});
     ~ViewBlockers();
     ViewBlockers(const ViewBlockers&) = delete;
     ViewBlockers& operator=(const ViewBlockers&) = delete;

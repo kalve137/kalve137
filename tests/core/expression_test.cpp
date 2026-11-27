@@ -72,4 +72,7 @@ TEST(Expression, Rejects)
     EXPECT_FALSE(evaluate("5 mm", Quantity::Angle));
     EXPECT_FALSE(evaluate("5 mm", Quantity::Count));
     EXPECT_FALSE(evaluate("5 5", Quantity::Length));
+    EXPECT_FALSE(evaluate("1.5.2", Quantity::Length));
+    EXPECT_FALSE(evaluate("1e-", Quantity::Length));
+    EXPECT_FALSE(evaluate("1e999", Quantity::Length));
 }

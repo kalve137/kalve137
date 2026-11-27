@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <Bnd_Box.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -20,7 +21,7 @@ class BRepTools_History;
 namespace kalve137::geometry {
 
 TopoDS_Shape extrude(const std::vector<TopoDS_Face>& faces, const gp_Vec& from, const gp_Vec& to,
-                     double taperRadians = 0.0);
+                     double taperRadians = 0.0, std::vector<TopoDS_Shape>* caps = nullptr);
 TopoDS_Shape revolve(const std::vector<TopoDS_Face>& faces, const gp_Ax1& axis, double angleRadians);
 
 TopoDS_Shape fuse(const TopoDS_Shape& a, const TopoDS_Shape& b, BRepTools_History* history = nullptr);
@@ -61,6 +62,8 @@ std::optional<TopoDS_Edge> findEdge(const TopoDS_Shape& shape, const gp_Pnt& poi
 
 gp_Pnt facePoint(const TopoDS_Face& face);
 std::optional<gp_Ax3> planarFrame(const TopoDS_Face& face);
+Bnd_Box geometryBox(const TopoDS_Shape& shape);
+bool mayHold(const Bnd_Box& box, const gp_Pnt& point, double tolerance);
 std::optional<TopoDS_Face> findFace(const TopoDS_Shape& shape, const gp_Pnt& pointOnFace, double tolerance);
 
 } // namespace kalve137::geometry

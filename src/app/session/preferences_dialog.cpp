@@ -55,25 +55,30 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_stack = new QStackedWidget(this);
 
     QFormLayout* general = addPage(tr("General"));
-    m_reopenLastProject = addCheck(general, tr("Reopen the last project on start"), tr("startup recent"));
+    m_theme = addCombo(general, tr("Theme"), tr("appearance light dark mode colors system"));
+    for (const theme::Scheme scheme : {theme::Scheme::System, theme::Scheme::Light, theme::Scheme::Dark}) {
+        m_theme->addItem(displayName(scheme), static_cast<int>(scheme));
+    }
+    connect(m_theme, &QComboBox::currentIndexChanged, this,
+            [this] { theme::setScheme(selected<theme::Scheme>(m_theme)); });
+    m_reopenLastProject = addCheck(general, tr("Reopen last project on start"), tr("startup recent"));
 
     QFormLayout* navigation = addPage(tr("Navigation"));
-    m_preset = addCombo(navigation, tr("Mouse scheme"), tr("preset orbit pan zoom middle button"));
+    m_preset = addCombo(navigation, tr("Mouse scheme"), tr("preset orbit pan zoom middle right button"));
     for (const NavigationPreset preset :
          {NavigationPreset::MiddleOrbitsCtrlPans, NavigationPreset::MiddlePansShiftOrbits,
-          NavigationPreset::MiddleOrbitsShiftPans}) {
+          NavigationPreset::MiddleOrbitsShiftPans, NavigationPreset::RightOrbitsCtrlPans}) {
         m_preset->addItem(displayName(preset), static_cast<int>(preset));
     }
     m_presetHint = new QLabel(this);
     m_presetHint->setObjectName("panelHint");
     m_presetHint->setWordWrap(true);
     navigation->addRow(QString(), m_presetHint);
-    addRow(navigation, tr("Mouse scheme preset orbit pan zoom middle button"));
+    addRow(navigation, tr("Mouse scheme preset orbit pan zoom middle right button"));
     connect(m_preset, &QComboBox::currentIndexChanged, this, &PreferencesDialog::updatePresetHint);
     m_reverseZoom = addCheck(navigation, tr("Reverse wheel zoom direction"), tr("scroll invert"));
-    m_zoomToCursor = addCheck(navigation, tr("Zoom toward the cursor"), tr("wheel scroll point"));
-    m_orbitAroundCursor =
-        addCheck(navigation, tr("Orbit around the point under the cursor"), tr("rotate pivot center"));
+    m_zoomToCursor = addCheck(navigation, tr("Zoom toward cursor"), tr("wheel scroll point"));
+    m_orbitAroundCursor = addCheck(navigation, tr("Orbit around point under cursor"), tr("rotate pivot center"));
     m_constrainedOrbit = addCheck(navigation, tr("Constrained orbit, keep Z up"), tr("rotate turntable"));
     m_animateTransitions = addCheck(navigation, tr("Animate view transitions"), tr("camera smooth motion"));
 
@@ -86,17 +91,18 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     m_camera = addCombo(display, tr("Camera"), tr("projection orthographic perspective"));
     m_camera->addItem(tr("Orthographic"), 0);
     m_camera->addItem(tr("Perspective"), 1);
-    m_showGrid = addCheck(display, tr("Show the grid"), tr("ground plane"));
+    m_showGrid = addCheck(display, tr("Show grid"), tr("ground plane"));
 
     QFormLayout* sketch = addPage(tr("Sketch"));
-    m_lookAtSketch = addCheck(sketch, tr("Look at the sketch plane when sketching starts"), tr("camera turn"));
+    m_lookAtSketch = addCheck(sketch, tr("Look at sketch plane while sketching"), tr("camera turn return view"));
+    m_lookAtSketch->setToolTip(tr("Turns view to face sketch and returns to previous view when sketch ends"));
     m_sketchProfiles = addCheck(sketch, tr("Shade profiles"), tr("palette regions closed loops"));
     m_sketchPoints = addCheck(sketch, tr("Show points"), tr("palette vertices ends"));
     m_sketchDimensions = addCheck(sketch, tr("Show dimensions"), tr("palette sizes values"));
     m_constraintGlyphs = addCheck(sketch, tr("Show constraint glyphs"), tr("palette badges icons horizontal vertical"));
     m_sketchConstruction = addCheck(sketch, tr("Show construction geometry"), tr("palette dashed reference"));
-    m_sketchGridLabels = addCheck(sketch, tr("Label the grid while sketching"), tr("numbers rulers"));
-    m_sketchGridSnap = addCheck(sketch, tr("Snap points to the grid"), tr("snapping intersections"));
+    m_sketchGridLabels = addCheck(sketch, tr("Label grid while sketching"), tr("numbers rulers"));
+    m_sketchGridSnap = addCheck(sketch, tr("Snap points to grid"), tr("snapping intersections"));
 
     QFormLayout* grid = addPage(tr("Grid"));
     m_grid = new GridSettingsWidget(this);
@@ -106,7 +112,7 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     QFormLayout* diagnostics = addPage(tr("Diagnostics"));
     m_logLevels = new QLineEdit(this);
     m_logLevels->setPlaceholderText(QStringLiteral("info,viewer=debug"));
-    m_logLevels->setToolTip(tr("A level for all channels, then channel=level pairs. Channels: app, core, geometry, "
+    m_logLevels->setToolTip(tr("Level for all channels, then channel=level pairs. Channels: app, core, geometry, "
                                "sketch, viewer, input, io. Levels: trace, debug, info, warn, error, off."));
     diagnostics->addRow(tr("Log levels"), m_logLevels);
     addRow(diagnostics, tr("Log levels logging debug trace channels"));
@@ -134,12 +140,13 @@ PreferencesDialog::PreferencesDialog(const Preferences& preferences, QWidget* pa
     layout->addWidget(buttons);
 
     load(preferences);
-    resize(kDialogSize);
+    resize(theme::onScreen(*this, kDialogSize));
 }
 
 Preferences PreferencesDialog::preferences() const
 {
     Preferences p = m_loaded;
+    p.colorScheme = selected<theme::Scheme>(m_theme);
     p.reopenLastProject = m_reopenLastProject->isChecked();
     p.navigation.preset = selected<NavigationPreset>(m_preset);
     p.navigation.reverseZoom = m_reverseZoom->isChecked();
@@ -166,6 +173,7 @@ Preferences PreferencesDialog::preferences() const
 void PreferencesDialog::load(const Preferences& p)
 {
     m_loaded = p;
+    select(m_theme, p.colorScheme);
     m_reopenLastProject->setChecked(p.reopenLastProject);
     select(m_preset, p.navigation.preset);
     m_reverseZoom->setChecked(p.navigation.reverseZoom);

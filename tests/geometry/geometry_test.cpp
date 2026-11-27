@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Danius Kalvaitis
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "geometry/body_mesh.h"
 #include "geometry/exchange.h"
 #include "geometry/face_colors.h"
 #include "geometry/modeling.h"
@@ -10,22 +11,62 @@
 #include <gtest/gtest.h>
 
 #include <BRepTools_History.hxx>
+#include <BRep_Builder.hxx>
+#include <DESTEP_Parameters.hxx>
+#include <IFSelect_ReturnStatus.hxx>
+#include <STEPCAFControl_Writer.hxx>
+#include <TCollection_ExtendedString.hxx>
+#include <TDF_Label.hxx>
+#include <TDataStd_Name.hxx>
+#include <TDocStd_Document.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
+#include <XCAFApp_Application.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_ShapeTool.hxx>
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
 
 using namespace kalve137::geometry;
+
+class Blockers {
+public:
+    explicit Blockers(const std::vector<TopoDS_Shape>& shapes)
+    {
+        m_meshes.reserve(shapes.size());
+        for (const TopoDS_Shape& shape : shapes) {
+            m_meshes.push_back(meshBody(shape));
+        }
+        std::vector<const kalve137::snapshot::Mesh*> meshes;
+        meshes.reserve(m_meshes.size());
+        for (const kalve137::snapshot::Mesh& mesh : m_meshes) {
+            meshes.push_back(&mesh);
+        }
+        m_blockers = std::make_unique<ViewBlockers>(meshes);
+    }
+
+    bool blocks(const gp_Pnt& point, const gp_Dir& towardViewer) const
+    {
+        return m_blockers->blocks(point, towardViewer);
+    }
+
+private:
+    std::vector<kalve137::snapshot::Mesh> m_meshes;
+    std::unique_ptr<ViewBlockers> m_blockers;
+};
 
 TEST(Geometry, BoxVolume)
 {
@@ -255,6 +296,80 @@ TEST(Exchange, StepKeepsAssemblyPaths)
     std::filesystem::remove_all(folder);
 }
 
+void writeOneProduct(const std::filesystem::path& file, const std::string& product,
+                     const std::vector<std::pair<std::string, TopoDS_Shape>>& bodies)
+{
+    const Handle(TDocStd_Document) document = new TDocStd_Document("MDTV-XCAF");
+    XCAFApp_Application::GetApplication()->InitDocument(document);
+    const Handle(XCAFDoc_ShapeTool) shapes = XCAFDoc_DocumentTool::ShapeTool(document->Main());
+    BRep_Builder builder;
+    TopoDS_Compound all;
+    builder.MakeCompound(all);
+    for (const auto& [name, body] : bodies) {
+        builder.Add(all, body);
+    }
+    const TDF_Label label = shapes->AddShape(all, false);
+    TDataStd_Name::Set(label, TCollection_ExtendedString(product.c_str(), true));
+    for (const auto& [name, body] : bodies) {
+        if (!name.empty()) {
+            TDataStd_Name::Set(shapes->AddSubShape(label, body), TCollection_ExtendedString(name.c_str(), true));
+        }
+    }
+    DESTEP_Parameters parameters;
+    parameters.InitFromStatic();
+    parameters.WriteSubshapeNames = true;
+    STEPCAFControl_Writer writer;
+    writer.SetNameMode(true);
+    ASSERT_TRUE(writer.Transfer(document, parameters, STEPControl_AsIs));
+    ASSERT_EQ(writer.Write(file.string().c_str()), IFSelect_RetDone);
+}
+
+TEST(Exchange, StepProductWithSeveralBodiesBecomesAFolderOfNamedBodies)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-product";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "supply.step", "Supply",
+                    {{"Body1", makeBox(10.0, 10.0, 10.0)}, {"Body2", makeCylinder(gp_Pnt(50.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "supply.step");
+    ASSERT_EQ(parts.size(), 2u);
+    const auto find = [&](const std::string& name) { return std::ranges::find(parts, name, &StepPart::name); };
+    ASSERT_NE(find("Body1"), parts.end());
+    ASSERT_NE(find("Body2"), parts.end());
+    EXPECT_EQ(find("Body1")->path, std::vector<std::string>{"Supply"});
+    EXPECT_EQ(find("Body2")->path, std::vector<std::string>{"Supply"});
+    EXPECT_NEAR(areaCentroid(find("Body2")->shape).X(), 50.0, 1e-6);
+    std::filesystem::remove_all(folder);
+}
+
+TEST(Exchange, StepBodiesWithoutNamesAreNumberedAfterTheirProduct)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-unnamed";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "front.step", "Front",
+                    {{"", makeBox(10.0, 10.0, 10.0)}, {"", makeCylinder(gp_Pnt(50.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "front.step");
+    ASSERT_EQ(parts.size(), 2u);
+    EXPECT_EQ(parts[0].name, "Front 1");
+    EXPECT_EQ(parts[1].name, "Front 2");
+    EXPECT_EQ(parts[0].path, std::vector<std::string>{"Front"});
+    std::filesystem::remove_all(folder);
+}
+
+TEST(Exchange, StepProductWithOneBodyKeepsItsName)
+{
+    const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-single";
+    std::filesystem::create_directories(folder);
+    writeOneProduct(folder / "pin.step", "Pin", {{"Body1", makeCylinder(gp_Pnt(0.0, 0.0, 0.0), 5.0, 10.0)}});
+
+    const std::vector<StepPart> parts = readStepParts(folder / "pin.step");
+    ASSERT_EQ(parts.size(), 1u);
+    EXPECT_EQ(parts[0].name, "Pin");
+    EXPECT_TRUE(parts[0].path.empty());
+    std::filesystem::remove_all(folder);
+}
+
 TEST(Exchange, StepHeaderNamesTheApplication)
 {
     const auto folder = std::filesystem::temp_directory_path() / "kalve137-test-header";
@@ -463,7 +578,7 @@ TEST(Exchange, BrepTextRoundTrips)
 
 TEST(Topology, BlocksViewOnlyWhenTheBodyIsInTheWay)
 {
-    const ViewBlockers box({makeBox(10.0, 10.0, 10.0)});
+    const Blockers box({makeBox(10.0, 10.0, 10.0)});
     const gp_Pnt onTop(5.0, 5.0, 10.0);
     EXPECT_FALSE(box.blocks(onTop, gp_Dir(0, 0, 1)));
     EXPECT_TRUE(box.blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
@@ -475,11 +590,11 @@ TEST(Topology, BlocksViewAcrossSeveralBodies)
 {
     gp_Trsf aside;
     aside.SetTranslation(gp_Vec(0.0, 0.0, 20.0));
-    const ViewBlockers stack({makeBox(10.0, 10.0, 10.0), makeBox(10.0, 10.0, 10.0).Moved(TopLoc_Location(aside))});
+    const Blockers stack({makeBox(10.0, 10.0, 10.0), makeBox(10.0, 10.0, 10.0).Moved(TopLoc_Location(aside))});
     EXPECT_TRUE(stack.blocks(gp_Pnt(5.0, 5.0, 10.0), gp_Dir(0, 0, 1)));
     EXPECT_FALSE(stack.blocks(gp_Pnt(5.0, 5.0, 30.0), gp_Dir(0, 0, 1)));
     EXPECT_FALSE(stack.blocks(gp_Pnt(15.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
-    EXPECT_FALSE(ViewBlockers({}).blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
+    EXPECT_FALSE(Blockers({}).blocks(gp_Pnt(5.0, 5.0, 0.0), gp_Dir(0, 0, 1)));
 }
 
 TEST(Topology, SamplePointsLieOnTheShape)
@@ -505,7 +620,7 @@ TEST(Topology, FaceSamplesSeePastAShadeOverItsMiddle)
     ASSERT_TRUE(top);
     gp_Trsf above;
     above.SetTranslation(gp_Vec(0.0, 0.0, 12.0));
-    const ViewBlockers shade({makeBox(6.0, 10.0, 2.0).Moved(TopLoc_Location(above))});
+    const Blockers shade({makeBox(6.0, 10.0, 2.0).Moved(TopLoc_Location(above))});
     const gp_Dir up(0, 0, 1);
 
     const std::vector<gp_Pnt> points = samplePoints(*top);

@@ -68,7 +68,8 @@ class ShapeStoreTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        m_folder = std::filesystem::temp_directory_path() / "kalve137-shape-store-test";
+        m_folder = std::filesystem::temp_directory_path() / "kalve137-shape-store-test" /
+                   ::testing::UnitTest::GetInstance()->current_test_info()->name();
         std::filesystem::remove_all(m_folder);
         std::filesystem::create_directories(m_folder);
         m_design = m_folder / "assembly.k137";
@@ -188,8 +189,8 @@ std::uintmax_t folderSize(const std::filesystem::path& folder)
 TEST_F(ShapeStoreTest, DISABLED_LargeImportSave)
 {
     char* value = nullptr;
-    std::size_t length = 0;
 #ifdef _WIN32
+    std::size_t length = 0;
     _dupenv_s(&value, &length, "KALVE137_BENCH_STEP");
     const std::string step = value != nullptr ? value : "";
     std::free(value);

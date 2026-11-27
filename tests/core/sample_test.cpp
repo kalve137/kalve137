@@ -6,13 +6,17 @@
 #include "core/serialization.h"
 #include "core/shape_store.h"
 #include "geometry/shapes.h"
+#include "same_document.h"
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp_Explorer.hxx>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -147,7 +151,10 @@ TEST(Sample, ShippedDodecahedronMatchesItsRecipe)
         std::ofstream(kSamplePath, std::ios::binary) << expected;
     }
     ASSERT_TRUE(std::filesystem::exists(kSamplePath)) << "Run with KALVE137_UPDATE_SAMPLES=1 to write it";
-    EXPECT_EQ(readText(kSamplePath), expected) << "Run with KALVE137_UPDATE_SAMPLES=1 to refresh it";
+    test::expectSameDocument(nlohmann::json::parse(readText(kSamplePath)), nlohmann::json::parse(expected), "");
+    if (HasFailure()) {
+        ADD_FAILURE() << "Run with KALVE137_UPDATE_SAMPLES=1 to refresh it";
+    }
     const Model model = recompute(fromJson(readText(kSamplePath), shapes));
     ASSERT_EQ(model.bodies.size(), 1U);
     EXPECT_NEAR(geometry::volume(model.bodies.front().shape), dodecahedronVolume(), 1e-6 * dodecahedronVolume());

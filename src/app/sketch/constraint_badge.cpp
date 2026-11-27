@@ -38,10 +38,10 @@ Handle(Graphic3d_AspectMarker3d) renderBadge(const QString& icon, const QColor& 
     {
         QPainter painter(&image);
         painter.setRenderHint(QPainter::Antialiasing);
-        QColor background = theme::kSlate;
+        QColor background = theme::palette().chrome.surface;
         background.setAlpha(kBackgroundAlpha);
         const QRectF box = QRectF(image.rect()).adjusted(ratio * 0.5, ratio * 0.5, -ratio * 0.5, -ratio * 0.5);
-        painter.setPen(QPen(selected ? theme::kGold : theme::kSlateEdge, ratio));
+        painter.setPen(QPen(selected ? theme::palette().chrome.accent : theme::palette().chrome.border, ratio));
         painter.setBrush(background);
         painter.drawRoundedRect(box, size * kCornerFraction, size * kCornerFraction);
         const int iconSize = static_cast<int>(std::lround(size * kIconFraction));
@@ -64,9 +64,9 @@ Handle(Graphic3d_AspectMarker3d) renderBadge(const QString& icon, const QColor& 
 Handle(AIS_InteractiveObject) makeConstraintBadge(const gp_Pnt& at, const QString& icon, const QColor& color,
                                                   bool selected, double devicePixelRatio)
 {
-    using Key = std::tuple<QString, QRgb, bool, double>;
+    using Key = std::tuple<QString, QRgb, bool, double, bool>;
     static std::map<Key, Handle(Graphic3d_AspectMarker3d)> cache;
-    const Key key{icon, color.rgba(), selected, devicePixelRatio};
+    const Key key{icon, color.rgba(), selected, devicePixelRatio, theme::isDark()};
     auto it = cache.find(key);
     if (it == cache.end()) {
         it = cache.emplace(key, renderBadge(icon, color, selected, devicePixelRatio)).first;

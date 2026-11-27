@@ -3,17 +3,20 @@
 
 #include "app/feature/distance_handle.h"
 
+#include "app/feature/recent_values.h"
 #include "app/feature/value_edit.h"
+#include "app/sketch/sketch_view_items.h"
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
 
+#include "render/style.h"
 #include "viewer/grid.h"
-#include "viewer/occt_view_widget.h"
-#include "viewer/style.h"
 
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPolygonF>
+#include <QSignalBlocker>
 #include <QWidget>
 
 #include <algorithm>
@@ -24,22 +27,15 @@
 
 namespace kalve137::app {
 
-namespace style = viewer::style;
-
 namespace {
 
-constexpr double kShaftPixels = 22.0;
-constexpr double kShaftHalfWidth = 3.5;
-constexpr double kHeadPixels = 15.0;
-constexpr double kHeadHalfWidth = 9.0;
-constexpr double kOutlineWidth = style::kStrokeThin;
-constexpr double kGlowWidth = 7.0;
-constexpr int kGlowAlpha = 90;
-constexpr int kGuideAlpha = 170;
+constexpr double kShaftPixels = render::kHandleShaftPixels;
+constexpr double kShaftHalfWidth = render::kHandleShaftWidth / 2.0;
+constexpr double kHeadPixels = render::kHandleHeadPixels;
+constexpr double kHeadHalfWidth = render::kHandleHeadWidth / 2.0;
 constexpr double kHitPixels = 10.0;
 constexpr double kBoxGapPixels = 18.0;
 constexpr int kBoxWidth = 96;
-constexpr int kHoverLighterPercent = 125;
 constexpr double kArcSearchDegrees = 180.0;
 constexpr double kArcCoarseStep = 1.0;
 constexpr double kArcFineStep = 0.05;
@@ -120,22 +116,32 @@ private:
 
 } // namespace
 
-DistanceHandle::DistanceHandle(viewer::OcctViewWidget* view, QObject* parent) : QObject(parent), m_view(view)
+DistanceHandle::DistanceHandle(const ViewProjection& projection, QObject* parent)
+    : QObject(parent), m_projection(projection), m_canvas(projection.canvas())
 {
-    m_overlay = new Overlay(view, [this](QPainter& painter) { paint(painter); });
-    m_overlay->hide();
-    m_box = new ValueEdit(core::Quantity::Length, 0.0, view);
+    if (projection.viewport() == nullptr) {
+        m_overlay = new Overlay(m_canvas, [this](QPainter& painter) { paint(painter); });
+        m_overlay->hide();
+    }
+    m_box = new ValueEdit(core::Quantity::Length, 0.0, m_canvas);
     m_box->setObjectName("canvasInput");
     m_box->setFixedWidth(kBoxWidth);
     m_box->hide();
+    m_recentValues = new RecentValuesMenu(
+        m_box, [this] { return m_box->quantity(); }, [this](double value) { m_box->chooseValue(value); });
     connect(m_box, &ValueEdit::valueChanged, this, &DistanceHandle::edited);
-    connect(m_box, &ValueEdit::accepted, this, &DistanceHandle::accepted);
-    connect(view, &viewer::OcctViewWidget::rendered, this, &DistanceHandle::refresh, Qt::QueuedConnection);
-    view->installEventFilter(this);
+    connect(m_box, &ValueEdit::accepted, this, [this] {
+        m_recentValues->commit(m_box->value());
+        emit accepted();
+    });
+    connect(&projection, &ViewProjection::changed, this, &DistanceHandle::refresh, Qt::QueuedConnection);
+    connect(theme::notifier(), &theme::Notifier::changed, this, &DistanceHandle::refresh);
+    m_canvas->installEventFilter(this);
 }
 
 DistanceHandle::~DistanceHandle()
 {
+    const QSignalBlocker blocker(this);
     hide();
 }
 
@@ -166,11 +172,9 @@ void DistanceHandle::showCommon(double value)
 {
     m_value = value;
     m_shown = true;
-    if (!m_box->hasFocus()) {
-        m_box->setValue(value);
-    }
-    if (!m_overlay->isVisible()) {
-        m_overlay->setGeometry(m_view->rect());
+    showBoxValue();
+    if (m_overlay != nullptr && !m_overlay->isVisible()) {
+        m_overlay->setGeometry(m_canvas->rect());
         m_overlay->show();
     }
     if (m_active && !m_box->isVisible()) {
@@ -188,21 +192,35 @@ void DistanceHandle::hide()
     m_shown = false;
     m_dragOffset.reset();
     setHover(false);
-    m_overlay->hide();
+    if (m_overlay != nullptr) {
+        m_overlay->hide();
+    }
+    m_recentValues->reset();
     const bool hadFocus = m_box->hasFocus();
     m_box->hide();
     if (hadFocus) {
-        m_view->setFocus();
+        m_canvas->setFocus();
     }
+    emit itemChanged();
 }
 
 void DistanceHandle::setValue(double value)
 {
     m_value = value;
-    if (!m_box->hasFocus()) {
-        m_box->setValue(value);
-    }
+    showBoxValue();
     refresh();
+}
+
+void DistanceHandle::showBoxValue()
+{
+    const bool focused = m_box->hasFocus();
+    if (focused && !m_dragOffset) {
+        return;
+    }
+    m_box->setValue(m_value);
+    if (focused) {
+        m_box->selectAll();
+    }
 }
 
 void DistanceHandle::setActive(bool active)
@@ -221,7 +239,7 @@ void DistanceHandle::setActive(bool active)
         const bool hadFocus = m_box->hasFocus();
         m_box->hide();
         if (hadFocus) {
-            m_view->setFocus();
+            m_canvas->setFocus();
         }
     }
     refresh();
@@ -243,6 +261,13 @@ gp_Pnt DistanceHandle::tip() const
     return m_origin.Translated(gp_Vec(m_direction) * (m_value * m_scale));
 }
 
+gp_Pnt DistanceHandle::toward() const
+{
+    const gp_Pnt at = tip();
+    const gp_Vec step = m_arcAxis ? gp_Vec(at, arcPoint(m_value + 1.0)) : gp_Vec(m_direction) * m_scale;
+    return at.Translated(step * (m_value < 0.0 ? -1.0 : 1.0));
+}
+
 gp_Pnt DistanceHandle::arcPoint(double degrees) const
 {
     return m_origin.Rotated(*m_arcAxis, degrees * std::numbers::pi / 180.0);
@@ -251,21 +276,48 @@ gp_Pnt DistanceHandle::arcPoint(double degrees) const
 QPointF DistanceHandle::screenAxis() const
 {
     if (m_arcAxis) {
-        return m_view->toScreen(arcPoint(m_value + 1.0)) - m_view->toScreen(arcPoint(m_value));
+        return m_projection.toScreen(arcPoint(m_value + 1.0)) - m_projection.toScreen(arcPoint(m_value));
     }
-    const QPointF from = m_view->toScreen(m_origin);
-    const QPointF to = m_view->toScreen(m_origin.Translated(gp_Vec(m_direction) * m_scale));
+    const QPointF from = m_projection.toScreen(m_origin);
+    const QPointF to = m_projection.toScreen(m_origin.Translated(gp_Vec(m_direction) * m_scale));
     return to - from;
 }
 
 std::optional<QPointF> DistanceHandle::screenDirection() const
 {
-    const QPointF axis = screenAxis();
+    const QPointF axis = m_projection.toScreen(toward()) - m_projection.toScreen(tip());
     const double pixels = std::hypot(axis.x(), axis.y());
     if (pixels < 1e-6) {
         return std::nullopt;
     }
-    return axis / pixels * (m_value < 0.0 ? -1.0 : 1.0);
+    return axis / pixels;
+}
+
+std::optional<render::HandleItem> DistanceHandle::item() const
+{
+    if (!m_shown) {
+        return std::nullopt;
+    }
+    const auto vec = [](const gp_Pnt& point) { return camera::Vec3{point.X(), point.Y(), point.Z()}; };
+    const theme::Palette& palette = theme::palette();
+    render::HandleItem item{.anchor = vec(tip()),
+                            .toward = vec(toward()),
+                            .active = m_active,
+                            .hovered = m_hover,
+                            .dragged = m_dragOffset.has_value(),
+                            .colors = {.fill = colorOf(palette.viewport.handle),
+                                       .outline = colorOf(palette.viewport.handleOutline),
+                                       .halo = colorOf(palette.viewport.halo)},
+                            .guide = {}};
+    if (m_dragOffset && m_arcAxis) {
+        const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(m_value) / kArcCoarseStep)));
+        for (int i = 0; i <= steps; ++i) {
+            item.guide.push_back(vec(arcPoint(m_value * i / steps)));
+        }
+    } else if (m_dragOffset) {
+        item.guide = {vec(m_origin), item.anchor};
+    }
+    return item;
 }
 
 bool DistanceHandle::hits(QPointF pos) const
@@ -274,7 +326,7 @@ bool DistanceHandle::hits(QPointF pos) const
     if (!unit) {
         return false;
     }
-    const QPointF start = m_view->toScreen(tip());
+    const QPointF start = m_projection.toScreen(tip());
     const QPointF end = start + *unit * (kShaftPixels + kHeadPixels);
     return distanceToSegment(pos, start, end) <= kHitPixels;
 }
@@ -283,7 +335,7 @@ double DistanceHandle::valueAt(QPointF pos) const
 {
     if (m_arcAxis) {
         const auto distanceAt = [&](double degrees) {
-            const QPointF d = m_view->toScreen(arcPoint(degrees)) - pos;
+            const QPointF d = m_projection.toScreen(arcPoint(degrees)) - pos;
             return dot(d, d);
         };
         double best = m_value;
@@ -312,7 +364,7 @@ double DistanceHandle::valueAt(QPointF pos) const
     if (l2 <= 0.0) {
         return m_value;
     }
-    return dot(pos - m_view->toScreen(m_origin), axis) / l2;
+    return dot(pos - m_projection.toScreen(m_origin), axis) / l2;
 }
 
 void DistanceHandle::paint(QPainter& painter) const
@@ -321,21 +373,21 @@ void DistanceHandle::paint(QPainter& painter) const
     if (!m_shown || !unit) {
         return;
     }
-    const QPointF base = m_view->toScreen(tip());
+    const QPointF base = m_projection.toScreen(tip());
     if (m_dragOffset) {
-        QColor guide = theme::kHandleOutline;
-        guide.setAlpha(kGuideAlpha);
-        QPen pen(guide, 1.5, Qt::DotLine, Qt::RoundCap);
+        QColor guide = theme::palette().viewport.handleOutline;
+        guide.setAlpha(render::kHandleGuideAlpha);
+        QPen pen(guide, render::kHandleGuideWidth, Qt::DotLine, Qt::RoundCap);
         painter.setPen(pen);
         if (m_arcAxis) {
             const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(m_value) / kArcCoarseStep)));
             QPolygonF arc;
             for (int i = 0; i <= steps; ++i) {
-                arc << m_view->toScreen(arcPoint(m_value * i / steps));
+                arc << m_projection.toScreen(arcPoint(m_value * i / steps));
             }
             painter.drawPolyline(arc);
         } else {
-            painter.drawLine(m_view->toScreen(m_origin), base);
+            painter.drawLine(m_projection.toScreen(m_origin), base);
         }
     }
 
@@ -343,16 +395,16 @@ void DistanceHandle::paint(QPainter& painter) const
     painter.translate(base);
     painter.rotate(std::atan2(unit->y(), unit->x()) * 180.0 / std::numbers::pi);
     const QPainterPath arrow = arrowPath();
-    const QColor fill = m_active ? theme::kHandle : theme::kHandleOutline;
-    const QColor outline = m_active ? theme::kHandleOutline : theme::kSlateDeep;
+    const QColor fill = m_active ? theme::palette().viewport.handle : theme::palette().viewport.handleOutline;
+    const QColor outline = m_active ? theme::palette().viewport.handleOutline : theme::palette().viewport.halo;
     const bool lit = m_hover || m_dragOffset;
     if (lit) {
         QColor glow = fill;
-        glow.setAlpha(kGlowAlpha);
-        painter.strokePath(arrow, QPen(glow, kGlowWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        glow.setAlpha(render::kHandleGlowAlpha);
+        painter.strokePath(arrow, QPen(glow, render::kHandleGlowWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     }
-    painter.setPen(QPen(outline, kOutlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.setBrush(lit ? fill.lighter(kHoverLighterPercent) : fill);
+    painter.setPen(QPen(outline, render::kHandleOutlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(lit ? fill.lighter(render::kHandleLitPercent) : fill);
     painter.drawPath(arrow);
     painter.restore();
 }
@@ -362,11 +414,14 @@ void DistanceHandle::refresh()
     if (!m_shown) {
         return;
     }
-    if (m_overlay->size() != m_view->size()) {
-        m_overlay->setGeometry(m_view->rect());
+    if (m_overlay != nullptr) {
+        if (m_overlay->size() != m_canvas->size()) {
+            m_overlay->setGeometry(m_canvas->rect());
+        }
+        m_overlay->update();
     }
-    m_overlay->update();
     placeBox();
+    emit itemChanged();
 }
 
 void DistanceHandle::placeBox()
@@ -381,10 +436,10 @@ void DistanceHandle::placeBox()
         return std::abs(along.x()) * size.width() * 0.5 + std::abs(along.y()) * size.height() * 0.5;
     };
     const double along = std::max((kShaftPixels + kHeadPixels) * 0.5, extent(unit));
-    const QPointF center = m_view->toScreen(tip()) + unit * along + side * (kBoxGapPixels + extent(side));
+    const QPointF center = m_projection.toScreen(tip()) + unit * along + side * (kBoxGapPixels + extent(side));
     const QPoint at = (center - QPointF(size.width() / 2.0, size.height() / 2.0)).toPoint();
-    const QPoint clamped(std::clamp(at.x(), 0, std::max(0, m_view->width() - size.width())),
-                         std::clamp(at.y(), 0, std::max(0, m_view->height() - size.height())));
+    const QPoint clamped(std::clamp(at.x(), 0, std::max(0, m_canvas->width() - size.width())),
+                         std::clamp(at.y(), 0, std::max(0, m_canvas->height() - size.height())));
     if (m_box->pos() != clamped) {
         m_box->move(clamped);
     }
@@ -397,16 +452,16 @@ void DistanceHandle::setHover(bool hover)
     }
     m_hover = hover;
     if (hover) {
-        m_view->setCursor(Qt::SizeAllCursor);
+        m_canvas->setCursor(Qt::SizeAllCursor);
     } else {
-        m_view->unsetCursor();
+        m_canvas->unsetCursor();
     }
     refresh();
 }
 
 bool DistanceHandle::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched != m_view || !m_shown) {
+    if (watched != m_canvas || !m_shown) {
         return QObject::eventFilter(watched, event);
     }
     switch (event->type()) {

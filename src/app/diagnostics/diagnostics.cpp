@@ -11,6 +11,7 @@
 
 #include <Standard_Version.hxx>
 
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QStandardPaths>
@@ -117,12 +118,7 @@ std::optional<Crash> crashAt(const std::filesystem::path& base)
         return std::nullopt;
     }
     const std::filesystem::path& any = crash.dump.empty() ? crash.log : crash.dump;
-    const auto written = std::filesystem::last_write_time(any, ec);
-    if (!ec) {
-        const auto system = std::chrono::clock_cast<std::chrono::system_clock>(written);
-        crash.time = QDateTime::fromMSecsSinceEpoch(
-            std::chrono::duration_cast<std::chrono::milliseconds>(system.time_since_epoch()).count());
-    }
+    crash.time = QFileInfo(any).lastModified();
     return crash;
 }
 
@@ -213,7 +209,7 @@ std::optional<Crash> takePendingCrash()
     const std::u8string utf8(base.begin(), base.end());
     std::optional<Crash> crash = crashAt(std::filesystem::path(utf8));
     if (crash) {
-        K137_WARN(App, "The previous run crashed, report at {}", base);
+        K137_WARN(App, "Previous run crashed, report at {}", base);
     }
     return crash;
 }

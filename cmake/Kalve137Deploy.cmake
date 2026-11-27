@@ -18,16 +18,25 @@ function(kalve137_copy_runtime_dlls target)
     )
 endfunction()
 
-function(kalve137_stage_runtime target)
+function(kalve137_stage_fonts target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "FONT_DIRS")
+    get_target_property(bundle ${target} MACOSX_BUNDLE)
+    set(font_root "$<TARGET_FILE_DIR:${target}>/fonts")
+    if(APPLE AND bundle)
+        set(font_root "$<TARGET_BUNDLE_CONTENT_DIR:${target}>/Resources/fonts")
+    endif()
     foreach(dir IN LISTS arg_FONT_DIRS)
         get_filename_component(name "${dir}" NAME)
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${dir}" "$<TARGET_FILE_DIR:${target}>/fonts/${name}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${dir}" "${font_root}/${name}"
             VERBATIM
         )
     endforeach()
+endfunction()
 
+function(kalve137_stage_runtime target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "FONT_DIRS")
+    kalve137_stage_fonts(${target} FONT_DIRS ${arg_FONT_DIRS})
     kalve137_copy_runtime_dlls(${target})
     if(NOT WIN32)
         return()
@@ -46,17 +55,30 @@ function(kalve137_install_app target)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         BUNDLE DESTINATION .
     )
-    foreach(dir IN LISTS arg_FONT_DIRS)
-        install(DIRECTORY "${dir}" DESTINATION ${CMAKE_INSTALL_BINDIR}/fonts)
-    endforeach()
+    if(NOT APPLE)
+        foreach(dir IN LISTS arg_FONT_DIRS)
+            install(DIRECTORY "${dir}" DESTINATION ${CMAKE_INSTALL_BINDIR}/fonts)
+        endforeach()
+    endif()
 
+    set(kalve137_deploy_options)
+    if(WIN32)
+        list(APPEND kalve137_deploy_options
+            --exclude-plugins qtuiotouchplugin
+            --no-opengl-sw
+            --no-system-d3d-compiler
+            --no-system-dxc-compiler
+        )
+    elseif(APPLE)
+        list(APPEND kalve137_deploy_options -no-strip)
+    endif()
     qt_generate_deploy_app_script(
         TARGET ${target}
         OUTPUT_SCRIPT deploy_script
         NO_TRANSLATIONS
         NO_COMPILER_RUNTIME
         NO_UNSUPPORTED_PLATFORM_ERROR
-        DEPLOY_TOOL_OPTIONS --no-opengl-sw --no-system-d3d-compiler --no-system-dxc-compiler
+        DEPLOY_TOOL_OPTIONS ${kalve137_deploy_options}
     )
     install(SCRIPT ${deploy_script})
 
@@ -65,21 +87,28 @@ function(kalve137_install_app target)
     include(InstallRequiredSystemLibraries)
 endfunction()
 
-function(kalve137_install_notices)
-    set(notices ${CMAKE_INSTALL_BINDIR}/notices)
-    install(FILES "${PROJECT_SOURCE_DIR}/THIRD-PARTY-NOTICES.md" DESTINATION ${CMAKE_INSTALL_BINDIR})
+function(kalve137_resource_destination target out)
+    set(destination ${CMAKE_INSTALL_BINDIR})
+    if(APPLE)
+        set(destination ${target}.app/Contents/Resources)
+    endif()
+    set(${out} ${destination} PARENT_SCOPE)
+endfunction()
+
+function(kalve137_install_notices target)
+    kalve137_resource_destination(${target} resources)
+    set(notices ${resources}/notices)
+    install(FILES "${PROJECT_SOURCE_DIR}/THIRD-PARTY-NOTICES.md" DESTINATION ${resources})
     install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION ${notices} RENAME "Kalve137.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/planegcs/LICENSE" DESTINATION ${notices} RENAME "PlaneGCS.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/occt_qt/LICENSE.txt" DESTINATION ${notices}
         RENAME "occt-qt-tools.txt"
     )
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/tinybvh/LICENSE" DESTINATION ${notices} RENAME "tinybvh.txt")
     install(FILES "${PROJECT_SOURCE_DIR}/third_party/roboto/OFL.txt" DESTINATION ${notices} RENAME "Roboto.txt")
-
-    get_filename_component(qt_licenses "${Qt6_DIR}/../../../../../Licenses/LICENSE" ABSOLUTE)
-    if(EXISTS "${qt_licenses}")
-        install(FILES "${qt_licenses}" DESTINATION ${notices} RENAME "Qt.txt")
-    else()
-        message(WARNING "No Qt license text at ${qt_licenses}")
+    install(FILES "${PROJECT_SOURCE_DIR}/third_party/qt/LGPL-3.0-only.txt" DESTINATION ${notices} RENAME "Qt.txt")
+    if(UNIX AND NOT APPLE)
+        install(FILES "${PROJECT_SOURCE_DIR}/third_party/icu/Unicode-DFS-2016.txt" DESTINATION ${notices} RENAME "ICU.txt")
     endif()
 
     set(share "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share")
@@ -92,7 +121,7 @@ function(kalve137_install_notices)
         if(EXISTS "${share}/${port}/copyright")
             install(FILES "${share}/${port}/copyright" DESTINATION ${notices} RENAME "${name}.txt")
         else()
-            message(WARNING "No license text for ${port} in ${share}")
+            message(FATAL_ERROR "No license text for ${port} in ${share}")
         endif()
     endwhile()
 endfunction()

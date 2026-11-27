@@ -2,25 +2,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "core/document.h"
+#include "core/naming.h"
 #include "core/project.h"
+#include "core/projection.h"
 #include "core/recompute.h"
 #include "core/serialization.h"
 #include "core/undo_stack.h"
 #include "geometry/exchange.h"
 #include "geometry/modeling.h"
 #include "geometry/shapes.h"
+#include "sketch/offset.h"
 
 #include <gtest/gtest.h>
 
 #include <BRepClass3d_SolidClassifier.hxx>
+#include <BRep_Tool.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
+#include <TopoDS_Vertex.hxx>
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <numbers>
+#include <optional>
+#include <vector>
 
 using namespace kalve137;
 using namespace kalve137::core;
@@ -570,6 +578,218 @@ TEST(Serialization, RejectsDamagedSketches)
                                     {"refs", nlohmann::json::array({s["curves"][1]["id"]})},
                                     {"value", 0.0}});
     });
+}
+
+TEST(Serialization, OffsetRoundTripsWithItsSides)
+{
+    Document doc = blockWithHole();
+    sketch::Sketch& s = std::get<SketchFeature>(doc.find(doc.features().front().id)->data).sketch;
+    std::vector<sketch::Id> sides;
+    for (const auto& [id, curve] : s.curves()) {
+        sides.push_back(id);
+    }
+    const std::optional<sketch::Offset> offset = sketch::addOffset(s, sides, 3.0);
+    ASSERT_TRUE(offset);
+    ShapeStore shapes;
+    const std::string text = toJson(doc, shapes);
+    const nlohmann::json saved = nlohmann::json::parse(text)["features"][0]["data"]["sketch"]["constraints"].back();
+    EXPECT_EQ(saved["kind"], "offset");
+    EXPECT_EQ(saved["refs"].size(), 8U);
+    EXPECT_EQ(saved["sides"].size(), 4U);
+    ASSERT_EQ(saved["joints"].size(), 4U);
+    EXPECT_EQ(saved["joints"][0]["tangent"], false);
+    EXPECT_EQ(saved["value"], 3.0);
+    const Document loaded = fromJson(text, shapes);
+    EXPECT_EQ(toJson(loaded, shapes), text);
+    const sketch::Sketch& read = std::get<SketchFeature>(loaded.find(loaded.features().front().id)->data).sketch;
+    const sketch::Constraint* constraint = read.constraint(offset->constraint);
+    ASSERT_NE(constraint, nullptr);
+    EXPECT_EQ(constraint->refs, s.constraint(offset->constraint)->refs);
+    EXPECT_EQ(constraint->sides, s.constraint(offset->constraint)->sides);
+    EXPECT_EQ(constraint->joints, s.constraint(offset->constraint)->joints);
+    EXPECT_NEAR(totalVolume(recompute(loaded)), kBlockWithHoleVolume, 1e-3);
+}
+
+TEST(Serialization, RejectsDamagedOffsets)
+{
+    ShapeStore shapes;
+    const nlohmann::json good = nlohmann::json::parse(toJson(blockWithHole(), shapes));
+    const auto rejects = [&](const char* what, const auto& damage) {
+        nlohmann::json design = good;
+        nlohmann::json& s = design["features"][0]["data"]["sketch"];
+        nlohmann::json offset = {{"id", 900}, {"kind", "offset"}, {"value", 2.0}};
+        damage(s, offset);
+        s["constraints"].push_back(offset);
+        try {
+            fromJson(design.dump(), shapes);
+            ADD_FAILURE() << what << " loaded";
+        } catch (const std::runtime_error& error) {
+            EXPECT_NE(std::string(error.what()).find("damaged"), std::string::npos) << what << ": " << error.what();
+        }
+    };
+    const auto curve = [](const nlohmann::json& s, int i) { return s["curves"][i]["id"]; };
+    rejects("unknown curve", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), 999};
+        o["sides"] = {1};
+    });
+    rejects("unpaired curves", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2)};
+        o["sides"] = {1};
+    });
+    rejects("missing sides", [&](nlohmann::json& s, nlohmann::json& o) { o["refs"] = {curve(s, 0), curve(s, 2)}; });
+    rejects("extra sides", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1, 1};
+    });
+    rejects("point as curve", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), s["points"][1]["id"]};
+        o["sides"] = {1};
+    });
+    rejects("line paired with circle", [&](nlohmann::json& s, nlohmann::json& o) {
+        s["curves"].push_back({{"id", 800}, {"kind", "circle"}, {"points", {s["points"][1]["id"]}}, {"radius", 3.0}});
+        o["refs"] = {curve(s, 0), 800};
+        o["sides"] = {1};
+    });
+    rejects("curve used twice", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2), curve(s, 1)};
+        o["sides"] = {1, 1};
+    });
+    rejects("no side", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {0};
+    });
+    rejects("no distance", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["value"] = 0.0;
+    });
+    rejects("sides on another kind", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["kind"] = "parallel";
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+    });
+    const auto joint = [](const nlohmann::json& point) { return nlohmann::json{{"point", point}, {"tangent", false}}; };
+    rejects("missing joint", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 1), curve(s, 2), curve(s, 3)};
+        o["sides"] = {1, 1};
+    });
+    rejects("joint that no two curves share", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["joints"] = {joint(s["curves"][2]["points"][0])};
+    });
+    rejects("joint without a flag", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["sides"] = {1};
+        o["joints"] = {{{"point", s["curves"][2]["points"][0]}}};
+    });
+    rejects("joints on another kind", [&](nlohmann::json& s, nlohmann::json& o) {
+        o["kind"] = "parallel";
+        o["refs"] = {curve(s, 0), curve(s, 2)};
+        o["joints"] = {joint(s["curves"][2]["points"][0])};
+    });
+}
+
+TEST(Serialization, ProjectionsRoundTripWithTheirLinks)
+{
+    Document doc = blockWithHole();
+    const Model model = recompute(doc);
+    const Body& block = model.bodies.front();
+    SketchFeature data;
+    for (const gp_Pnt& at : {gp_Pnt(20, 0, 0), gp_Pnt(20, 15, 10)}) {
+        const TopoDS_Edge edge = *geometry::findEdge(block.shape, at, 1e-6);
+        addProjectedEdge(data, *projectEdge(edge, data.plane), edgeRef(block, edge, at));
+    }
+    for (TopExp_Explorer it(block.shape, TopAbs_VERTEX); it.More(); it.Next()) {
+        const TopoDS_Vertex& vertex = TopoDS::Vertex(it.Current());
+        if (BRep_Tool::Pnt(vertex).Distance(gp_Pnt(40, 20, 10)) < 1e-6) {
+            addProjectedVertex(data, *projectVertex(vertex, data.plane), vertexRef(block, vertex));
+            break;
+        }
+    }
+    const std::vector<Projection> links = data.projections;
+    ASSERT_EQ(links.size(), 3U);
+    const FeatureId id = doc.add(std::move(data));
+
+    ShapeStore shapes;
+    const std::string text = toJson(doc, shapes);
+    const nlohmann::json saved = nlohmann::json::parse(text)["features"].back()["data"];
+    const nlohmann::json& projections = saved["projections"];
+    ASSERT_EQ(projections.size(), 3U);
+    EXPECT_EQ(projections[0]["kind"], "edge");
+    EXPECT_EQ(projections[0]["curve"], links[0].curve);
+    EXPECT_FALSE(projections[0].contains("point"));
+    EXPECT_EQ(projections[0]["ref"]["names"].size(), 2U);
+    EXPECT_EQ(projections[2]["kind"], "vertex");
+    EXPECT_EQ(projections[2]["point"], links[2].point);
+    EXPECT_EQ(projections[2]["ref"]["names"].size(), 3U);
+    const auto projectedIn = [](const nlohmann::json& list) {
+        return std::ranges::count_if(list, [](const nlohmann::json& j) { return j.value("projected", false); });
+    };
+    EXPECT_EQ(projectedIn(saved["sketch"]["curves"]), 2);
+    EXPECT_EQ(projectedIn(saved["sketch"]["points"]), 4);
+
+    const Document loaded = fromJson(text, shapes);
+    EXPECT_EQ(toJson(loaded, shapes), text);
+    const std::vector<Projection>& read = std::get<SketchFeature>(loaded.find(id)->data).projections;
+    ASSERT_EQ(read.size(), links.size());
+    for (std::size_t i = 0; i < links.size(); ++i) {
+        EXPECT_EQ(read[i].kind, links[i].kind);
+        EXPECT_EQ(read[i].curve, links[i].curve);
+        EXPECT_EQ(read[i].point, links[i].point);
+        EXPECT_EQ(read[i].ref.names, links[i].ref.names);
+        EXPECT_TRUE(read[i].ref.point.IsEqual(links[i].ref.point, 1e-12));
+    }
+    EXPECT_NEAR(totalVolume(recompute(loaded)), kBlockWithHoleVolume, 1e-3);
+}
+
+TEST(Serialization, RejectsDamagedProjections)
+{
+    Document doc = blockWithHole();
+    const Model model = recompute(doc);
+    const Body& block = model.bodies.front();
+    SketchFeature data;
+    const TopoDS_Edge edge = *geometry::findEdge(block.shape, gp_Pnt(20, 0, 0), 1e-6);
+    const Projection line = addProjectedEdge(data, *projectEdge(edge, data.plane), edgeRef(block, edge, {20, 0, 0}));
+    const Projection vertex = addProjectedVertex(data, {40, 20}, gp_Pnt(40, 20, 10));
+    doc.add(std::move(data));
+    ShapeStore shapes;
+    const nlohmann::json good = nlohmann::json::parse(toJson(doc, shapes));
+    ASSERT_NO_THROW(fromJson(good.dump(), shapes));
+    const auto rejects = [&](const char* what, const auto& damage) {
+        nlohmann::json design = good;
+        nlohmann::json& feature = design["features"].back()["data"];
+        damage(feature["projections"], feature["sketch"]);
+        try {
+            fromJson(design.dump(), shapes);
+            ADD_FAILURE() << what << " loaded";
+        } catch (const std::runtime_error& error) {
+            EXPECT_NE(std::string(error.what()).find("damaged"), std::string::npos) << what << ": " << error.what();
+        }
+    };
+    const auto curveEntry = [](nlohmann::json& s, sketch::Id id) -> nlohmann::json& {
+        return *std::ranges::find_if(s["curves"], [id](const nlohmann::json& c) { return c["id"] == id; });
+    };
+    rejects("missing curve", [](nlohmann::json& p, nlohmann::json&) { p[0]["curve"] = 999; });
+    rejects("curve not projected",
+            [&](nlohmann::json&, nlohmann::json& s) { curveEntry(s, line.curve).erase("projected"); });
+    rejects("point as curve", [&](nlohmann::json& p, nlohmann::json&) { p[0]["curve"] = vertex.point; });
+    rejects("curve as point", [&](nlohmann::json& p, nlohmann::json&) { p[1]["point"] = line.curve; });
+    rejects("vertex linking a curve", [&](nlohmann::json& p, nlohmann::json&) {
+        p[1].erase("point");
+        p[1]["curve"] = line.curve;
+    });
+    rejects("curve and point", [&](nlohmann::json& p, nlohmann::json&) { p[0]["point"] = vertex.point; });
+    rejects("no target", [](nlohmann::json& p, nlohmann::json&) { p[0].erase("curve"); });
+    rejects("same curve twice", [](nlohmann::json& p, nlohmann::json&) { p.push_back(p[0]); });
+    rejects("no ref", [](nlohmann::json& p, nlohmann::json&) { p[0].erase("ref"); });
+    rejects("ref without a point", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"]["point"] = nullptr; });
+    rejects("bare point ref", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"] = p[0]["ref"]["point"]; });
+    rejects("ref without names", [](nlohmann::json& p, nlohmann::json&) { p[0]["ref"].erase("names"); });
+
+    nlohmann::json unknown = good;
+    unknown["features"].back()["data"]["projections"][0]["kind"] = "face";
+    EXPECT_THROW(fromJson(unknown.dump(), shapes), std::runtime_error);
 }
 
 TEST(Serialization, RejectsDuplicateFeatureIds)

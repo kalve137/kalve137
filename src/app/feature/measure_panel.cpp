@@ -4,6 +4,7 @@
 #include "app/feature/measure_panel.h"
 
 #include "app/theme/theme.h"
+#include "app/view/view_projection.h"
 
 #include "geometry/measure.h"
 #include "viewer/occt_view_widget.h"
@@ -48,7 +49,7 @@ QString mm(double value)
 QString row(const QString& name, const QString& value)
 {
     return QStringLiteral("<tr><td style='color:%1; padding-right:%2px'>%3</td><td>%4</td></tr>")
-        .arg(theme::kTitanium.name())
+        .arg(theme::palette().chrome.textDim.name())
         .arg(theme::kSpaceL)
         .arg(name, value);
 }
@@ -77,8 +78,8 @@ QString nameOf(const Pick& pick)
 
 } // namespace
 
-MeasurePanel::MeasurePanel(Scene& scene, viewer::OcctViewWidget* view, QWidget* parent)
-    : QWidget(parent), m_scene(scene), m_view(view)
+MeasurePanel::MeasurePanel(Scene& scene, PickSource& picks, const ViewProjection& projection, QWidget* parent)
+    : QWidget(parent), m_scene(scene), m_source(picks), m_projection(projection), m_view(&projection.view())
 {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(theme::kPanelMargins);
@@ -108,7 +109,7 @@ MeasurePanel::MeasurePanel(Scene& scene, viewer::OcctViewWidget* view, QWidget* 
     buttons->addWidget(close);
     layout->addLayout(buttons);
 
-    connect(view, &viewer::OcctViewWidget::selectionChanged, this, &MeasurePanel::onSelectionChanged);
+    connect(&picks, &PickSource::selectionChanged, this, &MeasurePanel::onSelectionChanged);
 }
 
 void MeasurePanel::start()
@@ -128,6 +129,7 @@ void MeasurePanel::stop()
     m_active = false;
     m_picks.clear();
     clearOverlay();
+    showPicks(std::nullopt);
     m_scene.setPickMode(PickMode::None);
     m_view->redraw();
     emit activeChanged(false);
@@ -138,7 +140,7 @@ void MeasurePanel::onSelectionChanged()
     if (!m_active) {
         return;
     }
-    const std::vector<Pick> picks = m_scene.takePicks();
+    const std::vector<Pick> picks = m_source.takePicks();
     if (picks.empty()) {
         m_picks.clear();
     }
@@ -160,6 +162,7 @@ void MeasurePanel::refresh()
 {
     clearOverlay();
     if (m_picks.empty()) {
+        showPicks(std::nullopt);
         m_selection->setText(tr("Click a face, edge or vertex. Click a second one to measure between them."));
         m_results->clear();
         m_view->redraw();
@@ -169,17 +172,10 @@ void MeasurePanel::refresh()
     QStringList names;
     for (const Pick& pick : m_picks) {
         names << nameOf(pick);
-        Handle(AIS_Shape) highlight = new AIS_Shape(pick.shape);
-        highlight->SetColor(occt(theme::kGold));
-        highlight->SetWidth(style::kStrokeBold);
-        highlight->Attributes()->SetPointAspect(
-            new Prs3d_PointAspect(Aspect_TOM_BALL, occt(theme::kGold), style::kMarkerSmall));
-        highlight->SetTransparency(style::kTintStrong);
-        highlight->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
-        showOverlay(highlight);
     }
     m_selection->setText(names.join(QStringLiteral(" + ")));
 
+    Span span;
     QString table;
     if (m_picks.size() == 1) {
         const geometry::Measurement m = geometry::measure(m_picks.front().shape);
@@ -207,27 +203,53 @@ void MeasurePanel::refresh()
             table += row(QStringLiteral("\u0394Y"), mm(std::abs(d.Y())));
             table += row(QStringLiteral("\u0394Z"), mm(std::abs(d.Z())));
             if (*m.distance > kSameSpot) {
-                Handle(AIS_Shape) line = new AIS_Shape(BRepBuilderAPI_MakeEdge(m.from, m.to));
-                line->SetColor(occt(theme::kGold));
-                line->Attributes()->SetWireAspect(
-                    new Prs3d_LineAspect(occt(theme::kGold), Aspect_TOL_DASH, style::kStrokeRegular));
-                line->SetZLayer(Graphic3d_ZLayerId_Topmost);
-                showOverlay(line);
-                for (const gp_Pnt& end : {m.from, m.to}) {
-                    Handle(AIS_Shape) dot = new AIS_Shape(BRepBuilderAPI_MakeVertex(end));
-                    dot->Attributes()->SetPointAspect(
-                        new Prs3d_PointAspect(Aspect_TOM_BALL, occt(theme::kGold), style::kMarkerSmall));
-                    dot->SetZLayer(Graphic3d_ZLayerId_Topmost);
-                    showOverlay(dot);
-                }
+                span = std::pair{m.from, m.to};
             }
         }
         if (m.angle) {
             table += row(tr("Angle"), QStringLiteral("%1\u00B0").arg(*m.angle, 0, 'f', 2));
         }
     }
+    showPicks(span);
     m_results->setText(QStringLiteral("<table>%1</table>").arg(table));
     m_view->redraw();
+}
+
+void MeasurePanel::showPicks(const Span& span)
+{
+    if (m_projection.viewport() != nullptr) {
+        publish(span);
+        return;
+    }
+    showOldOverlay(span);
+}
+
+void MeasurePanel::showOldOverlay(const Span& span)
+{
+    const Quantity_Color accent = occt(theme::palette().chrome.accent);
+    for (const Pick& pick : m_picks) {
+        Handle(AIS_Shape) highlight = new AIS_Shape(pick.shape);
+        highlight->SetColor(accent);
+        highlight->SetWidth(style::kStrokeBold);
+        highlight->Attributes()->SetPointAspect(new Prs3d_PointAspect(Aspect_TOM_BALL, accent, style::kMarkerSmall));
+        highlight->SetTransparency(style::kTintStrong);
+        highlight->SetPolygonOffsets(Aspect_POM_Fill, -1.0f, -1.0f);
+        showOverlay(highlight);
+    }
+    if (!span) {
+        return;
+    }
+    Handle(AIS_Shape) line = new AIS_Shape(BRepBuilderAPI_MakeEdge(span->first, span->second));
+    line->SetColor(accent);
+    line->Attributes()->SetWireAspect(new Prs3d_LineAspect(accent, Aspect_TOL_DASH, style::kStrokeRegular));
+    line->SetZLayer(Graphic3d_ZLayerId_Topmost);
+    showOverlay(line);
+    for (const gp_Pnt& end : {span->first, span->second}) {
+        Handle(AIS_Shape) dot = new AIS_Shape(BRepBuilderAPI_MakeVertex(end));
+        dot->Attributes()->SetPointAspect(new Prs3d_PointAspect(Aspect_TOM_BALL, accent, style::kMarkerSmall));
+        dot->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        showOverlay(dot);
+    }
 }
 
 void MeasurePanel::clearOverlay()

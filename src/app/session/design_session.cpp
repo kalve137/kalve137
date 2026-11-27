@@ -4,9 +4,13 @@
 #include "app/session/design_session.h"
 
 #include "app/session/paths.h"
+#include "core/parameter_table.h"
 
 #include "log/log.h"
 
+#include <QElapsedTimer>
+
+#include <utility>
 #include <variant>
 
 namespace kalve137::app {
@@ -38,6 +42,22 @@ bool usesSketch(const core::FeatureData& data, core::FeatureId sketch)
                       data);
 }
 
+bool isActive(const core::Document& document, const core::Feature& feature)
+{
+    return !feature.suppressed && !document.isRolledBack(feature.id);
+}
+
+bool movesTimeline(const core::Document& before, const core::Document& after)
+{
+    for (const core::Feature& feature : after.features()) {
+        const core::Feature* earlier = before.find(feature.id);
+        if (earlier != nullptr && isActive(before, *earlier) != isActive(after, feature)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 DesignSession::DesignSession(QObject* parent) : QObject(parent)
@@ -45,15 +65,46 @@ DesignSession::DesignSession(QObject* parent) : QObject(parent)
     rebuild();
 }
 
-void DesignSession::edit(const QString& label, const std::function<void(core::Document&)>& change)
+bool DesignSession::edit(const QString& label, const std::function<void(core::Document&)>& change)
 {
-    const core::Document before = m_document;
-    change(m_document);
+    const std::optional<core::ExpressionError> error = tryEdit(label, [&change](core::Document& document) {
+        change(document);
+        return std::optional<core::ExpressionError>();
+    });
+    if (error) {
+        QString text = QString::fromStdString(error->message);
+        if (!error->hint.empty()) {
+            text += QStringLiteral(". ") + QString::fromStdString(error->hint);
+        }
+        emit editRefused(text);
+    }
+    return !error;
+}
+
+std::optional<core::ExpressionError>
+DesignSession::tryEdit(const QString& label,
+                       const std::function<std::optional<core::ExpressionError>(core::Document&)>& change)
+{
+    core::Document candidate = m_document;
+    std::optional<core::ExpressionError> error = change(candidate);
+    if (!error) {
+        core::reconcileExpressions(m_document, candidate);
+        error = core::applyParameters(candidate);
+    }
+    if (error) {
+        K137_INFO(App, "Edit refused: {}: {}", label.toStdString(), error->message);
+        return error;
+    }
+    const core::Document before = std::exchange(m_document, std::move(candidate));
     K137_INFO(App, "Edit: {}", label.toStdString());
     m_undo.push(label.toStdString(), before);
     m_dirty = true;
+    if (movesTimeline(before, m_document)) {
+        jump();
+    }
     rebuild();
     emit fileStateChanged();
+    return std::nullopt;
 }
 
 QString DesignSession::undoLabel() const
@@ -74,6 +125,7 @@ void DesignSession::undo()
     K137_INFO(App, "Undo: {}", m_undo.undoLabel().value_or(std::string{}));
     m_undo.undo(m_document);
     m_dirty = true;
+    jump();
     rebuild();
     emit fileStateChanged();
 }
@@ -86,6 +138,7 @@ void DesignSession::redo()
     K137_INFO(App, "Redo: {}", m_undo.redoLabel().value_or(std::string{}));
     m_undo.redo(m_document);
     m_dirty = true;
+    jump();
     rebuild();
     emit fileStateChanged();
 }
@@ -100,6 +153,7 @@ void DesignSession::reset(core::Document document, std::filesystem::path path)
     m_dirty = false;
     m_visibility.clear();
     m_hiddenBodies.clear();
+    jump();
     rebuild();
     emit fileStateChanged();
     emit visibilityChanged();
@@ -173,7 +227,7 @@ void DesignSession::setBodyVisible(core::BodyKey key, bool visible)
 
 void DesignSession::setBodiesVisible(const std::vector<core::BodyKey>& keys, bool visible)
 {
-    bool changedAny = false;
+    std::vector<core::BodyKey> changed;
     for (const core::BodyKey& key : keys) {
         if (isBodyVisible(key) == visible) {
             continue;
@@ -183,10 +237,10 @@ void DesignSession::setBodiesVisible(const std::vector<core::BodyKey>& keys, boo
         } else {
             m_hiddenBodies.insert(key);
         }
-        changedAny = true;
+        changed.push_back(key);
     }
-    if (changedAny) {
-        emit visibilityChanged();
+    if (!changed.empty()) {
+        emit bodiesVisibilityChanged(changed, visible);
     }
 }
 
@@ -199,9 +253,19 @@ void DesignSession::setOriginVisible(bool visible)
     emit visibilityChanged();
 }
 
+void DesignSession::jump()
+{
+    m_snapshots.clear();
+    m_faces.clear();
+    emit historyJumped();
+}
+
 void DesignSession::rebuild()
 {
-    m_model = core::recompute(m_document);
+    QElapsedTimer timer;
+    timer.start();
+    m_model = core::recompute(m_document, &m_faces);
+    m_recomputeMs = static_cast<double>(timer.nsecsElapsed()) / 1e6;
     for (const core::Feature& feature : m_document.features()) {
         const core::FeatureStatus& status = m_model.status.at(feature.id);
         if (status.health == core::FeatureHealth::Failed) {

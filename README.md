@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/kalve137/kalve137/actions/workflows/ci.yml"><img alt="CI status." src="https://img.shields.io/github/actions/workflow/status/kalve137/kalve137/ci.yml?branch=main&label=CI"></a>
+  <a href="https://github.com/kalve137/kalve137/actions/workflows/ci.yml"><img alt="CI status." src="https://img.shields.io/github/actions/workflow/status/kalve137/kalve137/ci.yml?branch=dev&label=CI"></a>
   <a href="https://github.com/kalve137/kalve137/releases/latest"><img alt="Latest release." src="https://img.shields.io/github/v/release/kalve137/kalve137?include_prereleases&color=F2B705"></a>
   <a href="LICENSE"><img alt="License GPL-3.0-or-later." src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
   <img alt="Platform Windows 10 and 11." src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4">
@@ -50,9 +50,9 @@ Zip carries its own Qt, OpenCascade and Visual C++ runtime. To check an unpacked
 ## Known limits
 
 - Windows only for now.
+- Release binaries are not code signed yet. On Windows 11 with Smart App Control on, Windows can refuse to load them and show a Bad Image dialog with status `0xc0e90002`, so Kalve 137 does not start. It depends on Microsoft's cloud verdict on each file, which is most likely to block a release in its first days.
 - Extrude To Object reaches planar faces and planes parallel to the sketch.
 - An edge listed in two fillet sets takes the first set's radius.
-- Window and crossing selection over a large import can take several seconds.
 - Shell cannot open a face that runs smoothly into a round. That is an OpenCascade limit and the error message names a workaround.
 - `.k137` format may still change before 1.0. Older files keep loading.
 
@@ -66,7 +66,7 @@ Every UI flow is tested headless. A hidden main window is driven through real cl
 
 ## Build
 
-Windows build steps, tests, packaging, formatting and code layout are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes per release are in [CHANGELOG.md](CHANGELOG.md).
+Build steps and how to contribute are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes per release are in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
