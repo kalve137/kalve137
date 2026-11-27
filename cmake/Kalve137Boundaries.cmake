@@ -51,7 +51,7 @@ function(kalve137_forbid target)
 
     set(dev_errors)
     if(KALVE137_WARNINGS_AS_ERRORS)
-        set(dev_errors -Werror=dev)
+        set(dev_errors -Werror=author)
     endif()
     add_custom_command(
         OUTPUT "${stamp}"

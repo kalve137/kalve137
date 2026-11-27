@@ -24,6 +24,8 @@ permissions:
 
 env:
   VCPKG_COMMIT: ec48c11eae9448c8c6e7739d93e06fa2433aa95f
+  CMAKE_VERSION: 4.5.0
+  NINJA_VERSION: 1.13.2
   QT_VERSION: 6.12.0
   AQT_SOURCE: git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7
   KALVE137_VERSION_BASE: ${{ inputs.version_base }}
@@ -47,6 +49,16 @@ jobs:
 
       - name: Install LLVM
         run: choco install llvm --version=$env:LLVM_VERSION -y --no-progress --force
+
+      - name: Install CMake
+        id: cmake
+        uses: lukka/get-cmake@16e8153a8b4918849d92aad131befe67a3705daa
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+          ninjaVersion: ${{ env.NINJA_VERSION }}
+
+      - name: Put CMake ahead of Visual Studio's
+        run: Add-Content $env:GITHUB_ENV "KALVE137_CMAKE_DIR=$(Split-Path '${{ steps.cmake.outputs.cmake-path }}')"
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -84,6 +96,8 @@ jobs:
         id: build
         run: |
           . ./scripts/dev-shell.ps1
+          python scripts/ci-check-cmake.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $extra = @()
           if ($env:KALVE137_VERSION_BASE) {
               $extra += "-DKALVE137_VERSION_BASE=$env:KALVE137_VERSION_BASE"
@@ -91,7 +105,7 @@ jobs:
           if ($env:KALVE137_VERSION_SUFFIX) {
               $extra += "-DKALVE137_VERSION_SUFFIX=$env:KALVE137_VERSION_SUFFIX"
           }
-          python scripts/ci-no-cmake-warnings.py cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev @extra
+          python scripts/ci-no-cmake-warnings.py cmake --preset windows-release "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET" -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=author @extra
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/ci-no-cmake-warnings.py cmake --build --preset windows-release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -171,6 +185,13 @@ jobs:
       - name: Install system packages
         run: bash scripts/linux-deps.sh
 
+      - name: Install CMake
+        id: cmake
+        uses: lukka/get-cmake@16e8153a8b4918849d92aad131befe67a3705daa
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+          ninjaVersion: ${{ env.NINJA_VERSION }}
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -207,6 +228,7 @@ jobs:
       - name: Build
         id: build
         run: |
+          python3 scripts/ci-check-cmake.py
           extra=()
           if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
               extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
@@ -214,7 +236,7 @@ jobs:
           if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
               extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
           fi
-          python3 scripts/ci-no-cmake-warnings.py cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev "${extra[@]}"
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset linux-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=author "${extra[@]}"
           python3 scripts/ci-no-cmake-warnings.py cmake --build --preset linux-release
 
       - name: Stop vcpkg build log tail
@@ -285,6 +307,13 @@ jobs:
       - name: Install build tools
         run: brew install autoconf autoconf-archive automake libtool ninja pkgconf
 
+      - name: Install CMake
+        id: cmake
+        uses: lukka/get-cmake@16e8153a8b4918849d92aad131befe67a3705daa
+        with:
+          cmakeVersion: ${{ env.CMAKE_VERSION }}
+          ninjaVersion: ${{ env.NINJA_VERSION }}
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -321,6 +350,7 @@ jobs:
       - name: Build
         id: build
         run: |
+          python3 scripts/ci-check-cmake.py
           extra=()
           if [[ -n "${KALVE137_VERSION_BASE}" ]]; then
               extra+=("-DKALVE137_VERSION_BASE=${KALVE137_VERSION_BASE}")
@@ -328,7 +358,7 @@ jobs:
           if [[ -n "${KALVE137_VERSION_SUFFIX}" ]]; then
               extra+=("-DKALVE137_VERSION_SUFFIX=${KALVE137_VERSION_SUFFIX}")
           fi
-          python3 scripts/ci-no-cmake-warnings.py cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=dev "${extra[@]}"
+          python3 scripts/ci-no-cmake-warnings.py cmake --preset macos-release -DKALVE137_WARNINGS_AS_ERRORS=ON -Werror=author "${extra[@]}"
           python3 scripts/ci-no-cmake-warnings.py cmake --build --preset macos-release
 
       - name: Stop vcpkg build log tail
